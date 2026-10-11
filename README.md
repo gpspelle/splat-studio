@@ -40,7 +40,7 @@ Everything else (Homebrew, ffmpeg, COLMAP, Rust, Brush) is installed by `./splat
 ## Install
 
 ```bash
-git clone https://github.com/<you>/splat-studio.git
+git clone https://github.com/gpspelle/splat-studio.git
 cd splat-studio
 ./splat-studio setup
 ```

@@ -5,7 +5,7 @@
 No dependencies are needed to run the app or the tests, only Python 3.9+ and ffmpeg.
 
 ```
-git clone https://github.com/<you>/splat-studio.git
+git clone https://github.com/gpspelle/splat-studio.git
 cd splat-studio
 ./splat-studio --help
 ```
