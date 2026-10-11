@@ -197,6 +197,7 @@ class WebUiTest(BrowserTestCase):
         self.assertIn("Imported files", self.page.locator("[data-testid=lib-group][data-video='']").inner_text())
         # a collapsed group stays collapsed when the library refreshes
         vase.locator("summary").click()
+        self.page.wait_for_function("libCollapsed.has('vase')")    # the toggle event fires after the click
         self.page.evaluate("renderLibrary()")
         self.assertFalse(self.page.locator("[data-testid=lib-group][data-video=vase]").evaluate("e => e.open"))
         self.assertTrue(self.page.locator("[data-testid=lib-group][data-video=jar]").evaluate("e => e.open"))
