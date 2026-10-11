@@ -31,13 +31,17 @@ class ParseLineTest(unittest.TestCase):
             parse_line(j, line)
         self.assertEqual(j.cleaned, {"kept": 2900, "total": 3040})
         self.assertEqual(j.isolated, {"kept": 2100, "total": 3040})
-        self.assertTrue(j.splat.endswith("preview_3000.ply"))             # View splat stays the original
+        self.assertTrue(j.splat.endswith("preview_3000.ply"))             # the job keeps the original; the UI opens the clean copy
         self.assertTrue(j.object_splat.endswith("preview_3000_object.ply"))
         k = job(type="isolate", options={"splat": "imports/r.ply"})
         parse_line(k, "Kept 10 of 20 splats (50% removed)")
         parse_line(k, "Object copy: imports/r_object.ply")
         self.assertEqual((k.isolated, k.cleaned, k.splat), ({"kept": 10, "total": 20}, None, "imports/r_object.ply"))
         self.assertEqual(build_cmd(k)[-2:], ["isolate", "imports/r.ply"])
+
+    def test_fog_removal_is_not_an_option(self):
+        self.assertEqual(validate_options({"clean": True}), {})            # old clients: ignored, it always runs
+        self.assertNotIn("--clean", build_cmd(job(video="v.mov", options={"clean": True})))
 
     def test_colmap_progress_line(self):
         j = job()

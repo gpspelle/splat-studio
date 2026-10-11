@@ -7,7 +7,8 @@
 
 Frames are extracted once per video (frames/<name>) and reused. Each run gets its own
 folder workspace/<name>/run_<date_time>/ with dense/ (COLMAP result), splat/ (the .ply
-files) and summary.txt. Paths are relative to the current folder (the data folder).
+files) and summary.txt. Every run also saves NAME_clean.ply, the splat without background
+fog; the original is kept next to it. Paths are relative to the current folder (the data folder).
 """
 from __future__ import annotations
 
@@ -78,8 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-size", type=int, default=1600, help="image size for COLMAP (default 1600)")
     ap.add_argument("--eval", action="store_true", help="hold out every 10th frame and report PSNR/SSIM")
     ap.add_argument("--no-train", action="store_true", help="stop after COLMAP")
-    ap.add_argument("--clean", action="store_true",
-                    help="also save NAME_clean.ply without background fog (the original is kept)")
+    # Fog removal always runs; --clean is still accepted so older commands keep working.
+    ap.add_argument("--clean", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--remove-background", action="store_true",
                     help="also save NAME_object.ply with only the object: no table, floor or room "
                          "(the original is kept)")
@@ -174,16 +175,15 @@ def main(argv: list[str] | None = None) -> None:
     if plys:
         append_summary(ws, [("splat", f"{plys[-1]}  (trained in {took})")])
         say(f"\nDone. Splat: {plys[-1]}")                         # parsed by the web UI
-        if args.clean:
-            say("\n==> Removing background fog (the original is kept)")
-            from .splats import PlyError, clean
-            try:
-                s = clean(plys[-1], run_dir=ws)
-                say(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed)")
-                say(f"Clean copy: {s['output']}")                 # parsed by the web UI
-                append_summary(ws, [("clean splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
-            except (PlyError, OSError, ValueError) as e:
-                say(f"    couldn't clean the splat: {e}")
+        say("\n==> Removing background fog (the original is kept)")
+        from .splats import PlyError, clean
+        try:
+            s = clean(plys[-1], run_dir=ws)
+            say(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed)")
+            say(f"Clean copy: {s['output']}")                     # parsed by the web UI
+            append_summary(ws, [("clean splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
+        except (PlyError, OSError, ValueError) as e:
+            say(f"    couldn't clean the splat: {e}")
         if args.remove_background:
             say("\n==> Removing the background (the original is kept)")
             from .splats import PlyError, isolate

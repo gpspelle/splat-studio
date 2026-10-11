@@ -150,11 +150,12 @@ class WebUiTest(BrowserTestCase):
                                     timeout=30000)
         self.shot("studio", full_page=True)
 
+        self.assertEqual(self.page.get_by_test_id("view-original").count(), 1)   # fog removal always runs
         self.page.click("text=View splat")
         self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none' "
                                     "|| document.querySelector('.err')", timeout=60000)
         self.assertRegex(self.page.inner_text("#stats"), r"[\d,]+ splats")
-        self.assertEqual(self.page.inner_text("#title"), "IMG_4821 · preview")
+        self.assertEqual(self.page.inner_text("#title"), "IMG_4821 · preview · fog removed")
         self.page.wait_for_timeout(1500)
         self.shot("viewer")
         with self.page.expect_download() as dl:
