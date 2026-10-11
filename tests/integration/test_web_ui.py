@@ -180,6 +180,29 @@ class WebUiTest(BrowserTestCase):
         self.assertAlmostEqual(self.page.evaluate("window.splatViewer.worldUp()")[1], -1.0, places=3)
         self.assertEqual(self.errors, [])
 
+    def test_library_is_grouped_by_video(self):
+        for video, run, files in (("vase", "run_1", ["preview_7000.ply", "standard_30000.ply"]),
+                                  ("vase", "run_2", ["high_40000.ply"]), ("jar", "run_1", ["standard_30000.ply"])):
+            for f in files:
+                write_ply(self.data.workspace / video / run / "splat" / f, n=200)
+        write_ply(self.data.imports / "scan.ply", n=200)
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        self.page.reload()
+        self.page.wait_for_selector(".tile >> text=scan.ply")
+        groups = self.page.get_by_test_id("lib-group")
+        self.assertEqual(sorted(groups.evaluate_all("els => els.map((e) => e.dataset.video)")), ["", "jar", "vase"])
+        vase = self.page.locator("[data-testid=lib-group][data-video=vase]")
+        self.assertEqual(vase.locator(".tile").count(), 3)       # both runs of the same video
+        self.assertIn("3 splat(s)", vase.locator("summary").inner_text())
+        self.assertIn("Imported files", self.page.locator("[data-testid=lib-group][data-video='']").inner_text())
+        # a collapsed group stays collapsed when the library refreshes
+        vase.locator("summary").click()
+        self.page.evaluate("renderLibrary()")
+        self.assertFalse(self.page.locator("[data-testid=lib-group][data-video=vase]").evaluate("e => e.open"))
+        self.assertTrue(self.page.locator("[data-testid=lib-group][data-video=jar]").evaluate("e => e.open"))
+        self.assertEqual(self.errors, [])
+
 
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg

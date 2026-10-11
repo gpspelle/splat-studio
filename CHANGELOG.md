@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Library grouped by video.** The splat library shows one collapsible group per source video
+  (all runs of that video together), newest first, with imported files in their own group.
+  Library items have a new `video` field (the video's name, or `null` for imports).
+
 ## 0.3.0
 
 ### Added

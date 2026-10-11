@@ -141,6 +141,7 @@ class DataDir:
                 src = "imported" if imported else self.rel(p.parent.parent)
                 items.append({"path": self.rel(p), "name": p.name, "size": st.st_size, "mtime": st.st_mtime,
                               "source": src, "title": splat_title(self.rel(p)),
+                              "video": None if imported else p.parent.parent.parent.name,
                               "cleaned": p.stem.endswith("_clean"),
                               "isolated": p.stem.endswith("_object"),
                               "thumb": None if imported else self.thumbnail(run_dir=src)})
