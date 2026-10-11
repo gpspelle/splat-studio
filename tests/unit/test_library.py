@@ -50,6 +50,21 @@ class LibraryTest(TempDirTestCase):
         self.assertEqual(items["scan.ply"]["source"], "imported")
         self.assertEqual(self.data.latest_splat(self.data.rel(self.run)), self.data.rel(self.run / "splat" / "standard_30000.ply"))
 
+    def test_delete_splat_removes_only_library_files(self):
+        run_ply = write_ply(self.run / "splat" / "standard_30000.ply", n=200)
+        clean = write_ply(self.run / "splat" / "standard_30000_clean.ply", n=200)
+        imported = write_ply(self.data.imports / "scan.ply", n=200)
+        (self.run / "summary.txt").write_text("result: OK\n")
+        for bad in ("workspace/vase/run_20260101_120000/summary.txt", "../scan.ply", "imports/missing.ply",
+                    "workspace/vase/run_20260101_120000", ""):
+            self.assertFalse(self.data.delete_splat(bad), bad)
+        self.assertTrue(self.data.delete_splat(self.data.rel(clean)))
+        self.assertFalse(clean.exists())
+        self.assertTrue(run_ply.exists() and (self.run / "summary.txt").exists())   # the rest of the run stays
+        self.assertTrue(self.data.delete_splat("imports/scan.ply"))
+        self.assertFalse(imported.exists())
+        self.assertEqual([i["name"] for i in self.data.list_splats()], ["standard_30000.ply"])
+
     def test_disk_runs_reports_cli_runs(self):
         (self.run / "summary.txt").write_text("started:               2026-01-01 12:00:00\n"
                                               "best:                  sparse_try1/0  240/250 (96%), err\n"

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Delete from the library.** Each library splat has a **Delete** button that asks for
+  confirmation, then removes that one file from disk (`DELETE /api/splats?file=…`). The run
+  folder, frames and other splats stay. Files a queued or running job still uses are refused
+  with error code `splat_busy`.
+
 ## 0.3.0
 
 ### Added

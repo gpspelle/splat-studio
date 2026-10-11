@@ -181,6 +181,23 @@ class WebUiTest(BrowserTestCase):
         self.assertEqual(self.errors, [])
 
 
+    def test_delete_splat_from_library(self):
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        self.page.reload()
+        for name in ("vase.ply", "jar.ply"):
+            self.page.set_input_files("#importInput", str(write_ply(self.tmp / name, n=2000)))
+            self.page.wait_for_selector(f".tile >> text={name}")
+        asked = []
+        self.page.on("dialog", lambda d: asked.append(d.message))     # accepted by the default handler
+        self.page.click(".tile[data-path$='vase.ply'] [data-testid=delete-splat]")
+        self.page.wait_for_selector(".tile[data-path$='vase.ply']", state="detached")
+        self.assertEqual(len(asked), 1)
+        self.assertIn("vase.ply", asked[0])                             # confirmation names the file
+        self.assertFalse((self.data.imports / "vase.ply").exists())
+        self.assertTrue((self.data.imports / "jar.ply").exists())
+        self.assertEqual(self.errors, [])
+
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg
 class LanguageAndFogUiTest(BrowserTestCase):
