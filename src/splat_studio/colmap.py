@@ -189,8 +189,9 @@ def resize_images(paths: list[Path], max_size: int) -> None:
     if not paths:
         return
     if shutil.which("sips"):
+        # not check=True: an unreadable frame is left as is (COLMAP skips it) instead of ending the run
         subprocess.run(["sips", "-Z", str(max_size), *map(str, paths)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return
     try:
         import cv2
@@ -208,11 +209,18 @@ def resize_images(paths: list[Path], max_size: int) -> None:
         pass
     if shutil.which("ffmpeg"):
         flt = f"scale='if(gt(iw,ih),min({max_size},iw),-2)':'if(gt(iw,ih),-2,min({max_size},ih))'"
+        bad = 0
         for p in paths:
             tmp = p.with_suffix(".tmp.jpg")
-            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(p), "-vf", flt, "-qscale:v", "2",
-                            str(tmp)], check=True)
-            tmp.replace(p)
+            r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(p), "-vf", flt, "-qscale:v", "2",
+                                str(tmp)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if r.returncode == 0 and tmp.exists():
+                tmp.replace(p)
+            else:                       # unreadable frame: leave it as is, COLMAP skips it
+                tmp.unlink(missing_ok=True)
+                bad += 1
+        if bad:
+            say(f"    ({bad} frame(s) couldn't be read and were left as they are)")
         return
     say("    (no sips, OpenCV or ffmpeg found - images not resized)")
 

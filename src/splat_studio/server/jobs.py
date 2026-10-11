@@ -12,6 +12,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -30,7 +31,8 @@ class Job:
     FIELDS = ["id", "type", "status", "created", "started", "finished", "video", "options", "cmd",
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
-              "track_breaks", "error", "returncode"]
+              "track_breaks", "error", "returncode", "clean_splat", "cleaned",
+              "object_splat", "isolated"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -75,6 +77,10 @@ RE_SPLAT = re.compile(r"Done\. Splat: (.+\.ply)")
 RE_KEPT = re.compile(r"Kept (\d+) frames(?:, moved (\d+) blurry)?")
 RE_REUSE = re.compile(r"reusing (\d+) frames")
 RE_TRACK = re.compile(r"^\s+(\S+\.jpg) -> (\S+\.jpg)\s+\((\d+) frames\)")
+RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
+RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
+RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
+RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
 STAGE_NAMES = {"0": "Setup", "1": "Frames", "2": "Camera poses", "3": "Training"}
 ERROR_HINTS = ("failed", "Error", "error:", "Not good enough", "not found", "Traceback", "isn't installed",
                "could not reconstruct")
@@ -125,6 +131,25 @@ def parse_line(job: Job, line: str, rel=lambda p: p) -> None:
     if m:
         brk = {"first": m.group(1), "last": m.group(2), "count": int(m.group(3))}
         job.track_breaks = [b for b in (job.track_breaks or []) if b["first"] != brk["first"]] + [brk]
+    if RE_STAGE_ISOLATE.search(line):
+        job._isolating = True
+    m = RE_CLEAN_KEPT.search(line)
+    if m:
+        counts = {"kept": int(m.group(1).replace(",", "")), "total": int(m.group(2).replace(",", ""))}
+        if job.type == "isolate" or getattr(job, "_isolating", False):
+            job.isolated = counts                                  # background removal, not fog
+        else:
+            job.cleaned = counts
+    m = RE_OBJECT_COPY.search(line)
+    if m:
+        job.object_splat = rel(m.group(1).strip())
+        if job.type == "isolate":
+            job.splat = job.object_splat
+    m = RE_CLEAN_COPY.search(line)
+    if m:
+        job.clean_splat = rel(m.group(1).strip())
+        if job.type == "clean":
+            job.splat = job.clean_splat
     if any(k in line for k in ERROR_HINTS):
         job.error = line.strip()[:400]
 
@@ -133,6 +158,12 @@ def build_cmd(job: Job) -> list[str]:
     o = job.options or {}
     if job.type == "setup":
         return module_cmd("pipeline", "--setup-only")
+    if job.type == "clean":
+        args = ["clean", o["splat"]] + (["--run", job.run_dir] if job.run_dir else [])
+        return [sys.executable, "-u", "-m", "splat_studio", *args]
+    if job.type == "isolate":
+        args = ["isolate", o["splat"]] + (["--run", job.run_dir] if job.run_dir else [])
+        return [sys.executable, "-u", "-m", "splat_studio", *args]
     if job.type == "retrain":
         args = ["--train-only", job.run_dir]
     else:
@@ -147,26 +178,44 @@ def build_cmd(job: Job) -> list[str]:
     args += ["--quality", o.get("quality", "standard"), "--detail", o.get("detail", "auto")]
     if o.get("eval"):
         args.append("--eval")
+    if o.get("clean"):
+        args.append("--clean")
+    if o.get("remove_background"):
+        args.append("--remove-background")
     extra = (o.get("brush_args") or "").split()
     if extra:
         args += ["--", *extra]
     return module_cmd("pipeline", *args)
 
 
+class ApiError(ValueError):
+    """A request error with a stable code the UI can translate (see static/i18n.js: err.<code>)."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 def validate_options(body: dict) -> dict:
-    opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract", "brush_args")
+    opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
+                                     "brush_args", "clean", "remove_background")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
-        raise ValueError("quality must be preview, standard or high")
+        raise ApiError("quality", "quality must be preview, standard or high")
     if opts.get("detail", "auto") not in DETAILS:
-        raise ValueError("detail must be auto, low, normal or high")
-    if "frames" in opts and not (20 <= int(opts["frames"]) <= 2000):
-        raise ValueError("frames must be between 20 and 2000")
+        raise ApiError("detail", "detail must be auto, low, normal or high")
+    if "frames" in opts:
+        try:
+            ok = 20 <= int(opts["frames"]) <= 2000
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            raise ApiError("frames", "frames must be between 20 and 2000")
     for k in ("start", "end"):
         if k in opts and not re.fullmatch(r"\d+(:\d{1,2}){0,2}(\.\d+)?", str(opts[k])):
-            raise ValueError(f"{k} must look like 1:05 or 65")
-    if "brush_args" in opts and not re.fullmatch(r"[\w\s.,=+-]*", opts["brush_args"]):
-        raise ValueError("extra Brush options may only contain letters, numbers, spaces and . , = + -")
+            raise ApiError("trim", f"{k} must look like 1:05 or 65")
+    if "brush_args" in opts and not re.fullmatch(r"[\w\s.,=+-]*", str(opts["brush_args"])):
+        raise ApiError("brush_args", "extra Brush options may only contain letters, numbers, spaces and . , = + -")
     return opts
 
 

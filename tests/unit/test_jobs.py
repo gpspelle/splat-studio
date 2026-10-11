@@ -19,6 +19,26 @@ class ParseLineTest(unittest.TestCase):
         self.assertEqual(j.run_dir, "rel:/data/workspace/vase/run_1")
         self.assertEqual(j.stage_label, "Camera poses")
 
+    def test_fog_cleaning_and_background_removal_are_told_apart(self):
+        j = job()
+        for line in ("Done. Splat: /d/workspace/v/run_1/splat/preview_3000.ply",
+                     "==> Removing background fog (the original is kept)",
+                     "Kept 2,900 of 3,040 splats (5% removed)",
+                     "Clean copy: /d/workspace/v/run_1/splat/preview_3000_clean.ply",
+                     "==> Removing the background (the original is kept)",
+                     "Kept 2,100 of 3,040 splats (31% removed, support surface removed)",
+                     "Object copy: /d/workspace/v/run_1/splat/preview_3000_object.ply"):
+            parse_line(j, line)
+        self.assertEqual(j.cleaned, {"kept": 2900, "total": 3040})
+        self.assertEqual(j.isolated, {"kept": 2100, "total": 3040})
+        self.assertTrue(j.splat.endswith("preview_3000.ply"))             # View splat stays the original
+        self.assertTrue(j.object_splat.endswith("preview_3000_object.ply"))
+        k = job(type="isolate", options={"splat": "imports/r.ply"})
+        parse_line(k, "Kept 10 of 20 splats (50% removed)")
+        parse_line(k, "Object copy: imports/r_object.ply")
+        self.assertEqual((k.isolated, k.cleaned, k.splat), ({"kept": 10, "total": 20}, None, "imports/r_object.ply"))
+        self.assertEqual(build_cmd(k)[-2:], ["isolate", "imports/r.ply"])
+
     def test_colmap_progress_line(self):
         j = job()
         parse_line(j, "==> Attempt 2/3: wider overlap + loop closure, relaxed mapper")

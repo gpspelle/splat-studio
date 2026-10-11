@@ -44,12 +44,33 @@ src/splat_studio/
   setup_deps.py    dependency check/install (macOS)
   guidance.py      recording advice
   server/          web UI: app.py (HTTP), jobs.py (queue), library.py (files)
-  static/          Studio page, viewer, bundled three.js + Spark
+  splats.py        reading splats: inspect, fog cleaning, background removal
+  static/          Studio page, viewer, comparison page, bundled three.js + Spark
 tests/unit, tests/integration, tests/fakes
 docs/              recording guide, how it works, screenshots
 scripts/readme_screenshots.py   regenerates docs/images
 docker/            experimental container
 ```
+
+## Not breaking things
+
+- Run the full suite before every commit. All tests must pass.
+- `tests/integration/test_compat.py` pins behaviour users rely on: old run folders and job
+  records, API fields, advice and error shapes, exported-site config. Don't edit those tests to
+  make a change pass; if the break is intended, say so in `CHANGELOG.md`.
+- New features are additive: new fields, new options defaulting to the old behaviour, new files
+  next to existing ones (the cleaner writes `NAME_clean.ply` and background removal `NAME_object.ply`; neither ever
+  touches `NAME.ply`).
+
+## Translations
+
+All UI text lives in `src/splat_studio/static/i18n.js` (`en` and `pt`). In HTML use
+`data-i18n="key"` (or `data-i18n-html`, `-placeholder`, `-title`); in scripts use `t("key", {param})`.
+Server messages carry a `code` the UI translates (`advice.<code>`, `err.<code>`), plus English
+`text`/`error` for API users. `tests/unit/test_i18n.py` checks that every language has every key
+with the same `{placeholders}`, that every key the code uses exists, and that the English UI text
+matches the server's English text exactly. To add a language, add a block to `I18N` and a name
+to `LANGS`.
 
 ## Conventions
 

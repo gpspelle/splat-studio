@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splat Studio</title>
+<script src="/i18n.js"></script>
 <style>
   :root {
     --bg: #f4f2ef; --surface: #ffffff; --surface-2: #faf9f7; --line: #e7e3dd; --text: #1d1b19;
@@ -46,6 +47,7 @@
   .small { padding: 4px 9px; font-size: 13px; border-radius: 8px; }
   .link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; }
   .link:hover { background: none; text-decoration: underline; }
+  .lang-select { font: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; }
   .status-pill { font-size: 12px; padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line); cursor: pointer; background: var(--surface); }
   .status-pill.ok { color: var(--ok); }
   .status-pill.bad { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
@@ -128,6 +130,10 @@
   .tile .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
   .tile .body b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tile .acts { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
+  .tile.picked { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tile button.picked { background: var(--accent); color: #1a0d05; border-color: transparent; }
+  #compareBar[hidden] { display: none; }
+  #compareBar, #compareBar * { text-transform: none; letter-spacing: normal; }
   .right { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
     padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; z-index: 9; }
@@ -161,30 +167,31 @@
 </head>
 <body>
 <header>
-  <div class="brand"><div class="logo"></div><div><h1>Splat Studio</h1><span>Video → 3D Gaussian splat, on this computer</span></div></div>
+  <div class="brand"><div class="logo"></div><div><h1>Splat Studio</h1><span data-i18n="app.tagline">Video → 3D Gaussian splat, on this computer</span></div></div>
   <div class="head-actions">
-    <button id="guideBtn" data-testid="guide-button">📹 Recording guide</button>
-    <button id="setupPill" class="status-pill" data-testid="setup-pill">Checking tools…</button>
+    <span data-lang-switcher></span>
+    <button id="guideBtn" data-testid="guide-button" data-i18n="head.guide">📹 Recording guide</button>
+    <button id="setupPill" class="status-pill" data-testid="setup-pill" data-i18n="head.checking">Checking tools…</button>
   </div>
 </header>
 
 <main>
   <!-- ---------------------------------------------------------------- new run -->
   <section class="card">
-    <h2>New run</h2>
+    <h2 data-i18n="new.title">New run</h2>
     <div class="pad">
       <div class="tips-strip" data-testid="tips-strip">
-        <b>For a first-try success</b>
-        <ul>
+        <b data-i18n="tips.title">For a first-try success</b>
+        <ul data-i18n-html="tips.html">
           <li>One slow, continuous take: <b>3 loops</b> around the object (low, middle, high)</li>
           <li>Soft, even light · lock focus &amp; exposure · 1× lens, no zoom</li>
           <li>A matte object on a textured surface - nothing moving in the scene</li>
         </ul>
-        <button class="link" id="guideLink">Read the full recording guide →</button>
+        <button class="link" id="guideLink" data-i18n="tips.more">Read the full recording guide →</button>
       </div>
       <div id="dropZone" class="drop">
-        <b>Drop a video here</b>
-        <small>or click to choose · .mov / .mp4 from your phone works as-is</small>
+        <b data-i18n="drop.title">Drop a video here</b>
+        <small data-i18n="drop.sub">or click to choose · .mov / .mp4 from your phone works as-is</small>
         <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" hidden>
       </div>
       <div id="uploading" hidden style="margin-top:12px">
@@ -193,55 +200,60 @@
       </div>
       <div id="chosen" class="chosen" hidden style="margin-top:12px">
         <div class="name" id="chosenName"></div>
-        <button class="ghost small" id="clearVideo">Change</button>
+        <button class="ghost small" id="clearVideo" data-i18n="chosen.change">Change</button>
       </div>
       <ul class="advice" id="videoAdvice" data-testid="video-advice" hidden></ul>
       <div class="field" id="pickField">
-        <label for="prevVideo">…or reuse an uploaded video</label>
+        <label for="prevVideo" data-i18n="reuse.label">…or reuse an uploaded video</label>
         <select id="prevVideo"><option value="">Choose…</option></select>
       </div>
 
       <div class="field">
-        <label>Quality</label>
+        <label data-i18n="quality.label">Quality</label>
         <div class="seg" data-name="quality">
-          <button data-v="preview">Preview</button><button data-v="standard" class="on">Standard</button><button data-v="high">High</button>
+          <button data-v="preview" data-i18n="quality.preview">Preview</button><button data-v="standard" class="on" data-i18n="quality.standard">Standard</button><button data-v="high" data-i18n="quality.high">High</button>
         </div>
         <div class="help" id="qualityHelp"></div>
       </div>
       <div class="field">
-        <label>Detail</label>
+        <label data-i18n="detail.label">Detail</label>
         <div class="seg" data-name="detail">
-          <button data-v="auto" class="on">Auto</button><button data-v="low">Low</button><button data-v="normal">Normal</button><button data-v="high">High</button>
+          <button data-v="auto" class="on" data-i18n="detail.auto">Auto</button><button data-v="low" data-i18n="detail.low">Low</button><button data-v="normal" data-i18n="detail.normal">Normal</button><button data-v="high" data-i18n="detail.high">High</button>
         </div>
         <div class="help" id="detailHelp"></div>
       </div>
-      <label class="check"><input type="checkbox" id="eval"> <span>Measure quality<br><span class="meta">Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number.</span></span></label>
+      <label class="check"><input type="checkbox" id="clean" checked data-testid="clean-option"> <span><span data-i18n="clean.label">Remove background fog</span><br><span class="meta" data-i18n="clean.help">Also saves a copy without the haze and far-away surroundings (the original is kept).</span></span></label>
+      <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object: no table, floor or room (the original is kept).</span></span></label>
+      <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number.</span></span></label>
       <details class="adv">
-        <summary>Advanced</summary>
+        <summary data-i18n="adv.title">Advanced</summary>
         <div class="field row">
-          <div><label for="frames">Frames</label><input id="frames" type="number" value="250" min="50" max="1000" step="10"></div>
-          <div><label for="start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
-          <div><label for="end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
+          <div><label for="frames" data-i18n="adv.frames">Frames</label><input id="frames" type="number" value="250" min="50" max="1000" step="10"></div>
+          <div><label for="start" data-i18n="adv.start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
+          <div><label for="end" data-i18n="adv.end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
         </div>
-        <label class="check"><input type="checkbox" id="reextract"> <span>Extract frames again (otherwise reused)</span></label>
-        <div class="field"><label for="brushArgs">Extra Brush options</label>
-          <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000"></div>
+        <label class="check"><input type="checkbox" id="reextract"> <span data-i18n="adv.reextract">Extract frames again (otherwise reused)</span></label>
+        <div class="field"><label for="brushArgs" data-i18n="adv.brush">Extra Brush options</label>
+          <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000" data-i18n-placeholder="adv.brush.placeholder"></div>
       </details>
-      <button id="startBtn" class="primary" style="width:100%;margin-top:16px;justify-content:center" disabled>Start run</button>
-      <div class="help" id="startHelp">Choose a video first.</div>
+      <button id="startBtn" class="primary" style="width:100%;margin-top:16px;justify-content:center" disabled data-i18n="start.button">Start run</button>
+      <div class="help" id="startHelp" data-i18n="start.need">Choose a video first.</div>
     </div>
   </section>
 
   <div class="right">
     <section class="card">
-      <h2>Runs <span class="meta" id="queueInfo"></span></h2>
-      <div class="runs" id="runs"><div class="empty">No runs yet. Upload a video to start.</div></div>
+      <h2><span data-i18n="runs.title">Runs</span> <span class="meta" id="queueInfo"></span></h2>
+      <div class="runs" id="runs"><div class="empty" data-i18n="runs.empty">No runs yet. Upload a video to start.</div></div>
     </section>
     <section class="card">
-      <h2>Splat library
-        <span><button class="small" id="importBtn">Import .ply</button>
+      <h2><span data-i18n="lib.title">Splat library</span>
+        <span><span id="compareBar" hidden><span class="meta" id="compareHint"></span>
+          <a class="btn small primary" id="compareBtn" data-testid="compare-open"></a>
+          <button class="small ghost" id="compareClear" data-i18n="lib.compare.clear">Clear</button></span>
+        <button class="small" id="importBtn" data-i18n="lib.import">Import .ply</button>
         <input id="importInput" type="file" accept=".ply,.spz,.splat,.ksplat" hidden></span></h2>
-      <div class="pad"><div class="lib" id="lib"><div class="empty" style="grid-column:1/-1">Trained splats and imported files appear here.</div></div></div>
+      <div class="pad"><div class="lib" id="lib"><div class="empty" style="grid-column:1/-1" data-i18n="lib.empty">Trained splats and imported files appear here.</div></div></div>
     </section>
   </div>
 </main>
@@ -249,9 +261,9 @@
 <!-- ---------------------------------------------------------------- recording guide -->
 <dialog id="guide" class="guide" data-testid="guide">
   <div class="guide-head">
-    <div><h3>How to record a video that works the first time</h3>
-      <p>The software can only rebuild what the camera saw clearly, from many angles, in one continuous take.</p></div>
-    <form method="dialog"><button class="small">Close</button></form>
+    <div><h3 data-i18n="guide.title">How to record a video that works the first time</h3>
+      <p data-i18n="guide.lead">The software can only rebuild what the camera saw clearly, from many angles, in one continuous take.</p></div>
+    <form method="dialog"><button class="small" data-i18n="dlg.close">Close</button></form>
   </div>
   <div class="guide-body">
     <div>
@@ -262,7 +274,7 @@
           </defs>
           <ellipse cx="190" cy="210" rx="118" ry="24" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="3 4"/>
           <rect x="168" y="120" width="44" height="88" rx="14" fill="#e8622c" fill-opacity=".18" stroke="#e8622c" stroke-width="1.5"/>
-          <text x="190" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">object</text>
+          <text x="190" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.object">object</text>
           <g fill="none" stroke="#e8622c" stroke-width="2">
             <ellipse cx="190" cy="196" rx="104" ry="22" stroke-opacity=".55"/>
             <ellipse cx="190" cy="150" rx="112" ry="26"/>
@@ -272,15 +284,15 @@
           </g>
           <g fill="currentColor"><circle cx="86" cy="196" r="4"/><circle cx="78" cy="150" r="4"/><circle cx="98" cy="96" r="4"/></g>
           <g font-size="11" fill="currentColor" text-anchor="end">
-            <text x="78" y="200">① low</text><text x="70" y="154">② eye level</text><text x="90" y="100">③ high</text>
+            <text x="78" y="200" data-i18n="guide.diagram.low">① low</text><text x="70" y="154" data-i18n="guide.diagram.eye">② eye level</text><text x="90" y="100" data-i18n="guide.diagram.high">③ high</text>
           </g>
-          <text x="190" y="250" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">one continuous take · ~60-90 s per loop</text>
+          <text x="190" y="250" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.take">one continuous take · ~60-90 s per loop</text>
         </svg>
-        <figcaption>Walk three full circles without stopping the recording: knee height looking slightly up, eye level, then arms raised looking down. Rise gently between loops.</figcaption>
+        <figcaption data-i18n="guide.diagram.caption">Walk three full circles without stopping the recording: knee height looking slightly up, eye level, then arms raised looking down. Rise gently between loops.</figcaption>
       </figure>
       <div class="avoid" style="margin-top:14px">
-        <b>Avoid</b>
-        <ul style="margin:6px 0 0;padding-left:18px">
+        <b data-i18n="guide.avoid.title">Avoid</b>
+        <ul style="margin:6px 0 0;padding-left:18px" data-i18n-html="guide.avoid.html">
           <li>Glass, mirrors, chrome, very shiny paint</li>
           <li>Plain white tables and blank walls</li>
           <li>Turntables (the background must not move)</li>
@@ -290,24 +302,24 @@
       </div>
     </div>
     <div>
-      <div class="guide-sec"><h4><span>1</span>Pick the spot</h4><ul>
+      <div class="guide-sec"><h4><span>1</span><b data-i18n="guide.s1.title">Pick the spot</b></h4><ul data-i18n-html="guide.s1.html">
         <li>Room to walk all the way around the object, at a steady 1-2 m distance.</li>
         <li>Put it on a <b>textured surface</b> - a rug, newspaper, patterned cloth. COLMAP tracks texture, not plain surfaces.</li>
         <li>Matte objects work best. Cover or skip reflective and transparent parts.</li></ul></div>
-      <div class="guide-sec"><h4><span>2</span>Get the light right</h4><ul>
+      <div class="guide-sec"><h4><span>2</span><b data-i18n="guide.s2.title">Get the light right</b></h4><ul data-i18n-html="guide.s2.html">
         <li><b>Soft, even light</b>: overcast daylight or a bright room with several lamps.</li>
         <li>No harsh sun or a single spotlight - hard shadows and highlights move as you walk.</li>
         <li>Don't change the lights during the take, and keep your own shadow off the object.</li></ul></div>
-      <div class="guide-sec"><h4><span>3</span>Set up the phone</h4><ul>
+      <div class="guide-sec"><h4><span>3</span><b data-i18n="guide.s3.title">Set up the phone</b></h4><ul data-i18n-html="guide.s3.html">
         <li>4K at 30 fps, landscape. Stay on the <b>1× lens</b> and never zoom (the phone would switch cameras).</li>
         <li><b>Lock focus and exposure</b>: press and hold on the object until "AE/AF Lock" appears.</li>
         <li>Turn off Cinematic and Action mode. HDR is converted automatically, but off is best.</li></ul></div>
-      <div class="guide-sec"><h4><span>4</span>Record</h4><ul>
+      <div class="guide-sec"><h4><span>4</span><b data-i18n="guide.s4.title">Record</b></h4><ul data-i18n-html="guide.s4.html">
         <li><b>One continuous take</b>, three loops as in the diagram, ending each loop where it started.</li>
         <li>Walk slowly - about 2-3 seconds per step. Turn your body at corners, don't swing the phone.</li>
         <li>Keep the whole object in frame, filling about half to two-thirds of it.</li>
         <li>Total length: <b>1½-4 minutes</b>.</li></ul></div>
-      <div class="guide-sec"><h4><span>5</span>Check before you leave</h4><ul>
+      <div class="guide-sec"><h4><span>5</span><b data-i18n="guide.s5.title">Check before you leave</b></h4><ul data-i18n-html="guide.s5.html">
         <li>Scrub through the video: is every moment sharp, with no jumps, flicker or people walking through?</li>
         <li>After a run, Splat Studio tells you <em>at which seconds</em> the tracking broke, so you know what to redo.</li></ul></div>
     </div>
@@ -316,30 +328,30 @@
 
 <!-- ---------------------------------------------------------------- setup -->
 <dialog id="setupDlg" data-testid="setup-dialog">
-  <h3>Tools</h3>
+  <h3 data-i18n="setup.title">Tools</h3>
   <div class="meta" id="dataDir"></div>
   <ul class="setup-list" id="setupList"></ul>
-  <div class="meta" id="setupNote">Setup installs what's missing with Homebrew, rustup and pip, then downloads and builds Brush (15-30 min, once).
+  <div class="meta" id="setupNote" data-i18n-html="setup.note.html">Setup installs what's missing with Homebrew, rustup and pip, then downloads and builds Brush (15-30 min, once).
     If Homebrew itself is missing, run <code>./splat-studio setup</code> in Terminal instead - it needs your password.</div>
   <form method="dialog" class="row" style="margin-top:16px;justify-content:flex-end;flex:none">
-    <button value="cancel" style="flex:none">Close</button>
-    <button value="run" class="primary" style="flex:none" id="runSetup">Run setup</button>
+    <button value="cancel" style="flex:none" data-i18n="dlg.close">Close</button>
+    <button value="run" class="primary" style="flex:none" id="runSetup" data-i18n="setup.run">Run setup</button>
   </form>
 </dialog>
 
 <dialog id="retrainDlg">
   <form method="dialog">
-    <h3>Train again</h3>
-    <div class="meta">Reuses this run's camera poses and trains a new splat with different settings. The existing splat is kept.</div>
-    <div class="field"><label>Quality</label>
-      <div class="seg" data-name="rq"><button type="button" data-v="preview">Preview</button><button type="button" data-v="standard">Standard</button><button type="button" data-v="high" class="on">High</button></div></div>
-    <div class="field"><label>Detail</label>
-      <div class="seg" data-name="rd"><button type="button" data-v="auto" class="on">Auto</button><button type="button" data-v="low">Low</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="high">High</button></div></div>
-    <label class="check"><input type="checkbox" id="rEval"> <span>Measure quality (PSNR/SSIM)</span></label>
-    <div class="field"><label for="rArgs">Extra Brush options</label><input id="rArgs" type="text"></div>
+    <h3 data-i18n="retrain.title">Train again</h3>
+    <div class="meta" data-i18n="retrain.help">Reuses this run's camera poses and trains a new splat with different settings. The existing splat is kept.</div>
+    <div class="field"><label data-i18n="quality.label">Quality</label>
+      <div class="seg" data-name="rq"><button type="button" data-v="preview" data-i18n="quality.preview">Preview</button><button type="button" data-v="standard" data-i18n="quality.standard">Standard</button><button type="button" data-v="high" class="on" data-i18n="quality.high">High</button></div></div>
+    <div class="field"><label data-i18n="detail.label">Detail</label>
+      <div class="seg" data-name="rd"><button type="button" data-v="auto" class="on" data-i18n="detail.auto">Auto</button><button type="button" data-v="low" data-i18n="detail.low">Low</button><button type="button" data-v="normal" data-i18n="detail.normal">Normal</button><button type="button" data-v="high" data-i18n="detail.high">High</button></div></div>
+    <label class="check"><input type="checkbox" id="rEval"> <span data-i18n="retrain.eval">Measure quality (PSNR/SSIM)</span></label>
+    <div class="field"><label for="rArgs" data-i18n="adv.brush">Extra Brush options</label><input id="rArgs" type="text"></div>
     <div class="row" style="margin-top:16px;justify-content:flex-end;flex:none">
-      <button value="cancel" style="flex:none">Cancel</button>
-      <button value="ok" class="primary" style="flex:none">Queue training</button>
+      <button value="cancel" style="flex:none" data-i18n="dlg.cancel">Cancel</button>
+      <button value="ok" class="primary" style="flex:none" data-i18n="retrain.queue">Queue training</button>
     </div>
   </form>
 </dialog>
@@ -348,71 +360,89 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+const t = window.t;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const viewerUrl = (file, title) => "/viewer?" + new URLSearchParams({ file, title: title || file.split("/").pop() });
 const fileUrl = (p) => "/files/" + p.split("/").map(encodeURIComponent).join("/");
 const mb = (b) => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB";
-const ago = (t) => { if (!t) return ""; const s = Date.now() / 1000 - t;
-  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago";
-  if (s < 86400) return Math.floor(s / 3600) + " h ago"; return new Date(t * 1000).toLocaleDateString(); };
+const ago = (ts) => { if (!ts) return ""; const s = Date.now() / 1000 - ts;
+  if (s < 60) return t("ago.now"); if (s < 3600) return t("ago.min", { n: Math.floor(s / 60) });
+  if (s < 86400) return t("ago.h", { n: Math.floor(s / 3600) }); return new Date(ts * 1000).toLocaleDateString(window.i18n.getLang() === "pt" ? "pt-BR" : "en"); };
 const dur = (a, b) => { if (!a) return ""; const s = Math.max(0, (b || Date.now() / 1000) - a);
   const m = Math.floor(s / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : m ? `${m}m ${Math.floor(s % 60)}s` : `${Math.floor(s)}s`; };
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
                 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2800); }
+const tr = (prefix, value) => window.i18n.has(prefix + value) ? t(prefix + value) : value;   // translate known labels
+function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("show"), 2800); }
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || r.statusText);
+  if (!r.ok) { const e = new Error(data.code && window.i18n.has("err." + data.code) ? t("err." + data.code) : (data.error || r.statusText)); e.code = data.code; throw e; }
   return data;
 }
 const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(a.text)}</li>`).join("");
+const adviceText = (a) => (a.code && window.i18n.has("advice." + a.code) ? t("advice." + a.code, a.params || {}) : a.text);
+const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(adviceText(a))}</li>`).join("");
+
+window.i18n.mountSwitcher();
+window.i18n.apply();
+window.addEventListener("langchange", () => { refreshHelp(); renderSetup(); renderVideoAdvice(); renderRuns(); loadLibrary(); renderVideoOptions(); });
 
 // ---------------------------------------------------------------- guide + setup
 $("guideBtn").onclick = $("guideLink").onclick = () => $("guide").showModal();
 if (!store.get("guide:seen")) { store.set("guide:seen", true); setTimeout(() => $("guide").showModal(), 300); }
 
+let setup = null;
 async function loadSetup() {
-  let d; try { d = await api("/api/setup"); } catch { return; }
-  const missing = d.items.filter((i) => i.required && !i.ok);
-  $("setupPill").textContent = missing.length ? `${missing.length} tool${missing.length > 1 ? "s" : ""} missing` : "✓ Tools ready";
-  $("setupPill").className = "status-pill " + (missing.length ? "bad" : "ok");
-  $("dataDir").textContent = "Data folder: " + d.data_dir;
-  $("setupList").innerHTML = d.items.map((i) => `<li><span class="${i.ok ? "y" : i.required ? "n" : "o"}">${i.ok ? "✓" : i.required ? "✗" : "·"}</span>
-    <b>${esc(i.name)}</b><span class="meta">${esc(i.why)}</span></li>`).join("");
-  $("runSetup").textContent = missing.length ? "Run setup" : "Check again";
+  try { setup = await api("/api/setup"); } catch { return; }
+  renderSetup();
+}
+function renderSetup() {
+  if (!setup) return;
+  const missing = setup.items.filter((i) => i.required && !i.ok);
+  const pill = $("setupPill");
+  pill.removeAttribute("data-i18n");
+  pill.textContent = !missing.length ? t("head.ready") : missing.length === 1 ? t("head.missing.one") : t("head.missing.many", { n: missing.length });
+  pill.className = "status-pill " + (missing.length ? "bad" : "ok");
+  $("dataDir").textContent = t("setup.dataDir", { dir: setup.data_dir });
+  $("setupList").innerHTML = setup.items.map((i) => `<li><span class="${i.ok ? "y" : i.required ? "n" : "o"}">${i.ok ? "✓" : i.required ? "✗" : "·"}</span>
+    <b>${esc(i.name)}</b><span class="meta">${esc(tr("tool.", i.name) === i.name ? i.why : t("tool." + i.name))}</span></li>`).join("");
+  $("runSetup").removeAttribute("data-i18n");
+  $("runSetup").textContent = missing.length ? t("setup.run") : t("setup.again");
 }
 $("setupPill").onclick = () => { loadSetup(); $("setupDlg").showModal(); };
 $("setupDlg").addEventListener("close", async () => {
   if ($("setupDlg").returnValue !== "run") return;
-  try { await postJSON("/api/jobs", { type: "setup" }); toast("Setup queued - see Runs"); refresh(); } catch (e) { toast(e.message); }
+  try { await postJSON("/api/jobs", { type: "setup" }); toast(t("toast.setupQueued")); refresh(); } catch (e) { toast(e.message); }
 });
 
 // ---------------------------------------------------------------- segmented controls
-const HELP = {
-  quality: { preview: "Quick look, ~4× faster. Lower resolution.", standard: "Good default. ~120 training steps per frame.",
-             high: "Best result, slowest. More steps and splats." },
-  detail: { auto: "Judged from how much texture COLMAP found.", low: "Smoother, smaller file. Good for plain objects.",
-            normal: "Balanced.", high: "Grows more splats for fine detail. Bigger file." },
-};
 function seg(name) { return document.querySelector(`.seg[data-name="${name}"] button.on`)?.dataset.v; }
+function refreshHelp() {
+  $("qualityHelp").textContent = t("quality.help." + seg("quality"));
+  $("detailHelp").textContent = t("detail.help." + seg("detail"));
+}
 document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   s.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
-  const name = s.dataset.name; if (HELP[name]) $(name + "Help").textContent = HELP[name][b.dataset.v];
+  refreshHelp();
 }));
-$("qualityHelp").textContent = HELP.quality.standard; $("detailHelp").textContent = HELP.detail.auto;
+refreshHelp();
 
 // ---------------------------------------------------------------- choosing / uploading a video
-let chosenVideo = null, videos = [];
+let chosenVideo = null, chosenAdvice = null, videos = [];
 function setChosen(path, name, advice) {
-  chosenVideo = path;
+  chosenVideo = path; chosenAdvice = advice || null;
   $("chosen").hidden = !path; $("dropZone").hidden = !!path; $("pickField").hidden = !!path;
   $("chosenName").textContent = name || "";
-  $("videoAdvice").hidden = !(path && advice && advice.length);
-  $("videoAdvice").innerHTML = adviceHTML(advice);
-  $("startBtn").disabled = !path; $("startHelp").textContent = path ? "" : "Choose a video first.";
+  $("startBtn").disabled = !path;
+  $("startHelp").textContent = path ? "" : t("start.need");
+  renderVideoAdvice();
+}
+function renderVideoAdvice() {
+  const show = chosenVideo && chosenAdvice && chosenAdvice.length;
+  $("videoAdvice").hidden = !show;
+  $("videoAdvice").innerHTML = show ? adviceHTML(chosenAdvice) : "";
 }
 $("clearVideo").onclick = () => { setChosen(null); $("prevVideo").value = ""; };
 $("dropZone").onclick = () => $("fileInput").click();
@@ -424,33 +454,35 @@ $("prevVideo").onchange = (e) => { const v = videos.find((x) => x.path === e.tar
 
 function upload(file, url, done) {
   const xhr = new XMLHttpRequest();
-  $("uploading").hidden = false; $("upLabel").textContent = `Uploading ${file.name}…`; $("upBar").style.width = "0";
+  $("uploading").hidden = false; $("upLabel").textContent = t("upload.start", { name: file.name }); $("upBar").style.width = "0";
   xhr.upload.onprogress = (e) => { if (e.lengthComputable) {
     $("upBar").style.width = (100 * e.loaded / e.total) + "%";
-    $("upLabel").textContent = e.loaded >= e.total ? "Checking the video…" : `Uploading ${file.name} · ${mb(e.loaded)} / ${mb(e.total)}`; } };
+    $("upLabel").textContent = e.loaded >= e.total ? t("upload.checking") : t("upload.progress", { name: file.name, done: mb(e.loaded), total: mb(e.total) }); } };
   xhr.onload = () => {
     $("uploading").hidden = true;
     let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
-    if (xhr.status >= 300) return toast("Upload failed: " + (d.error || xhr.statusText));
+    if (xhr.status >= 300) return toast(t("upload.failed") + ": " + (d.code && window.i18n.has("err." + d.code) ? t("err." + d.code) : (d.error || xhr.statusText)));
     done(d); loadVideos(); loadLibrary();
   };
-  xhr.onerror = () => { $("uploading").hidden = true; toast("Upload failed"); };
+  xhr.onerror = () => { $("uploading").hidden = true; toast(t("upload.failed")); };
   xhr.open("POST", url);
   xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
   xhr.send(file);
 }
-async function loadVideos() {
-  videos = await api("/api/videos").catch(() => []);
-  $("prevVideo").innerHTML = `<option value="">${videos.length ? "Choose…" : "No uploads yet"}</option>` +
+async function loadVideos() { videos = await api("/api/videos").catch(() => []); renderVideoOptions(); }
+function renderVideoOptions() {
+  const keep = $("prevVideo").value;
+  $("prevVideo").innerHTML = `<option value="">${videos.length ? t("reuse.choose") : t("reuse.none")}</option>` +
     videos.map((v) => `<option value="${esc(v.path)}">${esc(v.name)} (${mb(v.size)})</option>`).join("");
+  $("prevVideo").value = keep;
 }
 
 // ---------------------------------------------------------------- starting jobs
 $("startBtn").onclick = async () => {
   const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
-    eval: $("eval").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    eval: $("eval").checked, clean: $("clean").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
     start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim() };
-  try { await postJSON("/api/jobs", body); toast("Run queued"); setChosen(null); $("prevVideo").value = ""; refresh(); }
+  try { await postJSON("/api/jobs", body); toast(t("toast.queued")); setChosen(null); $("prevVideo").value = ""; refresh(); }
   catch (e) { toast(e.message); }
 };
 let retrainDir = null;
@@ -458,100 +490,121 @@ function retrain(runDir) { retrainDir = runDir; $("retrainDlg").showModal(); }
 $("retrainDlg").addEventListener("close", async () => {
   if ($("retrainDlg").returnValue !== "ok") return;
   try { await postJSON("/api/jobs", { type: "retrain", run_dir: retrainDir, quality: seg("rq"), detail: seg("rd"),
-                                      eval: $("rEval").checked, brush_args: $("rArgs").value.trim() });
-    toast("Training queued"); refresh(); } catch (e) { toast(e.message); }
+                                      eval: $("rEval").checked, clean: $("clean").checked, remove_background: $("removeBg").checked, brush_args: $("rArgs").value.trim() });
+    toast(t("toast.trainQueued")); refresh(); } catch (e) { toast(e.message); }
 });
-async function cancelJob(id) { if (!confirm("Stop this run?")) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
+async function cleanSplat(path) {
+  try { await postJSON("/api/jobs", { type: "clean", splat: path }); toast(t("toast.cleanQueued")); refresh(); }
+  catch (e) { toast(e.message); }
+}
+async function isolateSplat(path) {
+  try { await postJSON("/api/jobs", { type: "isolate", splat: path }); toast(t("toast.isolateQueued")); refresh(); }
+  catch (e) { toast(e.message); }
+}
+async function cancelJob(id) { if (!confirm(t("confirm.stop"))) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
 
 // ---------------------------------------------------------------- runs list
-const STAGES = ["Setup", "Frames", "Camera poses", "Training"];
 const open = new Set();
 function stepper(j) {
-  if (j.type === "setup") return "";
+  if (j.type === "setup" || j.type === "clean" || j.type === "isolate") return "";
   const st = j.stage ?? -1, first = j.type === "retrain" ? 3 : 0;
-  return `<div class="steps">${STAGES.map((s, i) => {
-    if (i < first) return `<span class="done" style="opacity:.45">${s}</span>`;
+  return `<div class="steps">${[0, 1, 2, 3].map((i) => {
+    const label = t("stage." + i);
+    if (i < first) return `<span class="done" style="opacity:.45">${label}</span>`;
     let c = "";
     if (j.status === "done" || i < st) c = "done";
     else if (i === st) c = j.status === "running" ? "now" : ["failed", "interrupted", "cancelled"].includes(j.status) ? "fail" : "";
-    return `<span class="${c}">${s}</span>`; }).join("")}</div>`;
+    return `<span class="${c}">${label}</span>`; }).join("")}</div>`;
 }
 function runTitle(j) {
-  if (j.type === "setup") return "Setup";
+  if (j.type === "setup") return t("run.setup");
+  if (j.type === "clean") return t("run.clean", { name: splatTitle((j.options || {}).splat || "") });
+  if (j.type === "isolate") return t("run.isolate", { name: splatTitle((j.options || {}).splat || "") });
   const base = (j.video || j.run_dir || "").split("/").pop();
-  return j.type === "retrain" ? `Re-train · ${(j.run_dir || "").split("/")[1] || ""}` : base;
+  return j.type === "retrain" ? t("run.retrain", { name: (j.run_dir || "").split("/")[1] || "" }) : base;
+}
+function attemptText(a) {                       // "2/3 - wider overlap ..." -> translated label
+  const m = /^(\d+\/\d+) - (.+)$/.exec(a || ""); return m ? `${m[1]} - ${tr("attempt.", m[2])}` : (a || "");
 }
 function runHTML(j) {
   const running = j.status === "running", qd = j.status === "queued";
   const o = j.options || {};
-  const tags = [j.source === "cli" ? "command line" : null, o.quality, o.detail && o.detail !== "auto" ? o.detail + " detail" : null,
-                o.eval ? "eval" : null].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join("");
-  const timing = running ? `running ${dur(j.started)}` : qd ? `queued ${ago(j.created)}`
-    : !j.started ? `stopped before starting · ${ago(j.finished || j.created)}`
-    : j.finished ? `took ${dur(j.started, j.finished)} · ${ago(j.finished)}` : ago(j.created);
-  const facts = [j.frames ? `${j.frames} frames` : null, j.registered ? `registered ${j.registered}` : null].filter(Boolean).join(" · ");
+  const tags = [j.source === "cli" ? t("tag.cli") : null, o.quality ? t("quality." + o.quality).toLowerCase() : null,
+                o.detail && o.detail !== "auto" ? t("tag.detail", { d: t("detail." + o.detail) }) : null,
+                o.eval ? t("tag.eval") : null, o.clean ? t("tag.clean") : null, o.remove_background ? t("tag.removeBg") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
+  const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
+    : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
+    : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);
+  const facts = [j.frames ? t("run.frames", { n: j.frames }) : null, j.registered ? t("run.registered", { r: j.registered }) : null].filter(Boolean).join(" · ");
   let now = "";
   if (running) {
     const pct = j.step_pct ?? null;
     now = `<div class="bar ${pct == null ? "indet" : ""}" style="margin-top:4px"><i style="width:${pct ?? 0}%"></i></div>
-      <div class="now-line"><span>${esc(j.stage_label || "Starting")}${j.step_label ? " · " + esc(j.step_label) : ""}${pct != null ? " · " + pct + "%" : ""}
-      ${j.stage === 2 && j.attempt ? `<br>Attempt ${esc(j.attempt)}` : ""}</span>
-      <span>${j.eta ? "left " + esc(j.eta) : ""}${j.eta_worst ? `<br>worst case ${esc(j.eta_worst)}` : ""}</span></div>`;
+      <div class="now-line"><span>${esc(j.stage != null ? t("stage." + j.stage) : t("run.starting"))}${j.step_label ? " · " + esc(tr("step.", j.step_label)) : ""}${pct != null ? " · " + pct + "%" : ""}
+      ${j.stage === 2 && j.attempt ? `<br>${esc(t("run.attempt", { a: attemptText(j.attempt) }))}` : ""}</span>
+      <span>${j.eta ? esc(t("run.left", { t: j.eta })) : ""}${j.eta_worst ? `<br>${esc(t("run.worst", { t: j.eta_worst }))}` : ""}</span></div>`;
   }
-  const splat = j.splat, title = splat ? splatTitle(splat) : "";
-  const canRetrain = !running && !qd && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
+  const best = j.splat, title = best ? splatTitle(best) : "";       // the original, as always
+  const canRetrain = !running && !qd && j.type !== "clean" && j.type !== "isolate" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
   const actions = [
-    splat ? `<a class="btn small primary" href="${viewerUrl(splat, title)}">View splat</a>` : "",
+    best ? `<a class="btn small primary" href="${viewerUrl(best, title)}">${esc(t("btn.viewSplat"))}</a>` : "",
+    j.clean_splat && j.clean_splat !== best ? `<a class="btn small" data-testid="view-clean" href="${viewerUrl(j.clean_splat, splatTitle(j.clean_splat))}">${esc(t("btn.viewClean"))}</a>` : "",
+    j.object_splat && j.object_splat !== best ? `<a class="btn small" data-testid="view-object" href="${viewerUrl(j.object_splat, splatTitle(j.object_splat))}">${esc(t("btn.viewObject"))}</a>` : "",
     `<div class="row">` +
-      (running || qd ? `<button class="small" onclick="cancelJob('${esc(j.id)}')">Stop</button>` : "") +
-      (canRetrain ? `<button class="small" onclick="retrain('${esc(j.run_dir)}')">Train again</button>` : "") +
-      (j.source === "ui" ? `<button class="small ghost" onclick="toggle('${esc(j.id)}')">Details</button>` : "") +
+      (running || qd ? `<button class="small" onclick="cancelJob('${esc(j.id)}')">${esc(t("btn.stop"))}</button>` : "") +
+      (canRetrain ? `<button class="small" onclick="retrain('${esc(j.run_dir)}')">${esc(t("btn.trainAgain"))}</button>` : "") +
+      (j.source === "ui" ? `<button class="small ghost" onclick="toggle('${esc(j.id)}')">${esc(t("btn.details"))}</button>` : "") +
     `</div>`].join("");
   const s = j.summary || {};
-  const breaks = (j.track_breaks || []).map((b) => `${b.when ? b.when + " (" : ""}${b.count} frames${b.when ? ")" : ""}`).join(", ")
+  const breaks = (j.track_breaks || []).map((b) => `${b.when ? b.when + " (" : ""}${t("run.frames", { n: b.count })}${b.when ? ")" : ""}`).join(", ")
                  || (s.track_breaks || []).join("; ");
-  const kv = [["Run folder", j.run_dir], ["Best model", s.best], ...(s.attempts || []).map((a, i) => [`Attempt ${i + 1}`, a]),
-              ["Track breaks", breaks], ["Brush", s["brush settings"]], ["Splats", (j.splats || []).map((x) => x.split("/").pop()).join(", ")]]
+  const kv = [[t("kv.folder"), j.run_dir], [t("kv.best"), s.best], ...(s.attempts || []).map((a, i) => [t("kv.attempt", { n: i + 1 }), a]),
+              [t("kv.breaks"), breaks], [t("kv.brush"), s["brush settings"]], [t("kv.splats"), (j.splats || []).map((x) => x.split("/").pop()).join(", ")]]
     .filter(([, v]) => v).map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("");
   return `<div class="run ${open.has(j.id) ? "open" : ""}" data-id="${esc(j.id)}">
     <div class="thumb" style="${j.thumb ? `background-image:url('${fileUrl(j.thumb)}')` : ""}"></div>
     <div style="min-width:0">
       <div class="head"><span class="name" title="${esc(runTitle(j))}">${esc(runTitle(j))}</span>
-        <span class="pill ${esc(j.status)}">${esc(j.status)}</span>${tags}</div>
+        <span class="pill ${esc(j.status)}">${esc(tr("status.", j.status))}</span>${tags}</div>
       <div class="meta">${esc(timing)}${facts ? " · " + esc(facts) : ""}</div>
       ${stepper(j)}${now}
       ${j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : ""}
       ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}
-      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><button class="link" onclick="$('guide').showModal()">Recording guide →</button></div>` : ""}
+      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><button class="link" onclick="$('guide').showModal()">${esc(t("btn.guide"))}</button></div>` : ""}
+      ${j.status === "done" && j.type === "video" && !j.splat ? `<div class="meta">${esc(t("run.noSplat"))}</div>` : ""}
     </div>
     <div class="actions">${actions}</div>
-    <div class="more">${kv ? `<div class="kv">${kv}</div>` : ""}<pre class="log" id="log-${esc(j.id)}">Loading log…</pre></div>
+    <div class="more">${kv ? `<div class="kv">${kv}</div>` : ""}<pre class="log" id="log-${esc(j.id)}">${esc(t("log.loading"))}</pre></div>
   </div>`;
 }
 function splatTitle(p) {
-  const parts = p.split("/");
-  if (parts[0] !== "workspace") return parts.pop();
-  return `${parts[1]} · ${parts.pop().replace(/\.ply$/, "").replace(/_\d+$/, "")}`;
+  const parts = p.split("/"), file = parts[parts.length - 1] || "";
+  const cleaned = /_clean\.ply$/.test(file), isolated = /_object\.ply$/.test(file);
+  const q = file.replace(/_clean\.ply$|_object\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
+  // English output stays exactly "<name> · preview"; other languages translate the quality word
+  const base = parts[0] !== "workspace" ? file : `${parts[1]} · ${tr("quality.", q).toLowerCase()}`;
+  if (parts[0] !== "workspace") return base;
+  return cleaned ? `${base} · ${t("lib.cleaned")}` : isolated ? `${base} · ${t("lib.isolated")}` : base;
 }
 async function toggle(id) { open.has(id) ? open.delete(id) : open.add(id); renderRuns(); if (open.has(id)) loadLog(id); }
 async function loadLog(id) {
   const el = document.getElementById("log-" + id); if (!el) return;
   const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
   const d = await api(`/api/jobs/${encodeURIComponent(id)}/log`).catch(() => ({ log: "" }));
-  el.textContent = d.log || "(no output yet)";
+  el.textContent = d.log || t("log.empty");
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
 let jobs = [], lastSig = "";
 function renderRuns() {
   const logs = {}; document.querySelectorAll("pre.log").forEach((p) => logs[p.id] = [p.textContent, p.scrollTop]);
-  $("runs").innerHTML = jobs.length ? jobs.map(runHTML).join("") : `<div class="empty">No runs yet. Upload a video to start.</div>`;
-  for (const [id, [t, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = t; p.scrollTop = s; } }
+  $("runs").innerHTML = jobs.length ? jobs.map(runHTML).join("") : `<div class="empty">${esc(t("runs.empty"))}</div>`;
+  for (const [id, [txt, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = txt; p.scrollTop = s; } }
   const running = jobs.filter((j) => j.status === "running" && j.source === "ui").length, queued = jobs.filter((j) => j.status === "queued").length;
-  $("queueInfo").textContent = running || queued ? `${running} running · ${queued} queued` : "";
+  $("queueInfo").textContent = running || queued ? t("runs.queue", { running, queued }) : "";
 }
 async function refresh() {
   try { jobs = await api("/api/jobs"); } catch { return; }
-  const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat]));
+  const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat, j.clean_splat, j.object_splat]));
   renderRuns();
   open.forEach((id) => loadLog(id));
   if (sig !== lastSig) { if (lastSig && jobs.some((j) => j.type === "setup" && j.status === "done")) loadSetup(); lastSig = sig; loadLibrary(); }
@@ -559,18 +612,49 @@ async function refresh() {
 
 // ---------------------------------------------------------------- library
 async function loadLibrary() {
-  const items = await api("/api/splats").catch(() => []);
-  $("lib").innerHTML = items.length ? items.map((s) => `<div class="tile" data-path="${esc(s.path)}">
-      <a class="img" href="${viewerUrl(s.path, s.title)}" style="${s.thumb ? `background-image:url('${fileUrl(s.thumb)}')` : ""}">${s.thumb ? "" : "3D splat"}</a>
-      <div class="body"><b title="${esc(s.path)}">${esc(s.title)}</b>
-        <span class="meta">${mb(s.size)} · ${ago(s.mtime)}${s.source === "imported" ? " · imported" : ""}</span></div>
-      <div class="acts"><a class="btn small primary" href="${viewerUrl(s.path, s.title)}">View</a>
-        <a class="btn small" href="${fileUrl(s.path)}?download=1">Download</a>
-        <a class="btn small" href="/api/export?${new URLSearchParams({ file: s.path, title: s.title })}" title="Self-contained viewer website (zip)">Website</a></div>
-    </div>`).join("") : `<div class="empty" style="grid-column:1/-1">Trained splats and imported files appear here.</div>`;
+  libItems = await api("/api/splats").catch(() => []);
+  renderCompareBar(); renderLibrary();
 }
+function renderLibrary() {
+  const items = libItems;
+  $("lib").innerHTML = items.length ? items.map((s) => {
+    const title = splatTitle(s.path);
+    const picked = comparePick.includes(s.path);
+    return `<div class="tile${picked ? " picked" : ""}" data-path="${esc(s.path)}">
+      <a class="img" href="${viewerUrl(s.path, title)}" style="${s.thumb ? `background-image:url('${fileUrl(s.thumb)}')` : ""}">${s.thumb ? "" : esc(t("lib.placeholder"))}</a>
+      <div class="body"><b title="${esc(s.path)}">${esc(title)}</b>
+        <span class="meta">${mb(s.size)} · ${ago(s.mtime)}${s.source === "imported" ? " · " + esc(t("lib.imported")) : ""}${s.cleaned && s.source === "imported" ? " · " + esc(t("lib.cleaned")) : ""}</span></div>
+      <div class="acts"><a class="btn small primary" href="${viewerUrl(s.path, title)}">${esc(t("lib.view"))}</a>
+        <a class="btn small" href="${fileUrl(s.path)}?download=1">${esc(t("lib.download"))}</a>
+        <a class="btn small" href="/api/export?${new URLSearchParams({ file: s.path, title })}" title="${esc(t("lib.website.title"))}">${esc(t("lib.website"))}</a>
+        ${!s.cleaned && !s.isolated && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="clean-button" title="${esc(t("lib.clean.title"))}" onclick="cleanSplat('${esc(s.path)}')">${esc(t("lib.clean"))}</button>` : ""}
+        <button class="small${picked ? " picked" : ""}" data-testid="compare-select" title="${esc(t("lib.select.title"))}" onclick="pickCompare('${esc(s.path)}')">${esc(t("lib.select"))}</button>
+        ${!s.isolated && !s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="isolate-button" title="${esc(t("lib.isolate.title"))}" onclick="isolateSplat('${esc(s.path)}')">${esc(t("lib.isolate"))}</button>` : ""}</div>
+    </div>`; }).join("") : `<div class="empty" style="grid-column:1/-1">${esc(t("lib.empty"))}</div>`;
+}
+// ---------------------------------------------------------------- compare two splats
+let comparePick = [], libItems = [];
+function pickCompare(path) {
+  comparePick = comparePick.includes(path) ? comparePick.filter((p) => p !== path) : [...comparePick, path].slice(-2);
+  renderCompareBar(); renderLibrary();
+}
+function renderCompareBar() {
+  comparePick = comparePick.filter((p) => libItems.some((s) => s.path === p));     // drop deleted files
+  $("compareBar").hidden = !comparePick.length;
+  $("compareBtn").textContent = t("lib.compare", { n: comparePick.length });
+  $("compareHint").textContent = comparePick.length === 1 ? t("lib.compare.hint") : "";
+  if (comparePick.length === 2) {
+    const [a, b] = comparePick;
+    $("compareBtn").href = "/compare?" + new URLSearchParams({ a, b, ta: splatTitle(a), tb: splatTitle(b) });
+    $("compareBtn").removeAttribute("aria-disabled"); $("compareBtn").style.pointerEvents = "";
+  } else {
+    $("compareBtn").removeAttribute("href");
+    $("compareBtn").setAttribute("aria-disabled", "true"); $("compareBtn").style.pointerEvents = "none";
+  }
+}
+$("compareClear").onclick = () => { comparePick = []; renderCompareBar(); renderLibrary(); };
 $("importBtn").onclick = () => $("importInput").click();
-$("importInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0], "/api/import", (d) => toast(`Imported ${d.name}`));
+$("importInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0], "/api/import", (d) => toast(t("toast.imported", { name: d.name })));
 
 loadSetup(); loadVideos(); refresh(); loadLibrary();
 setInterval(refresh, 2000);

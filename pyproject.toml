@@ -35,7 +35,7 @@ version = { attr = "splat_studio.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-splat_studio = ["static/*.html", "static/vendor/**/*"]
+splat_studio = ["static/*.html", "static/*.js", "static/vendor/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

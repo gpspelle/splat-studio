@@ -7,9 +7,10 @@ Routes
   GET  /api/jobs/<id>/log        terminal log of a job
   GET  /api/splats               splat library          GET  /api/videos         uploaded videos (+ advice)
   GET  /api/setup                dependency status      GET  /api/export?file=   viewer website (zip)
+  GET  /compare?a=...&b=...      two splats side by side GET  /api/export-compare?a=&b=  comparison website (zip)
   POST /api/upload               raw video body, X-Filename header -> {video, advice}
   POST /api/import               raw .ply body, X-Filename header
-  POST /api/jobs                 {type: video|retrain|setup, ...options}
+  POST /api/jobs                 {type: video|retrain|setup|clean|isolate, ...options}
   POST /api/jobs/<id>/cancel     DELETE /api/jobs/<id>   (removes the record, never results)
 """
 from __future__ import annotations
@@ -27,8 +28,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, setup_deps
-from .jobs import Runner, validate_options
-from .library import SPLAT_EXT, STATIC_DIR, VIDEO_EXT, DataDir, export_site, splat_title
+from .jobs import ApiError, Runner, validate_options
+from .library import SPLAT_EXT, STATIC_DIR, VIDEO_EXT, DataDir, export_compare, export_site, splat_title
 
 
 def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
@@ -116,7 +117,8 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
             name = unquote(self.headers.get("X-Filename") or "")
             name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).name).strip("._") or "upload"
             if Path(name).suffix.lower() not in allowed:
-                self.send_json({"error": f"unsupported file type (allowed: {', '.join(sorted(allowed))})"}, 400)
+                self.send_json({"error": f"unsupported file type (allowed: {', '.join(sorted(allowed))})",
+                                "code": "file_type"}, 400)
                 return None
             dest, i = folder / name, 2
             while dest.exists():                    # never overwrite: frames/ are keyed by the file name
@@ -124,7 +126,7 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 i += 1
             left = int(self.headers.get("Content-Length") or 0)
             if left <= 0:
-                self.send_json({"error": "empty upload"}, 400)
+                self.send_json({"error": "empty upload", "code": "empty_upload"}, 400)
                 return None
             tmp = dest.with_name(dest.name + ".part")
             with open(tmp, "wb") as f:
@@ -136,7 +138,7 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                     left -= len(chunk)
             if left > 0:
                 tmp.unlink(missing_ok=True)
-                self.send_json({"error": "upload interrupted"}, 400)
+                self.send_json({"error": "upload interrupted", "code": "upload_interrupted"}, 400)
                 return None
             tmp.replace(dest)
             return dest
@@ -150,6 +152,8 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 return self.send_file(static_dir / "index.html")
             if p == "/viewer":
                 return self.send_file(static_dir / "viewer.html")
+            if p == "/compare":
+                return self.send_file(static_dir / "compare.html")
             if p.startswith("/files/"):
                 f = data.safe_path(p[len("/files/"):])
                 return self.send_file(f, download_name=f.name if f and q.get("download") else None)
@@ -174,9 +178,38 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                         raise ValueError
                 except ValueError:
                     return self.send_json({"error": "rotation must be a JSON array of 4 numbers"}, 400)
+                try:
+                    crop = float(q["crop"]) if q.get("crop") else None
+                    if crop is not None and not 0 < crop <= 10:
+                        raise ValueError
+                except ValueError:
+                    return self.send_json({"error": "crop must be a number between 0 and 10"}, 400)
                 title = q.get("title") or splat_title(data.rel(f))
                 name = re.sub(r"[^A-Za-z0-9_-]+", "_", title).strip("_") + "_viewer.zip"
-                return self.send_bytes(export_site(f, title, rot, static_dir), "application/zip", name)
+                return self.send_bytes(export_site(f, title, rot, static_dir, crop), "application/zip", name)
+            if p == "/api/export-compare":
+                models = []
+                for k in "ab":
+                    f = data.safe_path(q.get(k, ""))
+                    if not f or not f.is_file() or f.suffix.lower() not in SPLAT_EXT:
+                        return self.send_error(HTTPStatus.NOT_FOUND)
+                    try:
+                        rot = json.loads(q["r" + k]) if q.get("r" + k) else None
+                        if rot is not None and not (isinstance(rot, list) and len(rot) == 4):
+                            raise ValueError
+                    except ValueError:
+                        return self.send_json({"error": "rotation must be a JSON array of 4 numbers",
+                                               "code": "rotation"}, 400)
+                    try:
+                        crop = float(q["c" + k]) if q.get("c" + k) else None
+                        if crop is not None and not 0 < crop <= 10:
+                            raise ValueError
+                    except ValueError:
+                        return self.send_json({"error": "crop must be a number between 0 and 10", "code": "crop"}, 400)
+                    models.append({"path": f, "title": q.get("t" + k) or splat_title(data.rel(f)),
+                                   "rotation": rot, "crop": crop})
+                name = re.sub(r"[^A-Za-z0-9_-]+", "_", f"{models[0]['title']} vs {models[1]['title']}").strip("_")
+                return self.send_bytes(export_compare(models, static_dir), "application/zip", name + "_compare.zip")
             f = (static_dir / p.lstrip("/")).resolve()          # static assets (vendor libraries)
             if f.is_file() and str(f).startswith(str(static_dir) + "/"):
                 return self.send_file(f)
@@ -199,23 +232,30 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 body = self.read_json()
                 try:
                     opts = validate_options(body)
-                except (ValueError, TypeError) as e:
-                    return self.send_json({"error": str(e)}, 400)
+                except ApiError as e:
+                    return self.send_json({"error": str(e), "code": e.code}, 400)
                 t = body.get("type", "video")
                 if t == "video":
                     v = data.safe_path(body.get("video", ""))
                     if not v or not v.is_file() or v.suffix.lower() not in VIDEO_EXT:
-                        return self.send_json({"error": "video not found"}, 400)
+                        return self.send_json({"error": "video not found", "code": "video_missing"}, 400)
                     job = runner.submit("video", video=data.rel(v), options=opts)
                 elif t == "retrain":
                     rd = data.safe_path(body.get("run_dir", ""))
                     if not rd or not (rd / "dense").is_dir():
-                        return self.send_json({"error": "that run has no camera poses to train on"}, 400)
+                        return self.send_json({"error": "that run has no camera poses to train on",
+                                               "code": "no_poses"}, 400)
                     job = runner.submit("retrain", run_dir=data.rel(rd), options=opts)
                 elif t == "setup":
                     job = runner.submit("setup")
+                elif t in ("clean", "isolate"):
+                    f = data.safe_path(body.get("splat", ""))
+                    if not f or not f.is_file() or f.suffix.lower() != ".ply":
+                        return self.send_json({"error": "splat not found", "code": "splat_missing"}, 400)
+                    run_dir = data.run_dir_of(f)
+                    job = runner.submit(t, options={"splat": data.rel(f)}, run_dir=run_dir)
                 else:
-                    return self.send_json({"error": "unknown job type"}, 400)
+                    return self.send_json({"error": "unknown job type", "code": "unknown_type"}, 400)
                 return self.send_json(runner.view(job))
             m = re.match(r"^/api/jobs/([^/]+)/cancel$", p)
             if m:

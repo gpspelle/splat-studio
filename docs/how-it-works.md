@@ -66,6 +66,55 @@ to compare settings with PSNR/SSIM.
 Brush writes the scene's estimated up direction into the `.ply` header
 (`comment Vertical axis: x y z`). The viewer reads it to stand the model upright.
 
+## Fog: diagnosis and cleanup (`splat_studio/splats.py`)
+
+- Reads standard 3DGS PLY files in chunks with `struct` (no numpy needed): position, opacity
+  (stored as a logit) and scale (stored as a log).
+- **Object region.** With a run folder, it reads the camera centres and viewing directions from
+  COLMAP's `images.bin` and finds the point closest to all viewing rays: what the cameras were
+  filming. The kept radius is 0.8 × the median camera distance. Without cameras, it uses the
+  densest connected cluster of opaque splats (a flood fill over a voxel grid, starting from the
+  most crowded block), so opaque walls don't pull the region away from the object.
+- **inspect** reports the share of splats outside that region, the share that are large and
+  faint ("fog"), the share that are nearly invisible everywhere (a sign of inaccurate camera
+  positions), and how much bigger the whole scene is than the object.
+- **clean** copies the rows of splats inside the region with opacity ≥ 0.02 into
+  `NAME_clean.ply`, keeping the header comments (including the up axis). It refuses to
+  overwrite its input.
+- The viewer frames the camera on the 5th–95th percentile of opaque splats and implements
+  **Crop** with Spark's `SplatEdit` (an inverted sphere that makes everything outside it
+  transparent).
+
+Tested on a synthetic object-in-a-foggy-room scene with known answers: all object splats kept,
+fog removed, and a real browser confirms the crop removes the fog from the frame.
+
+## Background removal (`splats.isolate`)
+
+1. Keep the object region (as above) and splats with opacity ≥ 0.05.
+2. Find the support surface: a plane through the opaque splats, near-horizontal with respect
+   to Brush's up axis. Candidates are the most crowded height along the up axis plus RANSAC
+   planes (for a slightly tilted up axis); the one with most splats within 1.2% of the region
+   radius wins, if it holds at least 12% of them. Splats on it, and on the far side from the
+   object, are dropped.
+3. Voxelise the remaining opaque splats (region radius / 30), flood-fill from the voxel
+   nearest their median, grow the blob by one voxel, and keep every splat inside it.
+
+The result, `NAME_object.ply`, keeps the header comments (including the up axis). Tested on a
+synthetic vase-on-a-table scene with opaque walls and fog: more than 93% of the vase kept, no
+table, wall or fog splats, with and without camera positions.
+
+## Comparing (`static/compare.html`)
+
+Two panes, each with its own WebGL renderer, Spark renderer, camera and orbit controls. The
+pane you last touched leads: every frame its camera offset and pan, divided by its model's
+size, are applied to the other pane, multiplied by that model's size. Unlinked, each pane
+moves on its own.
+
+## Languages (`static/i18n.js`)
+
+One dictionary per language, shared by the Studio page, the viewer and exported websites.
+Server-side advice and errors carry codes and parameters, so they're translated in the browser.
+
 ## The web app (`splat_studio/server/`)
 
 - `app.py`: a standard-library HTTP server bound to `127.0.0.1` only.
