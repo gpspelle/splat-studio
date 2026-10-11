@@ -129,6 +129,8 @@ def main():
         page.click("[data-testid=compare-open]")
         page.wait_for_function("window.compareViewer && window.compareViewer.ready()", timeout=120000)
         page.evaluate("window.compareViewer.orbit(0, 25)")
+        for _ in range(3):                                  # turn model B on its own, 45°
+            page.click("[data-testid=model-bar-b] .right")
         page.wait_for_timeout(2500)
         page.screenshot(path=str(OUT / "compare.png"), timeout=300000)
         browser.close()

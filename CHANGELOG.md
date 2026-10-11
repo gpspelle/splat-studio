@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **Turn each model on its own in the comparison.** A bar under each model's name turns only
+  that model (↺ 15°, ↻ 15°, Flip, Tilt 90°, Reset), and **Turn model** makes dragging in that
+  view turn the model instead of the camera (Alt/Option + drag works too). Cameras stay
+  linked. **Save view** remembers both orientations for the viewer, and exports keep them.
 - **Site header and footer** on the Studio page and the recording guide: a logo, navigation
   (Studio, Library, Recording guide, Docs), a GitHub link, and a footer with help links,
   bug reports and contact (GitHub issues), the version, the license and credits. Built by
