@@ -91,11 +91,11 @@ def main():
 
         # 2. the studio
         page = browser.new_page(viewport={"width": 1320, "height": 900}, device_scale_factor=2)
-        page.goto(url)
+        page.goto(url + "/guide")
         page.get_by_test_id("guide").wait_for(state="visible")
         page.wait_for_timeout(400)
         page.screenshot(path=str(OUT / "recording-guide.png"))
-        page.locator("#guide button:has-text('Close')").click()
+        page.goto(url)
         page.set_input_files("#fileInput", str(video))
         page.get_by_test_id("video-advice").wait_for(state="visible")
         page.click('.seg[data-name="quality"] button[data-v="standard"]')

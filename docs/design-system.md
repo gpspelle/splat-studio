@@ -54,6 +54,8 @@ used only to explain a change; all of it switches off with *Reduce motion*.
 - **Status** `.pill`: mono capitals with a coloured dot (running pulses, unless motion is reduced).
 - **Progress** `.bar`: ruled track, ink fill with a signal tip. **Steps** `.steps`: four ruled cells.
 - **Advice list**, **toast** (ink with a signal edge), **dialog** (hard offset shadow).
+- **Site header and footer** (`.site-head`, `.site-nav`, `.site-foot`), built by `site.js`: wordmark with the
+  logo, navigation with the current page underlined in signal, and a ruled footer with link columns.
 - **HUD** (`.hud`, `.hud-chip`, `.hud-bar`): viewer chrome over the 3D canvas, mono capitals,
   joined by hairlines; `.marks` draws the viewfinder corners.
 

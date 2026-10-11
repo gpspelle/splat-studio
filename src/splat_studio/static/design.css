@@ -9,6 +9,7 @@
      2. Tokens          6. Form controls     10. Feedback: advice, toast, dialog
      3. Base            7. Surfaces          11. HUD (3D viewers)
      4. Type            8. Lists and tiles   12. Motion and accessibility
+                                             13. Site header and footer (site.js)
    ========================================================================== */
 
 /* 1. Fonts (bundled, SIL Open Font License - see fonts/*-OFL.txt) ---------------- */
@@ -295,3 +296,47 @@ pre.log { background: var(--canvas); color: #d9d6ce; font: 12px/1.5 var(--font-m
   .pill::before, .steps span.now, .primary, input[type=checkbox]:checked { forced-color-adjust: none; }
 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 13. Site header and footer (built by site.js on the Studio and guide pages) ------------- */
+.site-head { border-bottom: var(--hairline) solid var(--rule); background: var(--paper); }
+.site-head-in, .site-foot-in { max-width: 1240px; margin: 0 auto; padding: 0 var(--s-5); }
+.site-head-in { min-height: 60px; display: flex; align-items: center; gap: var(--s-6); flex-wrap: wrap; }
+.wordmark { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none;
+  font: 700 17px/1 var(--font-sans); letter-spacing: var(--track-tight); white-space: nowrap; }
+.wordmark .logo { width: 26px; height: 26px; flex: none; display: block; }
+.site-nav { display: flex; align-self: stretch; gap: var(--s-1); flex: 1; min-width: 0; }
+.site-nav a { display: inline-flex; align-items: center; padding: 0 var(--s-3); color: var(--ink-2); text-decoration: none;
+  font: 550 13.5px/1 var(--font-sans); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.site-nav a:hover { color: var(--ink); }
+.site-nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--signal); }
+.site-nav a[target="_blank"]::after { content: "↗"; margin-left: 4px; font: 12px var(--font-mono); color: var(--ink-3); }
+.site-tools { display: flex; align-items: center; gap: var(--s-2); }
+.site-tools .lang-select, .site-tools .theme-select { width: auto; height: var(--control-h); font: 500 12.5px var(--font-sans);
+  background-color: transparent; border-color: var(--rule-soft); }
+.btn.icon { width: var(--control-h); padding: 0; }
+.status-pill { gap: var(--s-2); font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
+.status-pill.ok { color: var(--ok); }
+.status-pill.bad { color: var(--bad); border-color: var(--bad); }
+@media (max-width: 920px) {
+  .site-head-in { gap: 0 var(--s-4); padding-top: var(--s-3); }
+  .site-tools { margin-left: auto; }
+  .site-nav { order: 3; flex-basis: 100%; overflow-x: auto; min-height: 44px; }
+  .site-nav a:first-child { padding-left: 0; }
+}
+@media (max-width: 480px) { .site-tools .btn.icon { display: none; } }   /* the footer links to GitHub too */
+
+.site-foot { border-top: var(--hairline) solid var(--rule); margin-top: var(--s-10); }
+.site-foot-in { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); gap: var(--s-6);
+  padding-top: var(--s-8); padding-bottom: var(--s-6); }
+.foot-brand p { margin: var(--s-3) 0 0; max-width: 34ch; font: var(--text-sm); color: var(--ink-2); }
+.foot-col { display: flex; flex-direction: column; gap: var(--s-2); }
+.foot-col b { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3); margin-bottom: 2px; }
+.foot-col a { color: var(--ink); text-decoration: none; font: var(--text-sm); width: fit-content; }
+.foot-col a:hover, .foot-base a:hover { color: var(--signal-ink); text-decoration: underline; text-underline-offset: 3px; }
+.foot-base { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--s-2) var(--s-6); flex-wrap: wrap;
+  padding-top: var(--s-4); border-top: var(--hairline) solid var(--rule-soft); font: var(--text-meta); color: var(--ink-3); }
+.foot-base a { color: inherit; }
+@media (max-width: 760px) {
+  .site-foot-in { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .foot-brand { grid-column: 1 / -1; }
+}
