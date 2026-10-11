@@ -19,6 +19,12 @@ class FramesLogicTest(unittest.TestCase):
         self.assertEqual(frames.blurry_indices(scores, 0), [])
         self.assertEqual(frames.blurry_indices([], 0.5), [])
 
+    def test_sharpest_indices(self):
+        scores = [5, 9, 1, 2, 3, 8, 7]
+        self.assertEqual(frames.sharpest_indices(scores, 3), [1, 5, 6])
+        self.assertEqual(frames.sharpest_indices(scores, 1), list(range(7)))
+        self.assertEqual(frames.sharpest_indices([], 3), [])
+
     def test_frame_names_sort_in_time_order(self):
         name = frames.frame_name("IMG_1")
         self.assertEqual(name % 7, "IMG_1_0007.jpg")

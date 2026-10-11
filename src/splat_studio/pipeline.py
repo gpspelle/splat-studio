@@ -75,7 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--start", help="trim: start time, e.g. 0:03")
     ap.add_argument("--end", help="trim: end time, e.g. 1:45")
     ap.add_argument("--re-extract", action="store_true", help="extract frames again even if they exist")
-    ap.add_argument("--max-size", type=int, default=1600, help="image size for COLMAP (default 1600)")
+    ap.add_argument("--max-size", type=int,
+                    help="image size for COLMAP and training (default: 1600, or 1920 at high quality)")
     ap.add_argument("--eval", action="store_true", help="hold out every 10th frame and report PSNR/SSIM")
     ap.add_argument("--no-train", action="store_true", help="stop after COLMAP")
     ap.add_argument("--clean", action="store_true",
@@ -131,9 +132,12 @@ def main(argv: list[str] | None = None) -> None:
             if run(cmd, args.dry_run) != 0:
                 sys.exit("Frame extraction failed.")
 
+        # The undistorted COLMAP images are what Brush trains on, so they must be at least as
+        # large as the quality's training resolution, or "high" silently trains at 1600px.
+        max_size = args.max_size or max(1600, brushmod.QUALITY[args.quality]["res"])
         ws = new_run_dir(Path("workspace") / name).resolve()
         say(f"\n==> 2/3 Camera poses (COLMAP): {ws}")          # parsed by the web UI
-        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size), args.dry_run) != 0:
+        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", max_size), args.dry_run) != 0:
             sys.exit("COLMAP did not produce a usable model - see the messages above. Brush was not started.")
         if not args.dry_run:
             latest = ws.parent / "latest"
@@ -152,7 +156,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     say("\n==> 3/3 Training the splat (Brush)")
     if args.dry_run and not dense.exists():
-        n_img, n_pts, size = 250, None, args.max_size
+        n_img, n_pts, size = 250, None, args.max_size or max(1600, brushmod.QUALITY[args.quality]["res"])
         say("    (dry run: assuming 250 images)")
     else:
         n_img, n_pts = brushmod.model_stats(dense / "sparse" / "0")
