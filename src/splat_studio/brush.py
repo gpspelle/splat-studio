@@ -26,15 +26,18 @@ QUALITY = {
     "high":     dict(per_img=160, lo=20000, hi=50000, res=1920, sh=3, splats=4_000_000),
 }
 # Lower threshold = splats grow more readily = more fine detail (and bigger files).
-DETAIL = {"low": 0.0035, "normal": 0.0025, "high": 0.0018}
+DETAIL = {"low": 0.0035, "normal": 0.0025, "high": 0.0018}   # normal = Brush's default
 
 
 def auto_detail(n_images: int, n_points: int | None) -> str:
-    """Judge detail from COLMAP's sparse points per image (a proxy for texture)."""
+    """Judge detail from COLMAP's sparse points per image (a proxy for texture).
+
+    Never "low": its threshold is above Brush's own default (0.0025), and few sparse points
+    usually means smooth or slightly blurry footage, which needs more growth, not less.
+    "low" stays available as an explicit choice for smaller files."""
     if not n_points or not n_images:
         return "normal"
-    ppi = n_points / n_images
-    return "high" if ppi > 600 else "low" if ppi < 150 else "normal"
+    return "high" if n_points / n_images > 600 else "normal"
 
 
 def choose_brush_params(n_images: int, n_points: int | None, quality: str = "standard",

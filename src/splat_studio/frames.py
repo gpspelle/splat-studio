@@ -2,7 +2,8 @@
 
 The whole video (or a --start/--end range) is sampled evenly so you get about --target
 frames, the right amount for COLMAP on a laptop CPU. iPhone HDR video is detected and
-converted to normal colours, and blurry frames are moved aside (needs OpenCV).
+converted to normal colours. With OpenCV, the video is sampled --oversample times more
+densely and only the sharpest frame of each group is kept, then blurry frames are moved aside.
 
     python -m splat_studio.frames IMG_1234.MOV
     python -m splat_studio.frames IMG_1234.MOV --out frames/vase --target 250 --start 0:03 --end 1:45
@@ -79,19 +80,55 @@ def blurry_indices(scores: list[float], ratio: float) -> list[int]:
     return [i for i, s in enumerate(scores) if s < median * ratio]
 
 
-def drop_blurry(folder: Path, ratio: float) -> int:
-    """Move frames much blurrier than the median into folder/_blurry. Returns how many moved."""
+def sharpest_indices(scores: list[float], group: int) -> list[int]:
+    """Index of the sharpest frame in each run of `group` consecutive frames."""
+    if group <= 1:
+        return list(range(len(scores)))
+    return [max(range(i, min(i + group, len(scores))), key=scores.__getitem__)
+            for i in range(0, len(scores), group)]
+
+
+def has_cv2() -> bool:
     try:
-        import cv2
+        import cv2  # noqa: F401
+        return True
     except ImportError:
-        print("  (OpenCV not installed - skipping the blur filter)")
-        return 0
+        return False
+
+
+def sharpness_scores(folder: Path) -> tuple[list[Path], list[float]]:
+    """Variance of the Laplacian per frame (higher = sharper), on a 1280px copy for speed
+    and so the score doesn't depend on the video's resolution."""
+    import cv2
     frames, scores = [], []
     for f in sorted(folder.glob("*.jpg")):
         img = cv2.imread(str(f), cv2.IMREAD_GRAYSCALE)
-        if img is not None:
-            frames.append(f)
-            scores.append(cv2.Laplacian(img, cv2.CV_64F).var())
+        if img is None:
+            continue
+        scale = 1280 / max(img.shape[:2])
+        if scale < 1:
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        frames.append(f)
+        scores.append(cv2.Laplacian(img, cv2.CV_64F).var())
+    return frames, scores
+
+
+def keep_sharpest(folder: Path, group: int) -> int:
+    """Delete all but the sharpest frame of every `group` consecutive frames. Returns how many remain."""
+    frames, scores = sharpness_scores(folder)
+    keep = set(sharpest_indices(scores, group))
+    for i, f in enumerate(frames):
+        if i not in keep:
+            f.unlink()
+    return len(keep)
+
+
+def drop_blurry(folder: Path, ratio: float) -> int:
+    """Move frames much blurrier than the median into folder/_blurry. Returns how many moved."""
+    if not has_cv2():
+        print("  (OpenCV not installed - skipping the blur filter)")
+        return 0
+    frames, scores = sharpness_scores(folder)
     bad = blurry_indices(scores, ratio)
     if bad:
         (folder / "_blurry").mkdir(exist_ok=True)
@@ -112,6 +149,8 @@ def main(argv: list[str] | None = None) -> None:
                     help="convert HDR (e.g. iPhone) video to normal colours (default: auto-detect)")
     ap.add_argument("--blur-ratio", type=float, default=0.5,
                     help="move frames sharper than less than this fraction of the median to _blurry/ (0 = keep all)")
+    ap.add_argument("--oversample", type=int, default=3,
+                    help="sample N times more frames and keep the sharpest of each N (needs OpenCV; 1 = off)")
     args = ap.parse_args(argv)
 
     for tool in ("ffmpeg", "ffprobe"):
@@ -149,9 +188,15 @@ def main(argv: list[str] | None = None) -> None:
             print("HDR video detected, but this ffmpeg lacks the 'zscale' filter - frames may look washed out.\n"
                   "  Fix: brew reinstall ffmpeg, or record with HDR Video off (Settings > Camera > Record Video)")
 
-    extract(args.video, out_dir, fps, start, length if args.end else None, name, tonemap)
-    # lets the UI map frame numbers back to video time, even when the frames are reused later
-    save_extraction_info(out_dir, fps, start, duration, str(args.video))
+    group = args.oversample if args.oversample > 1 and has_cv2() else 1
+    if group > 1:
+        print(f"Sampling {round(fps * group, 3)} fps and keeping the sharpest frame of every {group}")
+    extract(args.video, out_dir, round(fps * group, 3), start, length if args.end else None, name, tonemap)
+    if group > 1:
+        keep_sharpest(out_dir, group)
+    # lets the UI map frame numbers back to video time, even when the frames are reused later.
+    # Frame numbers count the sampled frames, so this is the sampling rate.
+    save_extraction_info(out_dir, round(fps * group, 3), start, duration, str(args.video))
     total = len(list(out_dir.glob("*.jpg")))
     if args.blur_ratio > 0:
         moved = drop_blurry(out_dir, args.blur_ratio)

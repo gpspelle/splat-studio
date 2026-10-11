@@ -26,7 +26,7 @@ class BrushParamsTest(unittest.TestCase):
 
     def test_auto_detail_from_points_per_image(self):
         self.assertEqual(brush.auto_detail(100, 100 * 700), "high")
-        self.assertEqual(brush.auto_detail(100, 100 * 100), "low")
+        self.assertEqual(brush.auto_detail(100, 100 * 100), "normal")
         self.assertEqual(brush.auto_detail(100, 100 * 300), "normal")
         self.assertEqual(brush.auto_detail(100, None), "normal")
         p, why = brush.choose_brush_params(100, 100 * 700)

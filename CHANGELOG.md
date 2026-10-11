@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Sharper training frames.** With OpenCV, frame extraction samples 3x more densely and keeps
+  the sharpest frame of each group of 3 (`--oversample N`, 1 = off), before the blur filter.
+  `extraction.json` records the sampling rate, so frame-to-video-time mapping still works.
+- **High quality now trains at 1920px.** The COLMAP image size follows the quality (1600, or
+  1920 at high) unless `--max-size` is given; before, high was capped at 1600px.
+- Auto detail no longer picks "low" (a growth threshold above Brush's default).
+- macOS resizing keeps JPEG quality at "best".
+
 ## 0.3.0
 
 ### Added

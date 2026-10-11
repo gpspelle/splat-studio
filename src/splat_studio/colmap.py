@@ -190,7 +190,8 @@ def resize_images(paths: list[Path], max_size: int) -> None:
         return
     if shutil.which("sips"):
         # not check=True: an unreadable frame is left as is (COLMAP skips it) instead of ending the run
-        subprocess.run(["sips", "-Z", str(max_size), *map(str, paths)],
+        # sips re-encodes at its default JPEG quality otherwise; keep detail for training
+        subprocess.run(["sips", "-s", "formatOptions", "best", "-Z", str(max_size), *map(str, paths)],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return
     try:

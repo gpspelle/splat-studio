@@ -2,6 +2,7 @@
 import json
 
 from tests.helpers import TempDirTestCase, fake_tools_env, make_video, needs_ffmpeg, run_module
+from splat_studio import frames as frames_mod
 
 
 @needs_ffmpeg
@@ -15,7 +16,8 @@ class FramesStageTest(TempDirTestCase):
         self.assertTrue(36 <= n <= 42, n)
         self.assertIn("Extracting at 4.0 fps", r.stdout)
         info = json.loads((out / "extraction.json").read_text())
-        self.assertEqual((info["fps"], info["start"]), (4.0, 0.0))
+        # frame numbers count sampled frames: 3x denser when OpenCV picks the sharpest of 3
+        self.assertEqual((info["fps"], info["start"]), (12.0 if frames_mod.has_cv2() else 4.0, 0.0))
 
     def test_trim_and_refuse_overwrite(self):
         video = make_video(self.tmp / "clip.mp4", seconds=10)
