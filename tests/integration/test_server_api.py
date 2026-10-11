@@ -116,6 +116,22 @@ class LibraryApiTest(ServerTestCase):
         self.assertEqual(r.status, 400)
 
 
+    def test_delete_splat(self):
+        path = json.loads(self.upload(write_ply(self.tmp / "scan.ply", n=200), "/api/import")[1])["path"]
+        self.assertEqual(self.json("DELETE", "/api/splats?" + urlencode({"file": "../secret.ply"}))[0], 404)
+        self.assertEqual(self.json("DELETE", "/api/splats?" + urlencode({"file": "videos/a.mov"}))[0], 404)
+        status, res = self.json("DELETE", "/api/splats?" + urlencode({"file": path}))
+        self.assertEqual((status, res), (200, {"ok": True}))
+        _, splats = self.json("GET", "/api/splats")
+        self.assertNotIn(path, [s["path"] for s in splats])
+        self.assertEqual(self.json("DELETE", "/api/splats?" + urlencode({"file": path}))[0], 404)
+        run = self.data.workspace / "vase" / "run_1"                   # a command-line run still training
+        ply = write_ply(run / "splat" / "standard_30000.ply", n=200)
+        (run / ".lock").write_text(str(os.getpid()))
+        status, res = self.json("DELETE", "/api/splats?" + urlencode({"file": self.data.rel(ply)}))
+        self.assertEqual((status, res["code"]), (409, "splat_busy"))
+        self.assertTrue(ply.exists())
+
 @needs_ffmpeg
 class JobsApiTest(ServerTestCase):
     def test_upload_run_and_retrain(self):

@@ -94,6 +94,8 @@
   .tile .acts > :nth-child(n+3) { border-top: var(--hairline) solid var(--rule); }
   .tile .acts > :last-child:nth-child(odd) { grid-column: 1 / 3; }
   .tile .acts .view { font-weight: 700; }
+  .tile .acts .danger { color: var(--bad); }
+  .tile .acts .danger:hover { background: var(--bad-wash); color: var(--bad); }
   .tile .acts .view::after { content: "→"; font-family: var(--font-mono); color: var(--signal-ink); }
   #compareBar { display: inline-flex; align-items: center; gap: var(--s-2); margin-right: var(--s-2); }
   .lib-tools { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
@@ -467,6 +469,13 @@ async function isolateSplat(path) {
   try { await postJSON("/api/jobs", { type: "isolate", splat: path }); toast(t("toast.isolateQueued")); refresh(); }
   catch (e) { toast(e.message); }
 }
+async function deleteSplat(path) {
+  const name = path.split("/").pop();
+  if (!confirm(t("confirm.deleteSplat", { name }))) return;
+  try { await api("/api/splats?" + new URLSearchParams({ file: path }), { method: "DELETE" }); toast(t("toast.deleted", { name })); }
+  catch (e) { toast(e.message); }
+  loadLibrary(); refresh();
+}
 async function cancelJob(id) { if (!confirm(t("confirm.stop"))) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
 
 // ---------------------------------------------------------------- runs list
@@ -612,7 +621,8 @@ function libTile(s) {
         <a class="btn small" href="/api/export?${new URLSearchParams({ file: s.path, title })}" title="${esc(t("lib.website.title"))}">${esc(t("lib.website"))}</a>
         ${!s.cleaned && !s.isolated && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="clean-button" title="${esc(t("lib.clean.title"))}" onclick="cleanSplat('${esc(s.path)}')">${esc(t("lib.clean"))}</button>` : ""}
         <button class="small${picked ? " picked" : ""}" data-testid="compare-select" title="${esc(t("lib.select.title"))}" onclick="pickCompare('${esc(s.path)}')">${esc(t("lib.select"))}</button>
-        ${!s.isolated && !s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="isolate-button" title="${esc(t("lib.isolate.title"))}" onclick="isolateSplat('${esc(s.path)}')">${esc(t("lib.isolate"))}</button>` : ""}</div>
+        ${!s.isolated && !s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="isolate-button" title="${esc(t("lib.isolate.title"))}" onclick="isolateSplat('${esc(s.path)}')">${esc(t("lib.isolate"))}</button>` : ""}
+        <button class="small ghost danger" data-testid="delete-splat" title="${esc(t("lib.delete.title"))}" onclick="deleteSplat('${esc(s.path)}')">${esc(t("lib.delete"))}</button></div>
     </div>`;
 }
 // ---------------------------------------------------------------- compare two splats

@@ -147,6 +147,25 @@ class DataDir:
                               "thumb": None if imported else self.thumbnail(run_dir=src)})
         return sorted(items, key=lambda i: -i["mtime"])
 
+    def library_splat(self, relpath: str) -> Path | None:
+        """A file the library lists (imports/NAME or workspace/<name>/run_*/splat/NAME), else None."""
+        p = self.safe_path(relpath)
+        if not p or not p.is_file() or p.suffix.lower() not in SPLAT_EXT:
+            return None
+        parts = Path(self.rel(p)).parts
+        if (len(parts) == 2 and parts[0] == "imports") or \
+                (len(parts) == 5 and parts[0] == "workspace" and parts[2].startswith("run_") and parts[3] == "splat"):
+            return p
+        return None
+
+    def delete_splat(self, relpath: str) -> bool:
+        """Remove one library file. Only that file: the run folder, frames and other splats stay."""
+        p = self.library_splat(relpath)
+        if not p:
+            return False
+        p.unlink()
+        return True
+
 
 def splat_title(relpath: str) -> str:
     """'workspace/IMG_4821/run_x/splat/high_40000.ply' -> 'IMG_4821 · high'; imports keep their name."""

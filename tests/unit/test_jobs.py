@@ -123,5 +123,23 @@ class RunnerQueueTest(TempDirTestCase):
         self.assertEqual(r2.jobs[a.id].status, "interrupted")
 
 
+    def test_splat_in_use(self):
+        data = DataDir(self.tmp / "data")
+        r = Runner(data, start=False)
+        ply = "workspace/vase/run_1/splat/standard_30000.ply"
+        self.assertFalse(r.splat_in_use(ply))
+        c = r.submit("clean", options={"splat": "imports/scan.ply"})
+        self.assertTrue(r.splat_in_use("imports/scan.ply"))         # a queued job reads it
+        self.assertFalse(r.splat_in_use("imports/other.ply"))
+        t = r.submit("retrain", run_dir="workspace/vase/run_1")
+        self.assertTrue(r.splat_in_use(ply))                        # training writes into that run
+        r.cancel(c.id), r.cancel(t.id)
+        self.assertFalse(r.splat_in_use(ply) or r.splat_in_use("imports/scan.ply"))
+        lock = data.workspace / "vase" / "run_1" / ".lock"
+        lock.parent.mkdir(parents=True)
+        lock.write_text("999999999")                                # stale lock from a crashed run
+        self.assertFalse(r.splat_in_use(ply))
+
+
 if __name__ == "__main__":
     unittest.main()

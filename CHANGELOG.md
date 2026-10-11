@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- **Delete from the library.** Each library splat has a **Delete** button that asks for
+  confirmation, then removes that one file from disk (`DELETE /api/splats?file=…`). The run
+  folder, frames and other splats stay. Files a queued or running job still uses are refused
+  with error code `splat_busy`.
+
 ### Changed
 - **Library grouped by video.** The splat library shows one collapsible group per source video
   (all runs of that video together), newest first, with imported files in their own group.
