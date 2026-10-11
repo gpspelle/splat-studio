@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **History page** (`/history`) for finished runs: grouped by day, with search by video name,
+  a filter for finished, failed or stopped runs, and **Remove from list**, which deletes only
+  the job record and log (`DELETE /api/jobs/<id>`), never splats or run folders.
+
 - **Site header and footer** on the Studio page and the recording guide: a logo, navigation
   (Studio, Library, Recording guide, Docs), a GitHub link, and a footer with help links,
   bug reports and contact (GitHub issues), the version, the license and credits. Built by
@@ -14,6 +18,11 @@
   with error code `splat_busy`.
 
 ### Changed
+- **The Studio's run list stays short.** Runs in progress keep the full card. Finished runs
+  are one line (name, result, **View splat**, any error or warning) and open with **Details**.
+  Only the finished runs from the last day are kept there (at least 3, at most 5); a link
+  leads to the rest on the History page. Run rows are now drawn by `static/runs.js`, shared
+  by both pages, with styles in section 14 of `design.css`.
 - README screenshots retaken with fog removal always on. A new CI check
   (`scripts/check_docs.py`) fails PRs that change user-facing code without touching the
   README or `docs/`, and `AGENTS.md` / `CLAUDE.md` tell coding agents to keep both current.

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/design.css">
 <script src="/theme.js"></script>
 <script src="/site.js"></script>
+<script src="/runs.js"></script>
 <style>
   /* Studio page layout. Colors, type and components come from design.css. */
   main { max-width: 1240px; margin: 0 auto; padding: var(--s-5); display: grid; gap: var(--s-5);
@@ -40,34 +41,6 @@
   details.adv { margin-top: var(--s-4); padding-top: var(--s-3); border-top: var(--hairline) solid var(--rule-soft); }
   #startBtn { width: 100%; margin-top: var(--s-5); height: 44px; font-size: 14px; }
   .check .meta { font: var(--text-sm); font-size: 12.5px; color: var(--ink-3); }
-
-  /* runs */
-  .run { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: var(--s-4); padding: var(--s-4); }
-  .run + .run { border-top: var(--hairline) solid var(--rule); }
-  .thumb { width: 72px; height: 54px; background: var(--canvas) center / cover no-repeat; border: var(--hairline) solid var(--rule); }
-  .run .head { display: flex; align-items: center; gap: var(--s-2) var(--s-3); flex-wrap: wrap; }
-  .run .name { font: var(--text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
-  .run .meta { margin-top: 3px; }
-  .now-line .eta { text-align: right; }
-  .now-line { display: flex; justify-content: space-between; gap: var(--s-3); margin-top: 6px; font: var(--text-meta); color: var(--ink-2);
-    font-variant-numeric: tabular-nums; }
-  .err { color: var(--bad); font: var(--text-meta); margin-top: 6px; word-break: break-word; }
-  .actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 128px; }
-  .actions .row { flex: none; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .actions .row > * { flex: 1 0 auto; }
-  .more { grid-column: 2 / 4; display: none; }
-  .run.open .more { display: block; }
-  .kv { display: grid; grid-template-columns: 130px 1fr; border: var(--hairline) solid var(--rule-soft); margin-top: var(--s-2); }
-  .kv div { font: var(--text-meta); padding: 5px 8px; border-top: var(--hairline) solid var(--rule-soft); word-break: break-word; }
-  .kv div:nth-child(-n+2) { border-top: 0; }
-  .kv div:nth-child(odd) { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3);
-    border-right: var(--hairline) solid var(--rule-soft); padding-top: 7px; }
-  @media (max-width: 640px) {
-    .run { grid-template-columns: 56px minmax(0, 1fr); }
-    .thumb { width: 56px; height: 42px; }
-    .actions { grid-column: 1 / 3; align-items: stretch; flex-direction: row; flex-wrap: wrap; }
-    .more { grid-column: 1 / 3; }
-  }
 
   /* library */
   .lib { display: flex; flex-direction: column; gap: var(--s-5); }
@@ -170,7 +143,13 @@
   <div class="right">
     <section class="card">
       <h2><span data-i18n="runs.title">Runs</span> <span class="meta" id="queueInfo"></span></h2>
-      <div class="runs" id="runs"><div class="empty" data-i18n="runs.empty">No runs yet. They appear here once you start one.</div></div>
+      <div class="runs" id="runs" data-testid="runs">
+        <div id="runsActive" hidden></div>
+        <div class="runs-sub" id="runsRecentHead" hidden data-i18n="runs.recent">Recent</div>
+        <div id="runsRecent"></div>
+        <div class="empty" id="runsEmpty" data-i18n="runs.empty">No runs yet. They appear here once you start one.</div>
+        <div class="runs-more" id="runsMore" hidden><a class="link" href="/history" id="runsMoreLink" data-testid="runs-history"></a></div>
+      </div>
     </section>
     <section class="card" id="library">
       <h2><span data-i18n="lib.title">Splat library</span>
@@ -218,16 +197,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const t = window.t;
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const viewerUrl = (file, title) => "/viewer?" + new URLSearchParams({ file, title: title || file.split("/").pop() });
-const fileUrl = (p) => "/files/" + p.split("/").map(encodeURIComponent).join("/");
+const { esc, viewerUrl, fileUrl, ago, tr, splatTitle, adviceHTML } = window.runs;
 const mb = (b) => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB";
-const ago = (ts) => { if (!ts) return ""; const s = Date.now() / 1000 - ts;
-  if (s < 60) return t("ago.now"); if (s < 3600) return t("ago.min", { n: Math.floor(s / 60) });
-  if (s < 86400) return t("ago.h", { n: Math.floor(s / 3600) }); return new Date(ts * 1000).toLocaleDateString(window.i18n.getLang() === "pt" ? "pt-BR" : "en"); };
-const dur = (a, b) => { if (!a) return ""; const s = Math.max(0, (b || Date.now() / 1000) - a);
-  const m = Math.floor(s / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : m ? `${m}m ${Math.floor(s % 60)}s` : `${Math.floor(s)}s`; };
-const tr = (prefix, value) => window.i18n.has(prefix + value) ? t(prefix + value) : value;   // translate known labels
 function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("show"), 2800); }
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
@@ -236,8 +207,6 @@ async function api(path, opts = {}) {
   return data;
 }
 const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-const adviceText = (a) => (a.code && window.i18n.has("advice." + a.code) ? t("advice." + a.code, a.params || {}) : a.text);
-const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(adviceText(a))}</li>`).join("");
 
 window.site.mount({ tools: true });
 window.i18n.mountSwitcher();
@@ -366,120 +335,33 @@ async function deleteSplat(path) {
 }
 async function cancelJob(id) { if (!confirm(t("confirm.stop"))) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
 
-// ---------------------------------------------------------------- runs list
-const open = new Set();
-function stepper(j) {
-  if (j.type === "setup" || j.type === "clean" || j.type === "isolate") return "";
-  const st = j.stage ?? -1, first = j.type === "retrain" ? 3 : 0;
-  return `<div class="steps">${[0, 1, 2, 3].map((i) => {
-    const label = t("stage." + i);
-    if (i < first) return `<span class="done" style="opacity:.45">${label}</span>`;
-    let c = "";
-    if (j.status === "done" || i < st) c = "done";
-    else if (i === st) c = j.status === "running" ? "now" : ["failed", "interrupted", "cancelled"].includes(j.status) ? "fail" : "";
-    return `<span class="${c}">${label}</span>`; }).join("")}</div>`;
-}
-function runTitle(j) {
-  if (j.type === "setup") return t("run.setup");
-  if (j.type === "clean") return t("run.clean", { name: splatTitle((j.options || {}).splat || "") });
-  if (j.type === "isolate") return t("run.isolate", { name: splatTitle((j.options || {}).splat || "") });
-  const base = (j.video || j.run_dir || "").split("/").pop();
-  return j.type === "retrain" ? t("run.retrain", { name: (j.run_dir || "").split("/")[1] || "" }) : base;
-}
-// time left: measured for this step, from this computer's history for the whole run; never a guess
-function etaHTML(j) {
-  const step = j.eta ? t("run.stepLeft", { t: j.eta })
-    : j.eta_note === "finishing" ? t("run.finishing") : t("run.estimating");
-  const total = j.eta_total ? t("run.totalLeft", { t: j.eta_total }) : j.eta_note === "first_run" ? t("run.firstRun") : "";
-  const more = j.eta_total && j.eta_note === "more_attempts" ? ` title="${esc(t("run.moreAttempts"))}"` : "";
-  return `${esc(step)}${total ? `<br><span${more}>${esc(total)}${more ? " *" : ""}</span>` : ""}`;
-}
-function attemptText(a) {                       // "2/3 - wider overlap ..." -> translated label
-  const m = /^(\d+\/\d+) - (.+)$/.exec(a || ""); return m ? `${m[1]} - ${tr("attempt.", m[2])}` : (a || "");
-}
-function runHTML(j) {
-  const running = j.status === "running", qd = j.status === "queued";
-  const o = j.options || {};
-  const tags = [j.source === "cli" ? t("tag.cli") : null, o.quality ? t("quality." + o.quality).toLowerCase() : null,
-                o.detail && o.detail !== "auto" ? t("tag.detail", { d: t("detail." + o.detail) }) : null,
-                o.eval ? t("tag.eval") : null, o.remove_background ? t("tag.removeBg") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
-  const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
-    : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
-    : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);
-  const facts = [j.frames ? t("run.frames", { n: j.frames }) : null, j.registered ? t("run.registered", { r: j.registered }) : null].filter(Boolean).join(" · ");
-  let now = "";
-  if (running) {
-    const pct = j.step_pct ?? null;
-    now = `<div class="bar ${pct == null ? "indet" : ""}" style="margin-top:4px"><i style="width:${pct ?? 0}%"></i></div>
-      <div class="now-line"><span>${esc(j.stage != null ? t("stage." + j.stage) : t("run.starting"))}${j.step_label ? " · " + esc(tr("step.", j.step_label)) : ""}${pct != null ? " · " + pct + "%" : ""}
-      ${j.stage === 2 && j.attempt ? `<br>${esc(t("run.attempt", { a: attemptText(j.attempt) }))}` : ""}</span>
-      <span class="eta" data-testid="eta">${etaHTML(j)}</span></div>`;
-  }
-  const best = j.clean_splat || j.splat, title = best ? splatTitle(best) : "";   // fog removed when there is a copy
-  const canRetrain = !running && !qd && j.type !== "clean" && j.type !== "isolate" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
-  const actions = [
-    best ? `<a class="btn small primary" href="${viewerUrl(best, title)}">${esc(t("btn.viewSplat"))}</a>` : "",
-    j.splat && j.splat !== best ? `<a class="btn small" data-testid="view-original" href="${viewerUrl(j.splat, splatTitle(j.splat))}">${esc(t("btn.viewOriginal"))}</a>` : "",
-    j.object_splat && j.object_splat !== best ? `<a class="btn small" data-testid="view-object" href="${viewerUrl(j.object_splat, splatTitle(j.object_splat))}">${esc(t("btn.viewObject"))}</a>` : "",
-    `<div class="row">` +
-      (running || qd ? `<button class="small" onclick="cancelJob('${esc(j.id)}')">${esc(t("btn.stop"))}</button>` : "") +
-      (canRetrain ? `<button class="small" onclick="retrain('${esc(j.run_dir)}')">${esc(t("btn.trainAgain"))}</button>` : "") +
-      (j.source === "ui" ? `<button class="small ghost" onclick="toggle('${esc(j.id)}')">${esc(t("btn.details"))}</button>` : "") +
-    `</div>`].join("");
-  const s = j.summary || {};
-  const breaks = (j.track_breaks || []).map((b) => `${b.when ? b.when + " (" : ""}${t("run.frames", { n: b.count })}${b.when ? ")" : ""}`).join(", ")
-                 || (s.track_breaks || []).join("; ");
-  const kv = [[t("kv.folder"), j.run_dir], [t("kv.best"), s.best], ...(s.attempts || []).map((a, i) => [t("kv.attempt", { n: i + 1 }), a]),
-              [t("kv.breaks"), breaks], [t("kv.brush"), s["brush settings"]], [t("kv.splats"), (j.splats || []).map((x) => x.split("/").pop()).join(", ")]]
-    .filter(([, v]) => v).map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("");
-  return `<div class="run ${open.has(j.id) ? "open" : ""}" data-id="${esc(j.id)}">
-    <div class="thumb" style="${j.thumb ? `background-image:url('${fileUrl(j.thumb)}')` : ""}"></div>
-    <div style="min-width:0">
-      <div class="head"><span class="name" title="${esc(runTitle(j))}">${esc(runTitle(j))}</span>
-        <span class="pill ${esc(j.status)}">${esc(tr("status.", j.status))}</span>${tags}</div>
-      <div class="meta">${esc(timing)}${facts ? " · " + esc(facts) : ""}</div>
-      ${stepper(j)}${now}
-      ${j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : ""}
-      ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}
-      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><a class="link" href="/guide">${esc(t("btn.guide"))}</a></div>` : ""}
-      ${j.status === "done" && j.type === "video" && !j.splat ? `<div class="meta">${esc(t("run.noSplat"))}</div>` : ""}
-    </div>
-    <div class="actions">${actions}</div>
-    <div class="more">${kv ? `<div class="kv">${kv}</div>` : ""}<pre class="log" id="log-${esc(j.id)}">${esc(t("log.loading"))}</pre></div>
-  </div>`;
-}
-function splatTitle(p) {
-  const parts = p.split("/"), file = parts[parts.length - 1] || "";
-  const cleaned = /_clean\.ply$/.test(file), isolated = /_object\.ply$/.test(file);
-  const q = file.replace(/_clean\.ply$|_object\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
-  // English output stays exactly "<name> · preview"; other languages translate the quality word
-  const base = parts[0] !== "workspace" ? file : `${parts[1]} · ${tr("quality.", q).toLowerCase()}`;
-  if (parts[0] !== "workspace") return base;
-  return cleaned ? `${base} · ${t("lib.cleaned")}` : isolated ? `${base} · ${t("lib.isolated")}` : base;
-}
-async function toggle(id) { open.has(id) ? open.delete(id) : open.add(id); renderRuns(); if (open.has(id)) loadLog(id); }
-async function loadLog(id) {
-  const el = document.getElementById("log-" + id); if (!el) return;
-  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
-  const d = await api(`/api/jobs/${encodeURIComponent(id)}/log`).catch(() => ({ log: "" }));
-  el.textContent = d.log || t("log.empty");
-  if (atBottom) el.scrollTop = el.scrollHeight;
-}
+// ---------------------------------------------------------------- runs: in progress and recent (runs.js draws the rows)
 let jobs = [], lastSig = "";
+window.runs.hooks.stop = cancelJob;
+window.runs.hooks.retrain = retrain;
+window.runs.hooks.changed = (removed) => removed ? refresh() : renderRuns();
 function renderRuns() {
-  const logs = {}; document.querySelectorAll("pre.log").forEach((p) => logs[p.id] = [p.textContent, p.scrollTop]);
-  $("runs").innerHTML = jobs.length ? jobs.map(runHTML).join("") : `<div class="empty">${esc(t("runs.empty"))}</div>`;
-  for (const [id, [txt, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = txt; p.scrollTop = s; } }
-  const running = jobs.filter((j) => j.status === "running" && j.source === "ui").length, queued = jobs.filter((j) => j.status === "queued").length;
+  const { active, recent, older } = window.runs.split(jobs);
+  $("runsActive").hidden = !active.length;
+  window.runs.render($("runsActive"), active);
+  $("runsRecentHead").hidden = !recent.length;
+  window.runs.render($("runsRecent"), recent);
+  $("runsEmpty").hidden = !!jobs.length;
+  $("runsMore").hidden = !older.length;
+  $("runsMoreLink").textContent = t("runs.older", { n: older.length });
+  const running = active.filter((j) => j.status === "running" && j.source === "ui").length, queued = active.filter((j) => j.status === "queued").length;
   $("queueInfo").textContent = running || queued ? t("runs.queue", { running, queued }) : "";
 }
 async function refresh() {
   try { jobs = await api("/api/jobs"); } catch { return; }
   const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat, j.clean_splat, j.object_splat]));
   renderRuns();
-  open.forEach((id) => loadLog(id));
+  window.runs.open.forEach((id) => window.runs.loadLog(id));
   if (sig !== lastSig) { if (lastSig && jobs.some((j) => j.type === "setup" && j.status === "done")) loadSetup(); lastSig = sig; loadLibrary(); }
 }
+// the History page sends "Train again" here, where the dialog lives
+const retrainParam = new URLSearchParams(location.search).get("retrain");
+if (retrainParam) { history.replaceState(null, "", "/"); retrain(retrainParam); }
 
 // ---------------------------------------------------------------- library
 async function loadLibrary() {

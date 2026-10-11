@@ -10,6 +10,7 @@
      3. Base            7. Surfaces          11. HUD (3D viewers)
      4. Type            8. Lists and tiles   12. Motion and accessibility
                                              13. Site header and footer (site.js)
+                                             14. Run rows (runs.js)
    ========================================================================== */
 
 /* 1. Fonts (bundled, SIL Open Font License - see fonts/*-OFL.txt) ---------------- */
@@ -149,7 +150,7 @@ button.picked { background: var(--ink); border-color: var(--ink); color: var(--p
 .field { margin-top: var(--s-4); }
 .field > label, label.label { display: block; margin-bottom: 6px; font: var(--text-label); letter-spacing: var(--track-label);
   text-transform: uppercase; color: var(--ink-2); }
-input[type=text], input[type=number], select, textarea {
+input[type=text], input[type=search], input[type=number], select, textarea {
   width: 100%; height: var(--control-h); font: var(--text-sm); color: var(--ink); background: var(--surface);
   border: var(--hairline) solid var(--field); border-radius: var(--radius); padding: 0 10px;
 }
@@ -297,7 +298,7 @@ pre.log { background: var(--canvas); color: #d9d6ce; font: 12px/1.5 var(--font-m
 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* 13. Site header and footer (built by site.js on the Studio and guide pages) ------------- */
+/* 13. Site header and footer (built by site.js on the Studio, History and guide pages) ------------- */
 .site-head { border-bottom: var(--hairline) solid var(--rule); background: var(--paper); }
 .site-head-in, .site-foot-in { max-width: 1240px; margin: 0 auto; padding: 0 var(--s-5); }
 .site-head-in { min-height: 60px; display: flex; align-items: center; gap: var(--s-6); flex-wrap: wrap; }
@@ -339,4 +340,51 @@ pre.log { background: var(--canvas); color: #d9d6ce; font: 12px/1.5 var(--font-m
 @media (max-width: 760px) {
   .site-foot-in { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .foot-brand { grid-column: 1 / -1; }
+}
+
+/* 14. Run rows (built by runs.js on the Studio and History pages) -------------------------
+   Runs in progress are full rows. Finished runs are .compact: one line that opens for the rest. */
+.run { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: var(--s-4); padding: var(--s-4); }
+.run + .run { border-top: var(--hairline) solid var(--rule); }
+.thumb { width: 72px; height: 54px; background: var(--canvas) center / cover no-repeat; border: var(--hairline) solid var(--rule); }
+.run .head { display: flex; align-items: center; gap: var(--s-2) var(--s-3); flex-wrap: wrap; }
+.run .name { font: var(--text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+.run .meta { margin-top: 3px; }
+.now-line .eta { text-align: right; }
+.now-line { display: flex; justify-content: space-between; gap: var(--s-3); margin-top: 6px; font: var(--text-meta); color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.err { color: var(--bad); font: var(--text-meta); margin-top: 6px; word-break: break-word; }
+.actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 128px; }
+.actions .row { flex: none; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.actions .row > * { flex: 1 0 auto; }
+.more { grid-column: 2 / 4; display: none; }
+.run.open .more { display: block; }
+.kv { display: grid; grid-template-columns: 130px 1fr; border: var(--hairline) solid var(--rule-soft); margin-top: var(--s-2); }
+.kv div { font: var(--text-meta); padding: 5px 8px; border-top: var(--hairline) solid var(--rule-soft); word-break: break-word; }
+.kv div:nth-child(-n+2) { border-top: 0; }
+.kv div:nth-child(odd) { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3);
+  border-right: var(--hairline) solid var(--rule-soft); padding-top: 7px; }
+@media (max-width: 640px) {
+  .run { grid-template-columns: 56px minmax(0, 1fr); }
+  .thumb { width: 56px; height: 42px; }
+  .actions { grid-column: 1 / 3; align-items: stretch; flex-direction: row; flex-wrap: wrap; }
+  .more { grid-column: 1 / 3; }
+}
+
+.run.compact { grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; padding: var(--s-3) var(--s-4); }
+.run.compact .thumb { width: 56px; height: 42px; align-self: start; }
+.run.compact .actions { min-width: 0; }
+.run.compact .actions .row { flex-wrap: nowrap; }
+.run.compact .advice { margin-top: 6px; }
+.run.compact .more .head { margin-bottom: var(--s-1); }
+.more-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-3); }
+.kv-log pre.log { margin-top: var(--s-2); }
+.runs-sub { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3);
+  padding: var(--s-2) var(--s-4); background: var(--sunken); border-bottom: var(--hairline) solid var(--rule-soft); }
+#runsActive:not([hidden]) + .runs-sub { border-top: var(--hairline) solid var(--rule); }
+.runs-more { padding: var(--s-3) var(--s-4); border-top: var(--hairline) solid var(--rule); text-align: center; }
+@media (max-width: 640px) {
+  .run.compact { grid-template-columns: 48px minmax(0, 1fr); }
+  .run.compact .thumb { width: 48px; height: 36px; }
+  .run.compact .actions .row { justify-content: flex-start; }
 }

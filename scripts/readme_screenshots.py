@@ -10,6 +10,7 @@ the viewer and uses that clip as the input video.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 from plyfile import write_ply  # noqa: E402
 from splat_studio.server.app import create_server  # noqa: E402
+from splat_studio.server.jobs import Job  # noqa: E402
 
 OUT = ROOT / "docs" / "images"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
@@ -69,6 +71,26 @@ def film_vase(out: Path, n_frames: int = 36, size=(3840, 2160)):
         cv2.imwrite(str(out / f"f{i:03d}.png"), cv2.GaussianBlur(img, (7, 7), 0))
 
 
+def add_past_runs(runner, data):
+    """A few weeks of earlier runs, copied from the real one, so the run list and History page look lived in."""
+    real = next(j for j in runner.jobs.values() if j.status == "done")
+    frames = data.frames / data.frames_name(real.video)
+    now = time.time()
+    for name, hours, status in (("Teapot", 3, "done"), ("Desk_Plant", 20, "failed"), ("Sneaker", 30, "done"),
+                                ("Ceramic_Bowl", 75, "cancelled"), ("Teapot", 120, "done"), ("Bike_Helmet", 300, "done"),
+                                ("Desk_Plant", 520, "done"), ("Old_Camera", 800, "done")):
+        shutil.copytree(frames, data.frames / name, dirs_exist_ok=True)
+        end = now - hours * 3600
+        fields = {**real.to_dict(), "id": f"past_{name}_{hours}", "video": f"videos/{name}.mov", "status": status,
+                  "created": end - 900, "started": end - 860, "finished": end}
+        if status != "done":
+            fields.update(splat=None, clean_splat=None, object_splat=None, stage=2 if status == "failed" else 1,
+                          registered="41/250 frames (16%)" if status == "failed" else None,
+                          frames=250 if status == "failed" else None,
+                          error="Not good enough: only 41 of 250 frames could be placed" if status == "failed" else None)
+        runner.jobs[fields["id"]] = Job(data.jobs, **fields)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="splat-shots-"))
@@ -101,10 +123,12 @@ def main():
         page.click('.seg[data-name="quality"] button[data-v="standard"]')
         page.locator("main > section.card").first.screenshot(path=str(OUT / "upload-checks.png"))
         page.click("#startBtn")
-        page.wait_for_selector(".run .now-line >> text=training splat", timeout=300000)
-        page.wait_for_timeout(1500)
-        page.locator(".run").first.screenshot(path=str(OUT / "run-progress.png"))
+        page.wait_for_selector("[data-testid=run-active] .now-line >> text=training splat", timeout=300000)
+        page.wait_for_timeout(300)
+        page.locator("[data-testid=run-active]").first.screenshot(path=str(OUT / "run-progress.png"))
         page.wait_for_selector("text=View splat", timeout=180000)
+        add_past_runs(runner, data)
+        page.wait_for_selector("[data-testid=runs-history]", timeout=10000)
         page.wait_for_timeout(2500)
         page.evaluate("window.scrollTo(0, 0)")
         page.screenshot(path=str(OUT / "studio.png"))
@@ -115,7 +139,13 @@ def main():
         page.wait_for_timeout(1500)
         page.screenshot(path=str(OUT / "viewer.png"))
 
-        # 4. background removal + comparison: a vase on a table (fog removed) vs the object alone
+        # 4. older runs, on the History page
+        page.goto(url + "/history")
+        page.get_by_test_id("hist-day").first.wait_for()
+        page.wait_for_timeout(500)
+        page.screenshot(path=str(OUT / "history.png"))
+
+        # 5. background removal + comparison: a vase on a table (fog removed) vs the object alone
         from plyfile import write_room_scene
         page.goto(url)
         page.set_input_files("#importInput", str(write_room_scene(tmp / "Vase_on_table.ply")))
