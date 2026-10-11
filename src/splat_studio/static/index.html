@@ -81,7 +81,11 @@
   }
 
   /* library */
-  .lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-4); }
+  .lib { display: flex; flex-direction: column; gap: var(--s-5); }
+  .lib-group > summary { gap: var(--s-3); padding-bottom: var(--s-3); margin-bottom: var(--s-3); border-bottom: var(--hairline) solid var(--rule-soft); }
+  .lib-group > summary b { font: var(--text-title); letter-spacing: -.01em; text-transform: none; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib-group > summary .meta { text-transform: none; letter-spacing: 0; }
+  .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-4); }
   .tile .body { padding: var(--s-3) var(--s-3) var(--s-2); display: flex; flex-direction: column; gap: 3px; }
   .tile .body b { font: var(--text-title); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tile .acts { display: grid; grid-template-columns: 1fr 1fr; margin-top: auto; border-top: var(--hairline) solid var(--rule); }
@@ -212,7 +216,7 @@
           <button class="small ghost" id="compareClear" data-i18n="lib.compare.clear">Clear</button></span>
         <button class="small" id="importBtn" data-i18n="lib.import">Import .ply</button>
         <input id="importInput" type="file" accept=".ply,.spz,.splat,.ksplat" hidden></span></h2>
-      <div class="pad"><div class="lib" id="lib"><div class="empty" style="grid-column:1/-1" data-i18n="lib.empty">Trained splats and imported files appear here.</div></div></div>
+      <div class="pad"><div class="lib" id="lib"><div class="empty" data-i18n="lib.empty">Trained splats and imported files appear here.</div></div></div>
     </section>
   </div>
 </main>
@@ -577,9 +581,26 @@ async function loadLibrary() {
   libItems = await api("/api/splats").catch(() => []);
   renderCompareBar(); renderLibrary();
 }
+// one group per source video (imports in their own group), newest activity first
+function libGroups(items) {
+  const groups = new Map();
+  for (const s of items) {
+    const key = s.source === "imported" ? "" : s.video || s.path.split("/")[1] || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  }
+  return [...groups].map(([key, list]) => ({ key, list }));
+}
+const libCollapsed = new Set();
+function toggleLibGroup(el) { el.open ? libCollapsed.delete(el.dataset.video) : libCollapsed.add(el.dataset.video); }
 function renderLibrary() {
-  const items = libItems;
-  $("lib").innerHTML = items.length ? items.map((s) => {
+  $("lib").innerHTML = libItems.length ? libGroups(libItems).map(({ key, list }) => `
+    <details class="lib-group" data-testid="lib-group" data-video="${esc(key)}"${libCollapsed.has(key) ? "" : " open"} ontoggle="toggleLibGroup(this)">
+      <summary><b>${esc(key || t("lib.group.imported"))}</b><span class="meta">${esc(t("lib.group.count", { n: list.length }))}</span></summary>
+      <div class="lib-grid">${list.map(libTile).join("")}</div>
+    </details>`).join("") : `<div class="empty">${esc(t("lib.empty"))}</div>`;
+}
+function libTile(s) {
     const title = splatTitle(s.path);
     const picked = comparePick.includes(s.path);
     return `<div class="tile${picked ? " picked" : ""}" data-path="${esc(s.path)}">
@@ -592,7 +613,7 @@ function renderLibrary() {
         ${!s.cleaned && !s.isolated && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="clean-button" title="${esc(t("lib.clean.title"))}" onclick="cleanSplat('${esc(s.path)}')">${esc(t("lib.clean"))}</button>` : ""}
         <button class="small${picked ? " picked" : ""}" data-testid="compare-select" title="${esc(t("lib.select.title"))}" onclick="pickCompare('${esc(s.path)}')">${esc(t("lib.select"))}</button>
         ${!s.isolated && !s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="isolate-button" title="${esc(t("lib.isolate.title"))}" onclick="isolateSplat('${esc(s.path)}')">${esc(t("lib.isolate"))}</button>` : ""}</div>
-    </div>`; }).join("") : `<div class="empty" style="grid-column:1/-1">${esc(t("lib.empty"))}</div>`;
+    </div>`;
 }
 // ---------------------------------------------------------------- compare two splats
 let comparePick = [], libItems = [];

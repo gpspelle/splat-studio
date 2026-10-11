@@ -48,6 +48,8 @@ class LibraryTest(TempDirTestCase):
         self.assertEqual(items["standard_30000.ply"]["title"], "vase · standard")
         self.assertEqual(items["standard_30000.ply"]["thumb"], "frames/vase/vase_0001.jpg")
         self.assertEqual(items["scan.ply"]["source"], "imported")
+        self.assertEqual(items["standard_30000.ply"]["video"], "vase")
+        self.assertIsNone(items["scan.ply"]["video"])
         self.assertEqual(self.data.latest_splat(self.data.rel(self.run)), self.data.rel(self.run / "splat" / "standard_30000.ply"))
 
     def test_disk_runs_reports_cli_runs(self):
