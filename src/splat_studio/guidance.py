@@ -65,14 +65,14 @@ def video_advice(meta: dict | None) -> list[dict]:
     tips = []
     d, long_side = meta["duration"], max(meta["width"], meta["height"])
     if d < 25:
-        tips.append(tip("warn", "video.short_warn", f"Only {fmt_timestamp(d)} long. That's usually too few viewpoints - "
-                        "walk slower and do 3 loops (low, middle, high): aim for 1½-4 minutes.", d=fmt_timestamp(d)))
+        tips.append(tip("warn", "video.short_warn", f"Only {fmt_timestamp(d)} long, which usually means too few viewpoints. "
+                        "Aim for 1½ to 4 minutes: walk slower and film 3 loops (low, middle, high).", d=fmt_timestamp(d)))
     elif d < 60:
         tips.append(tip("info", "video.short_info", f"{fmt_timestamp(d)} is on the short side. It can work for a small "
-                        "object; 1½-4 minutes with 3 loops is more reliable.", d=fmt_timestamp(d)))
+                        "object, but 1½ to 4 minutes with 3 loops is more reliable.", d=fmt_timestamp(d)))
     elif d > 600:
-        tips.append(tip("info", "video.long", f"{fmt_timestamp(d)} is long. That's fine - frames are spread "
-                        "evenly - but trim any parts that don't show the object.", d=fmt_timestamp(d)))
+        tips.append(tip("info", "video.long", f"{fmt_timestamp(d)} is long. That works, since frames are sampled "
+                        "evenly, but trim any parts that don't show the object.", d=fmt_timestamp(d)))
     if long_side and long_side < 1920:
         tips.append(tip("warn", "video.low_res", f"Low resolution ({meta['width']}×{meta['height']}). Record in 4K "
                         "(or at least 1080p) for sharp detail.", w=meta["width"], h=meta["height"]))
@@ -152,10 +152,10 @@ def run_advice(job: dict) -> list[dict]:
                         "continuous take, walking slowly, with the whole object in frame. Avoid shiny, transparent "
                         "or plain textureless objects and backgrounds."))
     elif ratio is not None and ratio < 0.9:
-        tips.append(tip("info", "run.partial", f"{ratio:.0%} of frames were placed - usable, but the missing parts "
-                        "will look thinner. A smoother re-take of those moments would fill them in.", pct=f"{ratio:.0%}"))
+        tips.append(tip("info", "run.partial", f"{ratio:.0%} of frames were placed. The splat is usable, but areas with "
+                        "missing frames will look thin. Filming those moments again, more smoothly, fills them in.", pct=f"{ratio:.0%}"))
     elif status == "done" and ratio is not None and ratio >= 0.97 and not breaks:
-        tips.append(tip("ok", "run.excellent", "Excellent capture: every frame was placed."))
+        tips.append(tip("ok", "run.excellent", "Every frame was placed."))
     if "could not reconstruct anything" in error:
         tips.append(tip("warn", "run.nothing", "COLMAP found nothing to match. The video may be very blurry, too "
                         "dark, or show a plain/reflective surface. Put the object on a textured surface "

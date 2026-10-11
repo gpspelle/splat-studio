@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recording guide · Splat Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/i18n.js"></script>
+<link rel="stylesheet" href="/design.css">
+<script src="/theme.js"></script>
+<script src="/site.js"></script>
+<style>
+  /* Recording guide page. Colors, type and components come from design.css. */
+  main { max-width: 1240px; margin: 0 auto; padding: var(--s-8) var(--s-5) 0; }
+  .page-head { max-width: 68ch; margin-bottom: var(--s-6); }
+  .page-head h1 { font: var(--text-display); letter-spacing: var(--track-tight); margin: 0; }
+  .page-head p { margin: var(--s-3) 0 0; color: var(--ink-2); font-size: 15px; }
+  .guide-body { padding: var(--s-6); display: grid; grid-template-columns: 320px 1fr; gap: var(--s-8); }
+  @media (max-width: 760px) { .guide-body { grid-template-columns: 1fr; padding: var(--s-4); gap: var(--s-6); } }
+  .diagram { background: var(--paper); border: var(--hairline) solid var(--rule); padding: var(--s-3); color: var(--ink); margin: 0; }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram figcaption { font: var(--text-sm); font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .guide-sec { margin-bottom: var(--s-6); }
+  .guide-sec:last-child { margin-bottom: 0; }
+  .guide-sec h2 { margin: 0 0 6px; font: var(--text-title); display: flex; gap: var(--s-3); align-items: center; }
+  .guide-sec h2 span { width: 24px; height: 24px; background: var(--ink); color: var(--paper); display: grid; place-items: center; font: 600 12px var(--font-mono); }
+  .guide-sec ul { margin: 0; padding-left: 36px; }
+  .guide-sec li { margin: 4px 0; }
+  .guide-sec li em { color: var(--ink-3); font-style: normal; }
+  .avoid { border: var(--hairline) solid var(--bad); background: var(--bad-wash); padding: var(--s-3) var(--s-4); margin-top: var(--s-4); }
+  .avoid b { color: var(--bad); font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
+  .next { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; margin-top: var(--s-5);
+    padding: var(--s-4) var(--s-5); border: var(--hairline) solid var(--rule); background: var(--surface); }
+  .next p { margin: 0; }
+</style>
+</head>
+<body data-page="guide">
+<main>
+  <div class="page-head">
+    <h1 data-i18n="guide.title">Recording guide</h1>
+    <p data-i18n="guide.lead">Splat Studio can only rebuild what the camera saw clearly. Film the object from every side, in one continuous take.</p>
+  </div>
+
+  <section class="card" data-testid="guide">
+    <div class="guide-body">
+      <div>
+        <figure class="diagram">
+          <svg viewBox="0 0 320 260" role="img" aria-label="Three loops around the object at low, middle and high height">
+            <defs>
+              <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--signal)"/></marker>
+            </defs>
+            <ellipse cx="190" cy="210" rx="118" ry="24" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="3 4"/>
+            <rect x="168" y="120" width="44" height="88" rx="14" fill="var(--signal)" fill-opacity=".18" stroke="var(--signal)" stroke-width="1.5"/>
+            <text x="190" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.object">object</text>
+            <g fill="none" stroke="var(--signal)" stroke-width="2">
+              <ellipse cx="190" cy="196" rx="104" ry="22" stroke-opacity=".55"/>
+              <ellipse cx="190" cy="150" rx="112" ry="26"/>
+              <ellipse cx="190" cy="96" rx="92" ry="20" stroke-opacity=".75"/>
+              <path d="M298,150 C304,130 290,110 280,100" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+              <path d="M292,190 C302,176 304,165 302,155" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+            </g>
+            <g fill="currentColor"><circle cx="86" cy="196" r="4"/><circle cx="78" cy="150" r="4"/><circle cx="98" cy="96" r="4"/></g>
+            <g font-size="11" fill="currentColor" text-anchor="end">
+              <text x="78" y="200" data-i18n="guide.diagram.low">① low</text><text x="70" y="154" data-i18n="guide.diagram.eye">② eye level</text><text x="90" y="100" data-i18n="guide.diagram.high">③ high</text>
+            </g>
+            <text x="190" y="250" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.take">one take, 60 to 90 s per loop</text>
+          </svg>
+          <figcaption data-i18n="guide.diagram.caption">Walk three full circles without stopping the recording: at knee height looking slightly up, at eye level, then with your arms raised looking down. Rise gradually between loops.</figcaption>
+        </figure>
+        <div class="avoid">
+          <b data-i18n="guide.avoid.title">Avoid</b>
+          <ul style="margin:6px 0 0;padding-left:18px" data-i18n-html="guide.avoid.html"><li>Glass, mirrors, chrome and glossy paint</li><li>Plain white tables and blank walls</li><li>Turntables, because the background has to stay still</li><li>People, pets or curtains moving in view</li><li>Cuts, fast pans and zooming</li><li>A large open room behind the object, which turns into fog</li></ul>
+        </div>
+      </div>
+      <div>
+        <div class="guide-sec"><h2><span>1</span><b data-i18n="guide.s1.title">Pick the spot</b></h2><ul data-i18n-html="guide.s1.html"><li>Leave room to walk all the way around the object at a steady 1 to 2 m.</li><li>Put it on a <b>textured surface</b> such as a rug, newspaper or patterned cloth. COLMAP needs texture to track the camera.</li><li>Keep the background <b>close and simple</b>. Distant surroundings that are only filmed briefly become fog around the model.</li><li>Matte objects work best. Cover or skip reflective and transparent parts.</li></ul></div>
+        <div class="guide-sec"><h2><span>2</span><b data-i18n="guide.s2.title">Get the light right</b></h2><ul data-i18n-html="guide.s2.html"><li><b>Soft, even light</b>, like an overcast day or a bright room with several lamps.</li><li>Avoid harsh sun and single spotlights. Hard shadows and highlights shift as you move.</li><li>Don't change the lighting during the take, and keep your shadow off the object.</li></ul></div>
+        <div class="guide-sec"><h2><span>3</span><b data-i18n="guide.s3.title">Set up the phone</b></h2><ul data-i18n-html="guide.s3.html"><li>Record 4K at 30 fps in landscape. Stay on the <b>1× lens</b> and don't zoom, or the phone may switch cameras.</li><li><b>Lock focus and exposure</b>: press and hold on the object until "AE/AF Lock" appears.</li><li>Turn off Cinematic and Action mode. HDR is converted automatically, but it's better off.</li></ul></div>
+        <div class="guide-sec"><h2><span>4</span><b data-i18n="guide.s4.title">Record</b></h2><ul data-i18n-html="guide.s4.html"><li><b>One continuous take</b> with three loops, as in the diagram. End each loop where it started.</li><li>Walk slowly, about one step every 2 to 3 seconds. Turn your whole body at corners instead of swinging the phone.</li><li>Keep the whole object in frame, filling half to two-thirds of it.</li><li>Total length: <b>1½ to 4 minutes</b>.</li></ul></div>
+        <div class="guide-sec"><h2><span>5</span><b data-i18n="guide.s5.title">Check the footage</b></h2><ul data-i18n-html="guide.s5.html"><li>Scrub through the video. Every moment should be sharp, with no jumps, flicker or people walking through.</li><li>After a run, Splat Studio shows <em>at which seconds</em> the camera tracking broke, so you know what to film again.</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="next">
+    <p data-i18n="guide.next">Once you have the video, drop it into the Studio.</p>
+    <a class="btn primary" href="/" data-i18n="guide.next.button">Open the Studio</a>
+  </div>
+</main>
+
+<script>
+window.site.mount();
+window.i18n.mountSwitcher();
+window.theme.mount();
+window.i18n.apply();
+fetch("/api/setup").then((r) => r.json()).then((d) => window.site.setVersion(d.version)).catch(() => {});
+</script>
+</body>
+</html>

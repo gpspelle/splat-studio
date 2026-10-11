@@ -4,36 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splat Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <script src="/i18n.js"></script>
 <link rel="stylesheet" href="/design.css">
 <script src="/theme.js"></script>
+<script src="/site.js"></script>
 <style>
   /* Studio page layout. Colors, type and components come from design.css. */
-  header { max-width: 1240px; margin: 0 auto; padding: var(--s-6) var(--s-5) var(--s-4); display: flex; align-items: center;
-    justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; border-bottom: var(--hairline) solid var(--rule); }
-  .brand { display: flex; align-items: center; gap: var(--s-3); }
-  .brand .logo { width: 30px; height: 30px; background: var(--signal); position: relative; flex: none; }
-  .brand .logo::before { content: ""; position: absolute; inset: 9px; border: 2px solid var(--on-signal); border-radius: 50%; }
-  .brand .logo::after { content: ""; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; background: var(--on-signal); opacity: .0; }
-  .brand h1 { font: var(--text-display); letter-spacing: var(--track-tight); margin: 0; display: flex; align-items: baseline; gap: var(--s-2); }
-  .brand h1 small { font: var(--text-label); letter-spacing: var(--track-label); color: var(--ink-3); }
-  .brand .tagline { display: block; margin-top: 2px; font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3); }
-  .head-actions { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
-  .lang-select, .theme-select { width: auto; height: var(--control-h); font: 500 12.5px var(--font-sans); background-color: transparent; border-color: var(--rule); }
-  .status-pill { gap: var(--s-2); font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
-  .status-pill.ok { color: var(--ok); }
-  .status-pill.bad { color: var(--bad); border-color: var(--bad); }
-
-  main { max-width: 1240px; margin: 0 auto; padding: var(--s-5) var(--s-5) var(--s-10); display: grid; gap: var(--s-5);
+  main { max-width: 1240px; margin: 0 auto; padding: var(--s-5); display: grid; gap: var(--s-5);
     grid-template-columns: 380px minmax(0, 1fr); align-items: start; }
-  @media (max-width: 920px) { main { grid-template-columns: 1fr; } header { padding-top: var(--s-4); } }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+  #library { scroll-margin-top: var(--s-5); }
   .right { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
 
   /* new run */
   .tips-strip { border: var(--hairline) solid var(--rule); border-left: 4px solid var(--signal); background: var(--paper);
     padding: var(--s-3) var(--s-4); margin-bottom: var(--s-4); font: var(--text-sm); }
   .tips-strip > b { display: block; margin-bottom: 4px; font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
-  .tips-strip ul { margin: 0 0 8px; padding-left: 18px; }
+  .tips-strip ul { margin: 0; padding-left: 18px; }
   .tips-strip li { margin: 3px 0; }
   .tips-strip li::marker { color: var(--signal-ink); }
   .drop { position: relative; border: var(--hairline) dashed var(--ink); background: var(--paper); padding: var(--s-8) var(--s-4);
@@ -98,23 +86,6 @@
   #compareBtn, #compareClear, #importBtn { text-transform: none; letter-spacing: -.005em; }
 
   /* dialogs */
-  dialog.guide { width: min(900px, 96vw); max-height: 92vh; padding: 0; }
-  .guide-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-4); padding: var(--s-6) var(--s-6) var(--s-4);
-    border-bottom: var(--hairline) solid var(--rule); }
-  .guide-head p { margin: 6px 0 0; color: var(--ink-2); max-width: 60ch; }
-  .guide-body { padding: var(--s-5) var(--s-6) var(--s-6); display: grid; grid-template-columns: 300px 1fr; gap: var(--s-6); }
-  @media (max-width: 760px) { .guide-body { grid-template-columns: 1fr; } }
-  .diagram { background: var(--paper); border: var(--hairline) solid var(--rule); padding: var(--s-3); color: var(--ink); }
-  .diagram svg { width: 100%; height: auto; display: block; }
-  .diagram figcaption { font: var(--text-sm); font-size: 12px; color: var(--ink-3); margin-top: 6px; }
-  .guide-sec { margin-bottom: var(--s-5); }
-  .guide-sec h4 { margin: 0 0 6px; font: var(--text-title); display: flex; gap: var(--s-3); align-items: center; }
-  .guide-sec h4 span { width: 24px; height: 24px; background: var(--ink); color: var(--paper); display: grid; place-items: center; font: 600 12px var(--font-mono); }
-  .guide-sec ul { margin: 0; padding-left: 36px; }
-  .guide-sec li { margin: 4px 0; }
-  .guide-sec li em { color: var(--ink-3); font-style: normal; }
-  .avoid { border: var(--hairline) solid var(--bad); background: var(--bad-wash); padding: var(--s-3) var(--s-4); margin-top: 4px; }
-  .avoid b { color: var(--bad); font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
   .setup-list { list-style: none; padding: 0; margin: var(--s-4) 0; border: var(--hairline) solid var(--rule-soft); }
   .setup-list li { display: grid; grid-template-columns: 22px 92px 1fr; gap: var(--s-2); font: var(--text-sm); align-items: baseline; padding: 7px 10px; }
   .setup-list li + li { border-top: var(--hairline) solid var(--rule-soft); }
@@ -123,16 +94,7 @@
   .dlg-actions { display: flex; gap: var(--s-2); justify-content: flex-end; margin-top: var(--s-5); }
 </style>
 </head>
-<body>
-<header>
-  <div class="brand"><div class="logo" aria-hidden="true"></div><div><h1>Splat Studio <small id="appVersion"></small></h1><span class="tagline" data-i18n="app.tagline">Video → 3D Gaussian splat, on this computer</span></div></div>
-  <div class="head-actions">
-    <span data-lang-switcher></span>
-    <span data-theme-switcher></span>
-    <button id="guideBtn" data-testid="guide-button" data-i18n="head.guide">Recording guide</button>
-    <button id="setupPill" class="status-pill" data-testid="setup-pill" data-i18n="head.checking">Checking tools…</button>
-  </div>
-</header>
+<body data-page="studio">
 
 <main>
   <!-- ---------------------------------------------------------------- new run -->
@@ -140,17 +102,16 @@
     <h2><span data-i18n="new.title">New run</span></h2>
     <div class="pad">
       <div class="tips-strip" data-testid="tips-strip">
-        <b data-i18n="tips.title">For a first-try success</b>
+        <b data-i18n="tips.title">Before you record</b>
         <ul data-i18n-html="tips.html">
-          <li>One slow, continuous take: <b>3 loops</b> around the object (low, middle, high)</li>
-          <li>Soft, even light · lock focus &amp; exposure · 1× lens, no zoom</li>
-          <li>A matte object on a textured surface - nothing moving in the scene</li>
+          <li>Film <b>3 loops</b> around the object in one take: low, eye level, then high.</li>
+          <li>Use soft, even light. Lock focus and exposure, and stay on the 1× lens.</li>
+          <li>Choose a matte object on a patterned surface, with nothing moving behind it.</li>
         </ul>
-        <button class="link" id="guideLink" data-i18n="tips.more">Read the full recording guide →</button>
       </div>
       <div id="dropZone" class="drop" role="button" tabindex="0">
         <b data-i18n="drop.title">Drop a video here</b>
-        <small data-i18n="drop.sub">or click to choose · .mov / .mp4 from your phone works as-is</small>
+        <small data-i18n="drop.sub">or click to browse. MOV and MP4 files straight from your phone are fine.</small>
         <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" hidden>
       </div>
       <div id="uploading" hidden style="margin-top:12px">
@@ -163,7 +124,7 @@
       </div>
       <ul class="advice" id="videoAdvice" data-testid="video-advice" hidden></ul>
       <div class="field" id="pickField">
-        <label for="prevVideo" data-i18n="reuse.label">…or reuse an uploaded video</label>
+        <label for="prevVideo" data-i18n="reuse.label">Or pick a video you uploaded before</label>
         <select id="prevVideo"><option value="">Choose…</option></select>
       </div>
 
@@ -181,9 +142,9 @@
         </div>
         <div class="help" id="detailHelp"></div>
       </div>
-      <label class="check"><input type="checkbox" id="clean" checked data-testid="clean-option"> <span><span data-i18n="clean.label">Remove background fog</span><br><span class="meta" data-i18n="clean.help">Also saves a copy without the haze and far-away surroundings (the original is kept).</span></span></label>
-      <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object: no table, floor or room (the original is kept).</span></span></label>
-      <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number.</span></span></label>
+      <label class="check"><input type="checkbox" id="clean" checked data-testid="clean-option"> <span><span data-i18n="clean.label">Remove background fog</span><br><span class="meta" data-i18n="clean.help">Also saves a copy without the haze and distant surroundings.</span></span></label>
+      <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object, without the table, floor or room.</span></span></label>
+      <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Sets aside every 10th frame for testing and reports PSNR and SSIM, so you can compare runs.</span></span></label>
       <details class="adv">
         <summary data-i18n="adv.title">Advanced</summary>
         <div class="field row">
@@ -191,7 +152,7 @@
           <div><label for="start" data-i18n="adv.start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
           <div><label for="end" data-i18n="adv.end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
         </div>
-        <label class="check"><input type="checkbox" id="reextract"> <span data-i18n="adv.reextract">Extract frames again (otherwise reused)</span></label>
+        <label class="check"><input type="checkbox" id="reextract"> <span data-i18n="adv.reextract">Extract frames again instead of reusing the last set</span></label>
         <div class="field"><label for="brushArgs" data-i18n="adv.brush">Extra Brush options</label>
           <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000" data-i18n-placeholder="adv.brush.placeholder"></div>
       </details>
@@ -203,9 +164,9 @@
   <div class="right">
     <section class="card">
       <h2><span data-i18n="runs.title">Runs</span> <span class="meta" id="queueInfo"></span></h2>
-      <div class="runs" id="runs"><div class="empty" data-i18n="runs.empty">No runs yet. Upload a video to start.</div></div>
+      <div class="runs" id="runs"><div class="empty" data-i18n="runs.empty">No runs yet. They appear here once you start one.</div></div>
     </section>
-    <section class="card">
+    <section class="card" id="library">
       <h2><span data-i18n="lib.title">Splat library</span>
         <span class="lib-tools"><span id="compareBar" hidden><span class="meta" id="compareHint"></span>
           <a class="btn small primary" id="compareBtn" data-testid="compare-open"></a>
@@ -217,81 +178,12 @@
   </div>
 </main>
 
-<!-- ---------------------------------------------------------------- recording guide -->
-<dialog id="guide" class="guide" data-testid="guide">
-  <div class="guide-head">
-    <div><h3 data-i18n="guide.title">How to record a video that works the first time</h3>
-      <p data-i18n="guide.lead">The software can only rebuild what the camera saw clearly, from many angles, in one continuous take.</p></div>
-    <form method="dialog"><button class="small" data-i18n="dlg.close">Close</button></form>
-  </div>
-  <div class="guide-body">
-    <div>
-      <figure class="diagram" style="margin:0">
-        <svg viewBox="0 0 320 260" role="img" aria-label="Three loops around the object at low, middle and high height">
-          <defs>
-            <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--signal)"/></marker>
-          </defs>
-          <ellipse cx="190" cy="210" rx="118" ry="24" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="3 4"/>
-          <rect x="168" y="120" width="44" height="88" rx="14" fill="var(--signal)" fill-opacity=".18" stroke="var(--signal)" stroke-width="1.5"/>
-          <text x="190" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.object">object</text>
-          <g fill="none" stroke="var(--signal)" stroke-width="2">
-            <ellipse cx="190" cy="196" rx="104" ry="22" stroke-opacity=".55"/>
-            <ellipse cx="190" cy="150" rx="112" ry="26"/>
-            <ellipse cx="190" cy="96" rx="92" ry="20" stroke-opacity=".75"/>
-            <path d="M298,150 C304,130 290,110 280,100" stroke-dasharray="4 4" marker-end="url(#arr)"/>
-            <path d="M292,190 C302,176 304,165 302,155" stroke-dasharray="4 4" marker-end="url(#arr)"/>
-          </g>
-          <g fill="currentColor"><circle cx="86" cy="196" r="4"/><circle cx="78" cy="150" r="4"/><circle cx="98" cy="96" r="4"/></g>
-          <g font-size="11" fill="currentColor" text-anchor="end">
-            <text x="78" y="200" data-i18n="guide.diagram.low">① low</text><text x="70" y="154" data-i18n="guide.diagram.eye">② eye level</text><text x="90" y="100" data-i18n="guide.diagram.high">③ high</text>
-          </g>
-          <text x="190" y="250" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7" data-i18n="guide.diagram.take">one continuous take · ~60-90 s per loop</text>
-        </svg>
-        <figcaption data-i18n="guide.diagram.caption">Walk three full circles without stopping the recording: knee height looking slightly up, eye level, then arms raised looking down. Rise gently between loops.</figcaption>
-      </figure>
-      <div class="avoid" style="margin-top:14px">
-        <b data-i18n="guide.avoid.title">Avoid</b>
-        <ul style="margin:6px 0 0;padding-left:18px" data-i18n-html="guide.avoid.html">
-          <li>Glass, mirrors, chrome, very shiny paint</li>
-          <li>Plain white tables and blank walls</li>
-          <li>Turntables (the background must not move)</li>
-          <li>People, pets or curtains moving in view</li>
-          <li>Cuts, pauses with fast pans, zooming</li>
-        </ul>
-      </div>
-    </div>
-    <div>
-      <div class="guide-sec"><h4><span>1</span><b data-i18n="guide.s1.title">Pick the spot</b></h4><ul data-i18n-html="guide.s1.html">
-        <li>Room to walk all the way around the object, at a steady 1-2 m distance.</li>
-        <li>Put it on a <b>textured surface</b> - a rug, newspaper, patterned cloth. COLMAP tracks texture, not plain surfaces.</li>
-        <li>Matte objects work best. Cover or skip reflective and transparent parts.</li></ul></div>
-      <div class="guide-sec"><h4><span>2</span><b data-i18n="guide.s2.title">Get the light right</b></h4><ul data-i18n-html="guide.s2.html">
-        <li><b>Soft, even light</b>: overcast daylight or a bright room with several lamps.</li>
-        <li>No harsh sun or a single spotlight - hard shadows and highlights move as you walk.</li>
-        <li>Don't change the lights during the take, and keep your own shadow off the object.</li></ul></div>
-      <div class="guide-sec"><h4><span>3</span><b data-i18n="guide.s3.title">Set up the phone</b></h4><ul data-i18n-html="guide.s3.html">
-        <li>4K at 30 fps, landscape. Stay on the <b>1× lens</b> and never zoom (the phone would switch cameras).</li>
-        <li><b>Lock focus and exposure</b>: press and hold on the object until "AE/AF Lock" appears.</li>
-        <li>Turn off Cinematic and Action mode. HDR is converted automatically, but off is best.</li></ul></div>
-      <div class="guide-sec"><h4><span>4</span><b data-i18n="guide.s4.title">Record</b></h4><ul data-i18n-html="guide.s4.html">
-        <li><b>One continuous take</b>, three loops as in the diagram, ending each loop where it started.</li>
-        <li>Walk slowly - about 2-3 seconds per step. Turn your body at corners, don't swing the phone.</li>
-        <li>Keep the whole object in frame, filling about half to two-thirds of it.</li>
-        <li>Total length: <b>1½-4 minutes</b>.</li></ul></div>
-      <div class="guide-sec"><h4><span>5</span><b data-i18n="guide.s5.title">Check before you leave</b></h4><ul data-i18n-html="guide.s5.html">
-        <li>Scrub through the video: is every moment sharp, with no jumps, flicker or people walking through?</li>
-        <li>After a run, Splat Studio tells you <em>at which seconds</em> the tracking broke, so you know what to redo.</li></ul></div>
-    </div>
-  </div>
-</dialog>
-
 <!-- ---------------------------------------------------------------- setup -->
 <dialog id="setupDlg" data-testid="setup-dialog">
-  <h3 data-i18n="setup.title">Tools</h3>
+  <h3 data-i18n="setup.title">Required tools</h3>
   <div class="meta" id="dataDir"></div>
   <ul class="setup-list" id="setupList"></ul>
-  <div class="meta" id="setupNote" data-i18n-html="setup.note.html">Setup installs what's missing with Homebrew, rustup and pip, then downloads and builds Brush (15-30 min, once).
-    If Homebrew itself is missing, run <code>./splat-studio setup</code> in Terminal instead - it needs your password.</div>
+  <div class="meta" id="setupNote" data-i18n-html="setup.note.html">Setup installs anything missing with Homebrew, rustup and pip, then builds Brush from source. The first build takes 15 to 30 minutes. If Homebrew isn't installed, run <code>./splat-studio setup</code> in Terminal instead, because it needs your password.</div>
   <form method="dialog" class="dlg-actions">
     <button value="cancel" data-i18n="dlg.close">Close</button>
     <button value="run" class="primary" id="runSetup" data-i18n="setup.run">Run setup</button>
@@ -301,7 +193,7 @@
 <dialog id="retrainDlg">
   <form method="dialog">
     <h3 data-i18n="retrain.title">Train again</h3>
-    <div class="meta" data-i18n="retrain.help">Reuses this run's camera poses and trains a new splat with different settings. The existing splat is kept.</div>
+    <div class="meta" data-i18n="retrain.help">Trains a new splat from this run's camera poses, without extracting frames or running COLMAP again. The current splat stays in the library.</div>
     <div class="field"><label data-i18n="quality.label">Quality</label>
       <div class="seg" data-name="rq"><button type="button" data-v="preview" data-i18n="quality.preview">Preview</button><button type="button" data-v="standard" data-i18n="quality.standard">Standard</button><button type="button" data-v="high" class="on" data-i18n="quality.high">High</button></div></div>
     <div class="field"><label data-i18n="detail.label">Detail</label>
@@ -329,8 +221,6 @@ const ago = (ts) => { if (!ts) return ""; const s = Date.now() / 1000 - ts;
   if (s < 86400) return t("ago.h", { n: Math.floor(s / 3600) }); return new Date(ts * 1000).toLocaleDateString(window.i18n.getLang() === "pt" ? "pt-BR" : "en"); };
 const dur = (a, b) => { if (!a) return ""; const s = Math.max(0, (b || Date.now() / 1000) - a);
   const m = Math.floor(s / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : m ? `${m}m ${Math.floor(s % 60)}s` : `${Math.floor(s)}s`; };
-const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 const tr = (prefix, value) => window.i18n.has(prefix + value) ? t(prefix + value) : value;   // translate known labels
 function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("show"), 2800); }
 async function api(path, opts = {}) {
@@ -343,16 +233,14 @@ const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content
 const adviceText = (a) => (a.code && window.i18n.has("advice." + a.code) ? t("advice." + a.code, a.params || {}) : a.text);
 const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(adviceText(a))}</li>`).join("");
 
+window.site.mount({ tools: true });
 window.i18n.mountSwitcher();
 window.theme.mount();
 window.i18n.apply();
 $("dropZone").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileInput").click(); } });
 window.addEventListener("langchange", () => { refreshHelp(); renderSetup(); renderVideoAdvice(); renderRuns(); loadLibrary(); renderVideoOptions(); });
 
-// ---------------------------------------------------------------- guide + setup
-$("guideBtn").onclick = $("guideLink").onclick = () => $("guide").showModal();
-if (!store.get("guide:seen")) { store.set("guide:seen", true); setTimeout(() => $("guide").showModal(), 300); }
-
+// ---------------------------------------------------------------- setup
 let setup = null;
 async function loadSetup() {
   try { setup = await api("/api/setup"); } catch { return; }
@@ -366,7 +254,7 @@ function renderSetup() {
   pill.textContent = !missing.length ? t("head.ready") : missing.length === 1 ? t("head.missing.one") : t("head.missing.many", { n: missing.length });
   pill.className = "status-pill " + (missing.length ? "bad" : "ok");
   $("dataDir").textContent = t("setup.dataDir", { dir: setup.data_dir });
-  if (setup.version) $("appVersion").textContent = "v" + setup.version;
+  window.site.setVersion(setup.version);
   $("setupList").innerHTML = setup.items.map((i) => `<li><span class="${i.ok ? "y" : i.required ? "n" : "o"}">${i.ok ? "✓" : i.required ? "✗" : "·"}</span>
     <b>${esc(i.name)}</b><span class="meta">${esc(tr("tool.", i.name) === i.name ? i.why : t("tool." + i.name))}</span></li>`).join("");
   $("runSetup").removeAttribute("data-i18n");
@@ -532,7 +420,7 @@ function runHTML(j) {
       ${stepper(j)}${now}
       ${j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : ""}
       ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}
-      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><button class="link" onclick="$('guide').showModal()">${esc(t("btn.guide"))}</button></div>` : ""}
+      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><a class="link" href="/guide">${esc(t("btn.guide"))}</a></div>` : ""}
       ${j.status === "done" && j.type === "video" && !j.splat ? `<div class="meta">${esc(t("run.noSplat"))}</div>` : ""}
     </div>
     <div class="actions">${actions}</div>

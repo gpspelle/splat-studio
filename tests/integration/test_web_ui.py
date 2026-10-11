@@ -108,25 +108,28 @@ class BrowserTestCase(ServerTestCase):
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg
 class WebUiTest(BrowserTestCase):
-    def test_first_visit_shows_recording_guide(self):
+    def test_header_footer_and_recording_guide(self):
         self.page.goto(self.url)
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertIn("3 loops", self.page.get_by_test_id("tips-strip").inner_text())
+        self.assertEqual(self.page.get_attribute("[data-testid=nav-studio]", "aria-current"), "page")
+        self.assertIn("github.com/gpspelle/splat-studio", self.page.get_attribute("[data-testid=github-link]", "href"))
+        self.page.wait_for_function("/^v\\d/.test(document.getElementById('siteVersion').textContent)")
+        self.assertIn("MIT License", self.page.inner_text(".site-foot"))
+        self.page.get_by_test_id("nav-guide").click()
         guide = self.page.get_by_test_id("guide")
         guide.wait_for(state="visible")
-        self.assertIn("3 loops", self.page.get_by_test_id("tips-strip").inner_text())
+        self.assertEqual(self.page.evaluate("location.pathname"), "/guide")
+        self.assertEqual(self.page.get_attribute("[data-testid=nav-guide]", "aria-current"), "page")
         self.assertIn("Lock focus and exposure", guide.inner_text())
-        self.shot("guide")
-        self.page.locator("#guide button:has-text('Close')").click()
-        self.page.reload()
-        self.page.wait_for_timeout(800)
-        self.assertFalse(guide.is_visible())                     # only opens automatically once
-        self.page.get_by_test_id("guide-button").click()
-        guide.wait_for(state="visible")
+        self.shot("guide", full_page=True)
+        self.page.get_by_test_id("nav-library").click()
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.page.evaluate("location.hash"), "#library")
         self.assertEqual(self.errors, [])
 
     def test_upload_run_view_and_export(self):
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
-        self.page.reload()
         self.page.get_by_test_id("setup-pill").wait_for()
         video = make_video(self.tmp / "IMG_4821.MOV", seconds=8, size="1280x720")
         self.page.set_input_files("#fileInput", str(video))
@@ -141,7 +144,7 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_selector("text=View splat", timeout=180000)
         advice = self.page.get_by_test_id("run-advice")          # shown once the run is marked done
         advice.wait_for(timeout=30000)
-        self.assertIn("Excellent capture", advice.inner_text())
+        self.assertIn("Every frame was placed", advice.inner_text())
         self.page.click(".run button.ghost")                      # details + log
         self.page.wait_for_function("(document.querySelector('pre.log') || {}).textContent?.includes('3/3 Training')",
                                     timeout=30000)
@@ -162,8 +165,6 @@ class WebUiTest(BrowserTestCase):
     def test_imported_splat_renders_upright(self):
         ply = write_ply(self.tmp / "vase.ply", n=30000)
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
-        self.page.reload()
         self.page.set_input_files("#importInput", str(ply))
         self.page.wait_for_selector(".tile >> text=vase.ply")
         self.page.click(".tile >> text=View")
@@ -188,7 +189,6 @@ class LanguageAndFogUiTest(BrowserTestCase):
 
     def open_studio(self, lang=None):
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
         if lang:
             self.page.evaluate(f"localStorage.setItem('lang', '{lang}')")
         self.page.reload()
@@ -207,10 +207,12 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
         self.page.wait_for_function("/ok|bad/.test(document.getElementById('setupPill').className)")
         self.assertIn("erramenta", self.page.text_content("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
-        self.page.get_by_test_id("guide-button").click()
+        self.page.get_by_test_id("nav-guide").click()
         self.assertIn("Trave foco e exposição", self.page.get_by_test_id("guide").inner_text())
+        self.assertEqual(self.page.inner_text("[data-testid=nav-guide]"), "Guia de gravação")
         self.shot("guide-pt")
-        self.page.locator("#guide button[data-i18n='dlg.close']").click()
+        self.page.get_by_test_id("nav-studio").click()
+        self.page.get_by_test_id("setup-pill").wait_for()
         self.page.get_by_test_id("lang-select").select_option("en")
         self.assertEqual(self.page.inner_text("#startBtn"), "Start run")
         self.assertEqual(self.errors, [])
@@ -270,8 +272,6 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
 
     def open_studio(self):
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
-        self.page.reload()
         self.page.get_by_test_id("setup-pill").wait_for()
 
     def import_two(self):
@@ -389,8 +389,6 @@ class ThemeUiTest(BrowserTestCase):
     def test_follows_the_system_and_can_be_switched(self):
         self.page.emulate_media(color_scheme="dark")
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
-        self.page.reload()
         self.page.get_by_test_id("setup-pill").wait_for()
         self.assertEqual(self.bg(), "rgb(13, 13, 12)")                    # system dark
         self.page.get_by_test_id("theme-select").select_option("light")
@@ -409,8 +407,6 @@ class ThemeUiTest(BrowserTestCase):
 
     def test_keyboard_focus_is_visible(self):
         self.page.goto(self.url)
-        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
-        self.page.reload()
         self.page.get_by_test_id("setup-pill").wait_for()
         self.page.focus("#dropZone")
         self.page.keyboard.press("Tab")

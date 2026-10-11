@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Site header and footer** on the Studio page and the recording guide: a logo, navigation
+  (Studio, Library, Recording guide, Docs), a GitHub link, and a footer with help links,
+  bug reports and contact (GitHub issues), the version, the license and credits. Built by
+  `static/site.js`; styles in section 13 of `design.css`. The app also has a favicon.
+- The recording guide is now its own page, `/guide`, instead of a pop-up.
+
+### Changed
+- Rewrote the interface text in English and Portuguese to be shorter and plainer, without
+  arrows, dashes and repeated asides. The advice the server writes was updated to match.
+- The recording guide no longer opens by itself on the first visit, and the Studio links to
+  it from the menu and from runs that need a better capture, instead of from four places.
+
 ## 0.4.0
 
 ### Added

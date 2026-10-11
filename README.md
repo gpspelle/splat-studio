@@ -66,7 +66,7 @@ see what's installed.
 
 Your browser opens Splat Studio at <http://localhost:8765>. Then:
 
-1. Read the **Recording guide** (it opens on your first visit) and film your object.
+1. Read the **Recording guide** (in the menu at the top) and film your object.
 2. Drop the video onto **New run**. Splat Studio checks it and warns you about anything likely to fail.
 3. Click **Start run** and watch the progress: frames → camera poses → training.
 4. Click **View splat** to look at the result, and **Export website** to publish it.
