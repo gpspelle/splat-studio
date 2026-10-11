@@ -383,20 +383,31 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
         self.assertTrue(close(q(1), b0))                                   # ...B didn't
         self.assertTrue(close(view(0), cam0))                              # and the camera stayed put
         self.assertTrue(self.page.evaluate(f"{cv}.linked()"))              # cameras still linked
-        # drag to turn: in "Turn model" mode a drag turns the model, not the camera
-        self.page.get_by_test_id("turn-b").click()
-        self.assertTrue(self.page.evaluate(f"{cv}.turning(1)"))
+        # "Turn model" is on for both at first: dragging turns the model, not the camera
+        for L, i in (("a", 0), ("b", 1)):
+            self.assertEqual(self.page.get_attribute(f"[data-testid=turn-{L}]", "aria-checked"), "true")
+            self.assertEqual(self.page.get_attribute(f"[data-testid=turn-{L}]", "role"), "switch")
         box = self.page.get_by_test_id("pane-b").bounding_box()
         cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+        def drag():
+            self.page.mouse.move(cx, cy)
+            self.page.mouse.down()
+            self.page.mouse.move(cx + 120, cy + 20, steps=6)
+            self.page.mouse.up()
+            self.page.wait_for_timeout(300)
+
         cam_b = view(1)
-        self.page.mouse.move(cx, cy)
-        self.page.mouse.down()
-        self.page.mouse.move(cx + 120, cy, steps=6)
-        self.page.mouse.up()
+        drag()
         self.assertFalse(close(q(1), b0))
         self.assertTrue(close(view(1), cam_b))
-        self.page.get_by_test_id("turn-b").click()                         # back to moving the camera
-        self.assertFalse(self.page.evaluate(f"{cv}.turning(1)"))
+        # switched off, the model is locked: a drag turns neither the model nor the camera
+        self.page.get_by_test_id("turn-b").click()
+        self.assertEqual(self.page.get_attribute("[data-testid=turn-b]", "aria-checked"), "false")
+        locked_q, locked_cam = q(1), view(1)
+        drag()
+        self.assertTrue(close(q(1), locked_q))
+        self.assertTrue(close(view(1), locked_cam))
         # Reset puts a model back; Save view remembers both for the viewer
         self.page.get_by_test_id("orig-b").click()
         self.assertTrue(close(q(1), b0))

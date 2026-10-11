@@ -24,6 +24,15 @@
   .model-bar button { padding: 0 10px; }
   .pane.turning canvas { cursor: grab; }
   .pane.turning canvas:active { cursor: grabbing; }
+  /* "Turn model" is a switch: a track with a knob, signal-coloured and knob right when on */
+  .hud .switch { gap: 8px; }
+  .switch .track { position: relative; width: 26px; height: 14px; flex: none; border: 1px solid var(--hud-ink-2);
+    background: transparent; transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px;
+    background: var(--hud-ink-2); transition: transform var(--fast) var(--ease), background var(--fast) var(--ease); }
+  .switch[aria-checked="true"] .track { background: var(--signal); border-color: var(--signal); }
+  .switch[aria-checked="true"] .track::after { transform: translateX(12px); background: var(--on-signal); }
+  .hud .switch[aria-checked="true"], .hud .switch[aria-checked="true"]:hover { background: rgba(255, 90, 20, .16); color: var(--hud-ink); }
   @media (max-width: 760px) { .model-bar { top: 64px; } }
   .loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 1; }
   .loading .hud-chip { min-width: 220px; }
@@ -52,7 +61,7 @@
 <div id="panes">
   <div class="pane" id="pane0" data-testid="pane-a"><div class="pane-label"><span class="slot" aria-hidden="true">A</span><div class="hud-chip pad"><b class="title hud-title" data-i18n="viewer.loading">Loading…</b><span class="stats hud-sub">&nbsp;</span></div></div>
     <div class="hud-chip hud-bar model-bar" data-testid="model-bar-a" data-i18n-title="compare.model.title">
-    <button class="turn" data-testid="turn-a" data-i18n="compare.turn" data-i18n-title="compare.turn.title">Turn model</button>
+    <button class="turn switch" role="switch" aria-checked="true" data-testid="turn-a" data-i18n-title="compare.turn.title"><span class="track" aria-hidden="true"></span><span data-i18n="compare.turn">Turn model</span></button>
     <button class="left" data-i18n="compare.left" data-i18n-title="compare.left.title">↺ 15°</button>
     <button class="right" data-i18n="compare.right" data-i18n-title="compare.right.title">↻ 15°</button>
     <button class="flip hide-sm" data-i18n="viewer.flip">Flip</button>
@@ -61,7 +70,7 @@
     <div class="loading"><div class="hud-chip pad"><div class="msg hud-title" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
   <div class="pane" id="pane1" data-testid="pane-b"><div class="pane-label"><span class="slot" aria-hidden="true">B</span><div class="hud-chip pad"><b class="title hud-title" data-i18n="viewer.loading">Loading…</b><span class="stats hud-sub">&nbsp;</span></div></div>
     <div class="hud-chip hud-bar model-bar" data-testid="model-bar-b" data-i18n-title="compare.model.title">
-    <button class="turn" data-testid="turn-b" data-i18n="compare.turn" data-i18n-title="compare.turn.title">Turn model</button>
+    <button class="turn switch" role="switch" aria-checked="true" data-testid="turn-b" data-i18n-title="compare.turn.title"><span class="track" aria-hidden="true"></span><span data-i18n="compare.turn">Turn model</span></button>
     <button class="left" data-i18n="compare.left" data-i18n-title="compare.left.title">↺ 15°</button>
     <button class="right" data-i18n="compare.right" data-i18n-title="compare.right.title">↻ 15°</button>
     <button class="flip hide-sm" data-i18n="viewer.flip">Flip</button>
@@ -195,9 +204,13 @@ class Pane {
     for (const ev of ["pointerdown", "wheel", "touchstart"]) {
       this.renderer.domElement.addEventListener(ev, () => { leader = this; }, { passive: true });
     }
-    this.turning = false;                      // "Turn model": dragging turns this model, not the camera
+    // "Turn model" (on at first): dragging turns this model. Off, the model is locked: dragging
+    // doesn't turn it, and the camera never orbits with the mouse either (wheel zooms, right-drag pans).
+    this.turning = true;
+    this.controls.enableRotate = false;
     this.setupTurnDrag();
     const bar = el.querySelector(".model-bar");
+    this.setTurning(true);
     bar.querySelector(".turn").onclick = () => this.setTurning(!this.turning);
     bar.querySelector(".left").onclick = () => this.turn(-15);
     bar.querySelector(".right").onclick = () => this.turn(15);
@@ -211,8 +224,7 @@ class Pane {
   setTurning(on) {
     this.turning = on;
     this.el.classList.toggle("turning", on);
-    this.el.querySelector(".turn").classList.toggle("on", on);
-    this.controls.enabled = !on;
+    this.el.querySelector(".turn").setAttribute("aria-checked", String(on));
   }
   turn(deg) { this.rotateAbout(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(deg)); }
   // Rotate the model around its own centre by angle about a world axis.
@@ -247,7 +259,7 @@ class Pane {
     const el = this.renderer.domElement;
     let drag = null;
     el.addEventListener("pointerdown", (e) => {          // capture: runs before the orbit controls
-      if (!(this.turning || e.altKey) || !this.fit || e.button !== 0) return;
+      if (!this.turning || !this.fit || e.button !== 0) return;
       this.controls.enabled = false;
       drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
       el.setPointerCapture(e.pointerId);
@@ -265,7 +277,7 @@ class Pane {
       if (!drag || e.pointerId !== drag.id) return;
       drag = null;
       this.refit();
-      this.controls.enabled = !this.turning;
+      this.controls.enabled = true;
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
