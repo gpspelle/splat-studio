@@ -179,8 +179,6 @@ def build_cmd(job: Job) -> list[str]:
     args += ["--quality", o.get("quality", "standard"), "--detail", o.get("detail", "auto")]
     if o.get("eval"):
         args.append("--eval")
-    if o.get("clean"):
-        args.append("--clean")
     if o.get("remove_background"):
         args.append("--remove-background")
     extra = (o.get("brush_args") or "").split()
@@ -199,7 +197,7 @@ class ApiError(ValueError):
 
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
-                                     "brush_args", "clean", "remove_background")
+                                     "brush_args", "remove_background")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")

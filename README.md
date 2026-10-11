@@ -129,7 +129,6 @@ choice is remembered in your browser; the first time, it follows your browser's 
 |---|---|---|
 | Quality | Preview · Standard · High | Preview is ~4× faster, good for checking a capture. High takes longer and gives finer detail. |
 | Detail | Auto · Low · Normal · High | Auto judges it from how much texture the footage has. |
-| Remove background fog | on/off (on) | Also saves a copy without the haze and far-away surroundings. The original is always kept. |
 | Remove the background | on/off (off) | Also saves a copy with only the object: no table, floor or room. The original is always kept. |
 | Measure quality | on/off | Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number. |
 | Advanced | frames, trim start/end, extra Brush options | e.g. trim the first seconds while you were pressing record. |
@@ -168,8 +167,7 @@ colmap.log     COLMAP's full output
 ```
 
 You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`,
-and add `--clean` to `run` to also save a fog-free copy, or `--remove-background` to also save
-a copy with only the object. `./splat-studio isolate NAME.ply` does the latter for any splat.
+and add `--remove-background` to `run` to also save a copy with only the object. `./splat-studio isolate NAME.ply` does the latter for any splat.
 
 ## Removing background fog
 
@@ -177,10 +175,11 @@ Splats of indoor scenes often look foggy: the room around the object was only se
 distance and a few angles, so the trainer fills it with large, faint splats. Splat Studio
 handles this in three ways:
 
+- **Every run removes the fog.** After training it saves `NAME_clean.ply` next to the original,
+  and **View splat** opens that copy (**With fog** opens the original). The object is located
+  from where the cameras were pointing. The original file is never changed. For imported
+  splats and runs made before this, **Remove fog** in the library does the same.
 - **The viewer frames the object**, not the whole cloud, and **Crop** hides the rest.
-- **Remove fog** (in the library, or the option on new runs) saves `NAME_clean.ply` with only
-  the object. For splats from a Splat Studio run, the object is located from where the cameras
-  were pointing. The original file is never changed.
 - **`./splat-studio inspect NAME.ply`** prints numbers that explain the fog, with a diagnosis:
 
 ```text
@@ -251,9 +250,9 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 |---|---|
 | "Not good enough to train on" | The camera track broke too often. Check the advice on the run: it names the seconds where it broke. Re-film more slowly, in better light, on a textured surface. |
 | The model has holes or blurry sides | Those angles weren't filmed, or their frames weren't placed. Add the missing loop (usually the high one). |
-| Foggy haze around the model | Use **Remove fog**, or **Crop** in the viewer. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
+| Foggy haze around the model | New runs already remove it. For imported splats use **Remove fog**; **Crop** in the viewer hides what's left. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
 | The table or room is still around the object | Use **Remove background** (see [Removing the background](#removing-the-background)). |
-| Floating specks around the model | Normal for splats. **Remove fog** removes most of them; for fine control use [SuperSplat](https://superspl.at/editor). |
+| Floating specks around the model | Normal for splats. Fog removal takes out most of them; for fine control use [SuperSplat](https://superspl.at/editor). |
 | The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save view**. |
 | A tool is missing | Click the tools badge (top right) or run `./splat-studio check`, then `./splat-studio setup`. |
 | `command not found: colmap` after installing | Open a new terminal, or run `./splat-studio setup` again: it adds Homebrew and Rust to the path. |

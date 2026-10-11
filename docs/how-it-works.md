@@ -78,7 +78,7 @@ Brush writes the scene's estimated up direction into the `.ply` header
 - **inspect** reports the share of splats outside that region, the share that are large and
   faint ("fog"), the share that are nearly invisible everywhere (a sign of inaccurate camera
   positions), and how much bigger the whole scene is than the object.
-- **clean** copies the rows of splats inside the region with opacity ≥ 0.02 into
+- **clean** runs after every training run (and on demand for imported splats). It copies the rows of splats inside the region with opacity ≥ 0.02 into
   `NAME_clean.ply`, keeping the header comments (including the up axis). It refuses to
   overwrite its input.
 - The viewer frames the camera on the 5th–95th percentile of opaque splats and implements

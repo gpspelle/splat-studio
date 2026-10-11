@@ -14,6 +14,11 @@
   with error code `splat_busy`.
 
 ### Changed
+- **Fog removal always runs.** Every run now saves `NAME_clean.ply` without the background
+  fog, and **View splat** opens it; a **With fog** button opens the original, which is still
+  kept. The *Remove background fog* checkbox is gone, and `splat-studio run --clean` is
+  accepted but no longer needed. The library's **Remove fog** button only shows on splats
+  that don't have a clean copy yet (imports and older runs).
 - Rewrote the interface text in English and Portuguese to be shorter and plainer, without
   arrows, dashes and repeated asides. The advice the server writes was updated to match.
 - The recording guide no longer opens by itself on the first visit, and the Studio links to

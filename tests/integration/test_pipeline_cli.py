@@ -17,7 +17,7 @@ class PipelineTest(TempDirTestCase):
         for marker in ("==> 1/3 Frames", "==> 2/3 Camera poses (COLMAP)", "==> 3/3 Training", "Done. Splat:"):
             self.assertIn(marker, r.stdout)
         run = (self.tmp / "workspace" / "vase" / "latest").resolve()
-        splats = list((run / "splat").glob("preview_*.ply"))
+        splats = [p for p in (run / "splat").glob("preview_*.ply") if not p.stem.endswith("_clean")]
         self.assertEqual(len(splats), 1)
         self.assertTrue(splats[0].read_bytes().startswith(b"ply\n"))
         summary = (run / "summary.txt").read_text()
@@ -25,8 +25,8 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("--total-train-iters", summary)
         self.assertIn("splat:", summary)
 
-    def test_clean_option_adds_a_clean_copy_and_keeps_the_original(self):
-        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--clean")
+    def test_every_run_adds_a_clean_copy_and_keeps_the_original(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview")
         self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
         run = (self.tmp / "workspace" / "vase" / "latest").resolve()
         names = sorted(p.name for p in (run / "splat").glob("*.ply"))
@@ -37,15 +37,16 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("Clean copy:", r.stdout)
         self.assertIn("clean splat:", (run / "summary.txt").read_text())
 
-    def test_without_clean_option_output_is_unchanged(self):
-        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview")
+    def test_old_clean_flag_is_still_accepted(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--clean")
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
         run = (self.tmp / "workspace" / "vase" / "latest").resolve()
-        self.assertEqual([p.name for p in (run / "splat").glob("*.ply")], ["preview_3000.ply"])
-        self.assertNotIn("Clean copy", r.stdout)
+        self.assertEqual(sorted(p.name for p in (run / "splat").glob("*.ply")),
+                         ["preview_3000.ply", "preview_3000_clean.ply"])
         self.assertNotIn("Object copy", r.stdout)
 
     def test_remove_background_option_adds_an_object_copy(self):
-        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--clean", "--remove-background")
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--remove-background")
         self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
         run = (self.tmp / "workspace" / "vase" / "latest").resolve()
         names = sorted(p.name for p in (run / "splat").glob("*.ply"))
