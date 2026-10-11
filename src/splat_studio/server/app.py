@@ -13,6 +13,7 @@ Routes
   POST /api/import               raw .ply body, X-Filename header
   POST /api/jobs                 {type: video|retrain|setup|clean|isolate, ...options}
   POST /api/jobs/<id>/cancel     DELETE /api/jobs/<id>   (removes the record, never results)
+  DELETE /api/splats?file=<path> removes one library file (imports/ or a run's splat/ folder)
 """
 from __future__ import annotations
 
@@ -268,9 +269,17 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_DELETE(self):
-            m = re.match(r"^/api/jobs/([^/]+)$", urlparse(self.path).path)
+            url = urlparse(self.path)
+            m = re.match(r"^/api/jobs/([^/]+)$", url.path)
             if m:
                 return self.send_json({"ok": runner.delete(m.group(1))})
+            if url.path == "/api/splats":
+                f = data.library_splat(parse_qs(url.query).get("file", [""])[0])
+                if not f:
+                    return self.send_json({"error": "splat not found", "code": "splat_missing"}, 404)
+                if runner.splat_in_use(data.rel(f)):
+                    return self.send_json({"error": "a run is still using this splat", "code": "splat_busy"}, 409)
+                return self.send_json({"ok": data.delete_splat(data.rel(f))})
             self.send_error(HTTPStatus.NOT_FOUND)
 
     return Handler

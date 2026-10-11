@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 
 from .. import guidance
+from ..colmap import pid_alive
 from ..common import child_env, module_cmd
 from .library import DataDir, read_summary
 
@@ -273,6 +274,20 @@ class Runner:
         shutil.rmtree(job.dir, ignore_errors=True)     # only the job record + log, never results
         del self.jobs[jid]
         return True
+
+    def splat_in_use(self, splat: str) -> bool:
+        """A queued or running job reads this splat, or writes into its run folder (UI or command line)."""
+        parts = splat.split("/")
+        run_dir = "/".join(parts[:3]) if parts[0] == "workspace" else None
+        lock = self.data.root / run_dir / ".lock" if run_dir else None
+        try:
+            if lock and pid_alive(int(lock.read_text().strip())):
+                return True
+        except (OSError, ValueError):
+            pass
+        return any(j.status in ("queued", "running") and
+                   ((j.options or {}).get("splat") == splat or (run_dir and j.run_dir == run_dir))
+                   for j in list(self.jobs.values()))
 
     def stop_all(self) -> None:
         for j in self.jobs.values():

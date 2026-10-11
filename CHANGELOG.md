@@ -8,12 +8,19 @@
   bug reports and contact (GitHub issues), the version, the license and credits. Built by
   `static/site.js`; styles in section 13 of `design.css`. The app also has a favicon.
 - The recording guide is now its own page, `/guide`, instead of a pop-up.
+- **Delete from the library.** Each library splat has a **Delete** button that asks for
+  confirmation, then removes that one file from disk (`DELETE /api/splats?file=…`). The run
+  folder, frames and other splats stay. Files a queued or running job still uses are refused
+  with error code `splat_busy`.
 
 ### Changed
 - Rewrote the interface text in English and Portuguese to be shorter and plainer, without
   arrows, dashes and repeated asides. The advice the server writes was updated to match.
 - The recording guide no longer opens by itself on the first visit, and the Studio links to
   it from the menu and from runs that need a better capture, instead of from four places.
+- **Library grouped by video.** The splat library shows one collapsible group per source video
+  (all runs of that video together), newest first, with imported files in their own group.
+  Library items have a new `video` field (the video's name, or `null` for imports).
 
 ## 0.4.0
 
