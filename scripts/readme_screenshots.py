@@ -101,7 +101,7 @@ def main():
         page.click('.seg[data-name="quality"] button[data-v="standard"]')
         page.locator("main > section.card").first.screenshot(path=str(OUT / "upload-checks.png"))
         page.click("#startBtn")
-        page.wait_for_selector("text=training splat", timeout=300000)
+        page.wait_for_selector(".run .now-line >> text=training splat", timeout=300000)
         page.wait_for_timeout(1500)
         page.locator(".run").first.screenshot(path=str(OUT / "run-progress.png"))
         page.wait_for_selector("text=View splat", timeout=180000)

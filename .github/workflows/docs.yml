@@ -1,0 +1,19 @@
+name: Docs
+
+# Separate from CI so editing the PR description re-runs only this check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  readme:
+    name: README kept current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: User-facing changes come with README or docs changes
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/check_docs.py "origin/${{ github.base_ref }}"

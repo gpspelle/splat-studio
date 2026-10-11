@@ -49,6 +49,7 @@ src/splat_studio/
 tests/unit, tests/integration, tests/fakes
 docs/              recording guide, how it works, screenshots
 scripts/readme_screenshots.py   regenerates docs/images
+scripts/check_docs.py           CI check: user-facing changes need README/docs changes
 docker/            experimental container
 ```
 
@@ -81,4 +82,8 @@ to `LANGS`.
 - Lines that the UI parses (`==> 2/3 Camera poses (COLMAP): …`, the progress bar, `Done. Splat: …`)
   are marked with a comment where they are printed. Change them together with `server/jobs.py`
   and the tests.
-- Screenshots: `python3 scripts/readme_screenshots.py` (needs Playwright).
+- Screenshots: `python3 scripts/readme_screenshots.py` (needs Playwright and
+  `opencv-python-headless`).
+- Docs ship with the change: a PR that changes what users see or do also updates the README
+  (both languages) and, if a page looks different, the screenshots. CI checks this; see
+  [AGENTS.md](AGENTS.md).

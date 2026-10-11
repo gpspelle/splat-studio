@@ -14,6 +14,9 @@
   with error code `splat_busy`.
 
 ### Changed
+- README screenshots retaken with fog removal always on. A new CI check
+  (`scripts/check_docs.py`) fails PRs that change user-facing code without touching the
+  README or `docs/`, and `AGENTS.md` / `CLAUDE.md` tell coding agents to keep both current.
 - **Fog removal always runs.** Every run now saves `NAME_clean.ply` without the background
   fog, and **View splat** opens it; a **With fog** button opens the original, which is still
   kept. The *Remove background fog* checkbox is gone, and `splat-studio run --clean` is
