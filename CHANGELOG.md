@@ -19,6 +19,11 @@
 - Fog removal without camera positions now finds the object as the densest connected cluster
   of opaque splats, so opaque walls no longer pull the kept region away from the object.
 
+### Fixed
+- One unreadable frame no longer ends the COLMAP stage when OpenCV isn't installed (the ffmpeg
+  and sips resize paths now leave such a frame as is, like the OpenCV path already did). This
+  was also why the integration tests failed on GitHub Actions.
+
 ### Compatibility
 - Nothing existing was renamed or removed: all 0.2.0 fields, options, outputs and exported
   sites are unchanged, and the new options default to off.
