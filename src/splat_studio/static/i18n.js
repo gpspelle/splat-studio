@@ -14,7 +14,8 @@
       "lang.label": "Language",
       // ---- header
       "app.tagline": "Video → 3D Gaussian splat, on this computer",
-      "head.guide": "📹 Recording guide",
+      "head.guide": "Recording guide",
+      "theme.label": "Theme", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark",
       "head.checking": "Checking tools…",
       "head.ready": "✓ Tools ready",
       "head.missing.one": "1 tool missing",
@@ -220,7 +221,8 @@
     pt: {
       "lang.label": "Idioma",
       "app.tagline": "Vídeo → splat gaussiano 3D, neste computador",
-      "head.guide": "📹 Guia de gravação",
+      "head.guide": "Guia de gravação",
+      "theme.label": "Tema", "theme.system": "Sistema", "theme.light": "Claro", "theme.dark": "Escuro",
       "head.checking": "Verificando ferramentas…",
       "head.ready": "✓ Ferramentas prontas",
       "head.missing.one": "Falta 1 ferramenta",

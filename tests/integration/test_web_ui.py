@@ -206,7 +206,7 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.page.get_by_test_id("setup-pill").wait_for()
         self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
         self.page.wait_for_function("/ok|bad/.test(document.getElementById('setupPill').className)")
-        self.assertIn("erramenta", self.page.inner_text("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
+        self.assertIn("erramenta", self.page.text_content("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
         self.page.get_by_test_id("guide-button").click()
         self.assertIn("Trave foco e exposição", self.page.get_by_test_id("guide").inner_text())
         self.shot("guide-pt")
@@ -257,8 +257,8 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.page.wait_for_selector(".tile >> text=vaso.ply")
         self.page.click(".tile >> text=Ver")
         self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
-        self.assertEqual(self.page.inner_text("#crop"), "Recortar")
-        self.assertEqual(self.page.inner_text("#export"), "Exportar site")
+        self.assertEqual(self.page.text_content("#crop"), "Recortar")       # (displayed in capitals by the stylesheet)
+        self.assertEqual(self.page.text_content("#export"), "Exportar site")
         self.assertIn("splats", self.page.inner_text("#stats"))
         self.assertEqual(self.errors, [])
 
@@ -304,16 +304,20 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
         self.page.wait_for_timeout(800)
         self.shot("compare")
 
+        same = (f"() => {{ const a = {cv}.view(0), b = {cv}.view(1);"
+                " return a.every((x, i) => Math.abs(x - b[i]) < 1e-3); }")
+
         def same_view():
-            va, vb = self.page.evaluate(f"[{cv}.view(0), {cv}.view(1)]")
-            return max(abs(x - y) for x, y in zip(va, vb)) < 1e-3
+            return self.page.evaluate(same)
+
+        def follows():                     # software rendering can be slow: wait for the next frames
+            self.page.wait_for_function(same, timeout=15000)
+            return True
 
         self.page.evaluate(f"{cv}.orbit(0, 70)")                       # turn the left model...
-        self.page.wait_for_timeout(400)
-        self.assertTrue(same_view())                                     # ...the right one follows
+        self.assertTrue(follows())                                       # ...the right one follows
         self.page.evaluate(f"{cv}.orbit(1, -30)")                      # and the other way round
-        self.page.wait_for_timeout(400)
-        self.assertTrue(same_view())
+        self.assertTrue(follows())
         self.page.get_by_test_id("link-toggle").click()                  # unlink
         self.assertFalse(self.page.evaluate(f"{cv}.linked()"))
         self.page.evaluate(f"{cv}.orbit(0, 90)")
@@ -374,3 +378,42 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
         self.assertEqual(tile.locator("[data-testid=clean-button]").count(), 0)
         self.page.wait_for_selector("text=Background removed", timeout=30000)        # advice on the run card
         self.assertEqual(self.errors, [])
+
+
+@unittest.skipIf(sync_playwright is None, "playwright not installed")
+@needs_ffmpeg
+class ThemeUiTest(BrowserTestCase):
+    def bg(self):
+        return self.page.evaluate("getComputedStyle(document.body).backgroundColor")
+
+    def test_follows_the_system_and_can_be_switched(self):
+        self.page.emulate_media(color_scheme="dark")
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        self.page.reload()
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.bg(), "rgb(13, 13, 12)")                    # system dark
+        self.page.get_by_test_id("theme-select").select_option("light")
+        self.assertEqual(self.bg(), "rgb(239, 237, 231)")
+        self.page.reload()                                                 # remembered
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.bg(), "rgb(239, 237, 231)")
+        self.page.get_by_test_id("lang-select").select_option("pt")
+        self.assertEqual(self.page.locator("[data-testid=theme-select] option").all_text_contents(),
+                         ["Sistema", "Claro", "Escuro"])
+        self.page.get_by_test_id("theme-select").select_option("system")
+        self.assertEqual(self.bg(), "rgb(13, 13, 12)")
+        # fonts load from the app itself, never from the internet
+        self.page.wait_for_function("document.fonts.check('14px Inter') && document.fonts.check('12px \"JetBrains Mono\"')")
+        self.assertEqual(self.errors, [])
+
+    def test_keyboard_focus_is_visible(self):
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        self.page.reload()
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.page.focus("#dropZone")
+        self.page.keyboard.press("Tab")
+        self.page.keyboard.press("Shift+Tab")                              # keyboard focus, so :focus-visible applies
+        style = self.page.evaluate("getComputedStyle(document.activeElement).outlineStyle")
+        self.assertEqual(style, "solid")

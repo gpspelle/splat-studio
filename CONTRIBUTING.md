@@ -74,6 +74,9 @@ to `LANGS`.
 
 ## Conventions
 
+- UI styling comes from `static/design.css` ([docs/design-system.md](docs/design-system.md)). Pages
+  don't define their own colours: add a token. `tests/unit/test_design.py` checks contrast and usage.
+
 - Standard library only at runtime. Vendored front-end libraries are pinned files in `static/vendor`.
 - Lines that the UI parses (`==> 2/3 Camera poses (COLMAP): …`, the progress bar, `Done. Splat: …`)
   are marked with a comment where they are printed. Change them together with `server/jobs.py`

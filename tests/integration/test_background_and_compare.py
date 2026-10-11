@@ -89,3 +89,22 @@ class CompareTest(ServerTestCase):
         self.assertEqual(r.status, 400)
         r, _ = self.request("GET", "/api/export-compare?a=../../etc/passwd&b=imports/b.ply")
         self.assertEqual(r.status, 404)
+
+
+class DesignSystemServedTest(ServerTestCase):
+    def test_stylesheet_and_fonts_are_served(self):
+        r, body = self.request("GET", "/design.css")
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"--signal", body)
+        r, body = self.request("GET", "/fonts/InterVariable.woff2")
+        self.assertEqual((r.status, r.headers["Content-Type"]), (200, "font/woff2"))
+        self.assertEqual(body[:4], b"wOF2")
+
+    def test_exported_sites_carry_the_design_system(self):
+        self.upload(write_ply(self.tmp / "a.ply", n=500), "/api/import")
+        self.upload(write_ply(self.tmp / "b.ply", n=500), "/api/import")
+        for url in ("/api/export?file=imports/a.ply", "/api/export-compare?a=imports/a.ply&b=imports/b.ply"):
+            r, body = self.request("GET", url)
+            names = set(zipfile.ZipFile(io.BytesIO(body)).namelist())
+            self.assertTrue({"design.css", "fonts/InterVariable.woff2", "fonts/JetBrainsMono.woff2",
+                             "fonts/Inter-OFL.txt"} <= names, url)

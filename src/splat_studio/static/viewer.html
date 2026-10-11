@@ -4,47 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splat Viewer</title>
+<link rel="stylesheet" href="./design.css">
 <style>
-  :root {
-    --bg: #0d0f12; --panel: rgba(20, 23, 28, .82); --line: rgba(255,255,255,.09);
-    --text: #e9ecef; --muted: #98a0aa; --accent: #ff7a3d; --accent-ink: #1a0d05;
-  }
-  :root[data-bg="light"] { --bg: #eef0f2; --panel: rgba(255,255,255,.86); --line: rgba(0,0,0,.08);
-    --text: #15181c; --muted: #5d6570; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  html, body { height: 100%; overflow: hidden; background: var(--canvas); }
+  :root[data-bg="light"] body { background: var(--canvas-light); }
   canvas { display: block; touch-action: none; }
-  .bar { position: fixed; left: 16px; right: 16px; display: flex; gap: 8px; align-items: center;
+  .dock { position: fixed; left: var(--s-4); right: var(--s-4); display: flex; gap: var(--s-2); align-items: flex-start;
     pointer-events: none; z-index: 2; }
-  .bar > * { pointer-events: auto; }
-  .top { top: 16px; justify-content: space-between; }
-  .bottom { bottom: 16px; justify-content: center; flex-wrap: wrap; }
-  .chip { background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
-  .title { display: flex; flex-direction: column; min-width: 0; max-width: 60vw; }
-  .title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-  .title span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .group { display: flex; gap: 2px; padding: 4px; align-items: center; }
-  .right { display: flex; gap: 8px; }
-  button { appearance: none; border: 0; background: transparent; color: var(--text); font: inherit;
-    padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
-  button:hover { background: var(--line); }
-  button.on { background: var(--accent); color: var(--accent-ink); }
-  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  a.back { color: var(--text); text-decoration: none; }
-  input[type=range] { width: 120px; accent-color: var(--accent); margin: 0 6px; }
-  .lang-select { font: inherit; color: var(--text); background: transparent; border: 0; padding: 4px; }
-  .lang-select option { color: #000; }
+  .dock > * { pointer-events: auto; }
+  .top { top: var(--s-4); justify-content: space-between; }
+  .bottom { bottom: var(--s-4); justify-content: center; flex-wrap: wrap; align-items: stretch; }
+  .title { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 60vw; }
+  .title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .right { display: flex; gap: var(--s-2); }
+  a.back { text-decoration: none; display: flex; }
+  #cropRange { align-self: center; }
   #overlay { position: fixed; inset: 0; display: grid; place-items: center; z-index: 3; pointer-events: none; }
-  #overlay .box { text-align: center; min-width: 240px; }
-  .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; }
-  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
-  .err { color: #ff8a80; max-width: 520px; white-space: pre-wrap; }
-  .hint { color: var(--muted); font-size: 12px; }
+  #overlay .box { min-width: 260px; }
+  .err { color: #ff8a80; max-width: 520px; white-space: pre-wrap; font: var(--text-meta); }
   .app-only { display: none !important; }
   body.app .app-only { display: flex !important; }
-  @media (max-width: 640px) { .hide-sm { display: none; } .bottom { left: 8px; right: 8px; bottom: 8px; } }
+  @media (max-width: 640px) { .hide-sm { display: none !important; } .dock { left: var(--s-2); right: var(--s-2); } .bottom { bottom: var(--s-2); }
+    .hud button { padding: 0 9px; } }
 </style>
 <script src="./i18n.js"></script>
 <script type="importmap">
@@ -57,42 +38,43 @@
 }
 </script>
 </head>
-<body>
-<div class="bar top">
-  <div class="chip title"><b id="title" data-i18n="viewer.loading">Loading…</b><span id="stats">&nbsp;</span></div>
+<body class="hud">
+<div class="marks" aria-hidden="true" style="position:fixed;inset:0;pointer-events:none;z-index:1"></div>
+<div class="dock top">
+  <div class="hud-chip pad title"><b id="title" class="hud-title" data-i18n="viewer.loading">Loading…</b><span id="stats" class="hud-sub">&nbsp;</span></div>
   <div class="right">
-    <div class="chip group"><span data-lang-switcher></span></div>
-    <div class="chip group app-only"><a class="back" href="/"><button data-i18n="viewer.studio">← Studio</button></a></div>
+    <div class="hud-chip hud-bar"><span data-lang-switcher></span></div>
+    <div class="hud-chip hud-bar app-only"><a class="back" href="/"><button data-i18n="viewer.studio">← Studio</button></a></div>
   </div>
 </div>
 
-<div class="bar bottom">
-  <div class="chip group">
+<div class="dock bottom">
+  <div class="hud-chip hud-bar">
     <button id="reset" data-i18n="viewer.reset" data-i18n-title="viewer.reset.title">Reset view</button>
     <button id="spin" data-i18n="viewer.spin" data-i18n-title="viewer.spin.title">Auto-rotate</button>
   </div>
-  <div class="chip group" data-i18n-title="viewer.orient.title">
+  <div class="hud-chip hud-bar" data-i18n-title="viewer.orient.title">
     <button id="flip" data-i18n="viewer.flip">Flip</button>
     <button id="rotx" data-i18n="viewer.tilt">Tilt 90°</button>
     <button id="rotz" class="hide-sm" data-i18n="viewer.roll">Roll 90°</button>
   </div>
-  <div class="chip group" data-i18n-title="viewer.crop.title">
+  <div class="hud-chip hud-bar" data-i18n-title="viewer.crop.title">
     <button id="crop" data-testid="crop-toggle" data-i18n="viewer.crop">Crop</button>
     <input id="cropRange" type="range" min="40" max="300" value="120" hidden aria-label="Crop">
   </div>
-  <div class="chip group">
+  <div class="hud-chip hud-bar">
     <button id="bg">Light</button>
     <button id="full" class="hide-sm" data-i18n="viewer.fullscreen">Fullscreen</button>
   </div>
-  <div class="chip group app-only">
+  <div class="hud-chip hud-bar app-only">
     <button id="save" data-i18n="viewer.save" data-i18n-title="viewer.save.title">Save view</button>
     <button id="download" data-i18n="viewer.download">Download</button>
     <button id="export" class="primary" data-i18n="viewer.export" data-i18n-title="viewer.export.title">Export website</button>
   </div>
 </div>
 
-<div id="overlay"><div class="box chip"><div id="msg" data-i18n="viewer.loading">Loading splat…</div>
-  <div class="progress"><i id="prog"></i></div><div class="hint" id="sub">&nbsp;</div></div></div>
+<div id="overlay"><div class="box hud-chip pad"><div id="msg" class="hud-title" data-i18n="viewer.loading">Loading splat…</div>
+  <div class="progress"><i id="prog"></i></div><div class="hud-sub" id="sub">&nbsp;</div></div></div>
 
 <script type="module">
 import * as THREE from "three";
@@ -151,7 +133,7 @@ let cropFactor = null;                     // null = off; else radius as a multi
 function bgLabel() { $("bg").textContent = document.documentElement.dataset.bg === "light" ? t("viewer.dark") : t("viewer.light"); }
 function applyBackground() {
   const light = document.documentElement.dataset.bg === "light";
-  renderer.setClearColor(light ? 0xeef0f2 : 0x0d0f12, 1);
+  renderer.setClearColor(light ? 0xefede7 : 0x0b0b0a, 1);
   bgLabel();
 }
 document.documentElement.dataset.bg = store.get("viewer:bg") || "dark";

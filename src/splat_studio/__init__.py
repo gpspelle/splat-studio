@@ -3,4 +3,4 @@
 Pipeline: video -> frames (ffmpeg) -> camera poses (COLMAP) -> splat (Brush) -> web viewer.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

@@ -99,13 +99,14 @@ def main():
         page.set_input_files("#fileInput", str(video))
         page.get_by_test_id("video-advice").wait_for(state="visible")
         page.click('.seg[data-name="quality"] button[data-v="standard"]')
-        page.screenshot(path=str(OUT / "upload-checks.png"), clip={"x": 90, "y": 88, "width": 382, "height": 520})
+        page.locator("main > section.card").first.screenshot(path=str(OUT / "upload-checks.png"))
         page.click("#startBtn")
         page.wait_for_selector("text=training splat", timeout=300000)
         page.wait_for_timeout(1500)
-        page.screenshot(path=str(OUT / "run-progress.png"), clip={"x": 490, "y": 88, "width": 742, "height": 190})
+        page.locator(".run").first.screenshot(path=str(OUT / "run-progress.png"))
         page.wait_for_selector("text=View splat", timeout=180000)
         page.wait_for_timeout(2500)
+        page.evaluate("window.scrollTo(0, 0)")
         page.screenshot(path=str(OUT / "studio.png"))
 
         # 3. the viewer

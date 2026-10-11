@@ -175,9 +175,18 @@ def read_summary(run_dir: Path) -> dict:
     return out
 
 
+def _add_design_files(z: zipfile.ZipFile, static_dir: Path) -> None:
+    """The design system: stylesheet and bundled fonts (with their licences)."""
+    z.write(static_dir / "design.css", "design.css")
+    for f in sorted((static_dir / "fonts").glob("*")):
+        if f.is_file():
+            z.write(f, "fonts/" + f.name, compress_type=zipfile.ZIP_STORED if f.suffix == ".woff2" else zipfile.ZIP_DEFLATED)
+
+
 def _add_site_files(z: zipfile.ZipFile, page: str, static_dir: Path) -> None:
     z.write(static_dir / page, "index.html")
     z.write(static_dir / "i18n.js", "i18n.js")
+    _add_design_files(z, static_dir)
     for f in (static_dir / "vendor").rglob("*"):
         if f.is_file() and not f.name.endswith(".map"):
             z.write(f, "vendor/" + str(f.relative_to(static_dir / "vendor")))
@@ -217,6 +226,7 @@ def export_site(splat: Path, title: str, rotation: list | None, static_dir: Path
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(static_dir / "viewer.html", "index.html")
         z.write(static_dir / "i18n.js", "i18n.js")
+        _add_design_files(z, static_dir)
         for f in (static_dir / "vendor").rglob("*"):
             if f.is_file() and not f.name.endswith(".map"):
                 z.write(f, "vendor/" + str(f.relative_to(static_dir / "vendor")))

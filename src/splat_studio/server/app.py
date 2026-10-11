@@ -28,6 +28,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, setup_deps
+
+mimetypes.add_type("font/woff2", ".woff2")       # bundled fonts (not in every system's mime table)
 from .jobs import ApiError, Runner, validate_options
 from .library import SPLAT_EXT, STATIC_DIR, VIDEO_EXT, DataDir, export_compare, export_site, splat_title
 
@@ -167,7 +169,7 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
             if p == "/api/videos":
                 return self.send_json(data.list_videos())
             if p == "/api/setup":
-                return self.send_json({"items": setup_deps.check(), "data_dir": str(data.root)})
+                return self.send_json({"items": setup_deps.check(), "data_dir": str(data.root), "version": __version__})
             if p == "/api/export":
                 f = data.safe_path(q.get("file", ""))
                 if not f or not f.is_file() or f.suffix.lower() not in SPLAT_EXT:

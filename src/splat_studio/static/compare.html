@@ -4,47 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Compare – Splat Viewer</title>
+<link rel="stylesheet" href="./design.css">
 <style>
-  :root {
-    --bg: #0d0f12; --panel: rgba(20, 23, 28, .82); --line: rgba(255,255,255,.09);
-    --text: #e9ecef; --muted: #98a0aa; --accent: #ff7a3d; --accent-ink: #1a0d05;
-  }
-  :root[data-bg="light"] { --bg: #eef0f2; --panel: rgba(255,255,255,.86); --line: rgba(0,0,0,.08);
-    --text: #15181c; --muted: #5d6570; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-  #panes { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--line); }
+  html, body { height: 100%; overflow: hidden; background: var(--canvas); }
+  #panes { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hud-rule); }
   @media (max-width: 760px), (orientation: portrait) and (max-width: 1024px) {
     #panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
   }
-  .pane { position: relative; overflow: hidden; background: var(--bg); min-width: 0; min-height: 0; }
+  .pane { position: relative; overflow: hidden; background: var(--canvas); min-width: 0; min-height: 0; }
+  :root[data-bg="light"] .pane { background: var(--canvas-light); }
   .pane canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-  .label { position: absolute; left: 12px; top: 12px; right: 12px; display: flex; pointer-events: none; z-index: 2; }
-  .chip { background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
-  .label .chip { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
-  .label b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-  .label span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pane-label { position: absolute; left: var(--s-3); top: var(--s-3); right: var(--s-3); display: flex; align-items: flex-start; gap: var(--s-2);
+    pointer-events: none; z-index: 2; }
+  .pane-label .hud-chip { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
+  .pane-label b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pane-label .slot { flex: none; width: 26px; height: 26px; display: grid; place-items: center; background: var(--signal); color: var(--on-signal);
+    font: 700 12px/1 var(--font-mono); }
   .loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 1; }
-  .progress { height: 4px; width: 200px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 8px; }
-  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
-  .err { color: #ff8a80; max-width: 420px; white-space: pre-wrap; }
-  .bar { position: fixed; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 8px; justify-content: center;
+  .loading .hud-chip { min-width: 220px; }
+  .err { color: #ff8a80; max-width: 420px; white-space: pre-wrap; font: var(--text-meta); }
+  .dock { position: fixed; left: var(--s-4); right: var(--s-4); bottom: var(--s-4); display: flex; gap: var(--s-2); justify-content: center;
     flex-wrap: wrap; pointer-events: none; z-index: 3; }
-  .bar > * { pointer-events: auto; }
-  .group { display: flex; gap: 2px; padding: 4px; align-items: center; }
-  button { appearance: none; border: 0; background: transparent; color: var(--text); font: inherit;
-    padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
-  button:hover { background: var(--line); }
-  button.on { background: var(--accent); color: var(--accent-ink); }
-  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  a.back { color: var(--text); text-decoration: none; }
-  .lang-select { font: inherit; color: var(--text); background: transparent; border: 0; padding: 4px; }
-  .lang-select option { color: #000; }
+  .dock > * { pointer-events: auto; }
+  a.back { text-decoration: none; display: flex; }
   .app-only { display: none !important; }
   body.app .app-only { display: flex !important; }
-  @media (max-width: 640px) { .hide-sm { display: none; } .bar { left: 8px; right: 8px; bottom: 8px; } }
+  @media (max-width: 640px) { .hide-sm { display: none !important; } .dock { left: var(--s-2); right: var(--s-2); bottom: var(--s-2); }
+    .hud button { padding: 0 9px; } }
 </style>
 <script src="./i18n.js"></script>
 <script type="importmap">
@@ -57,27 +43,27 @@
 }
 </script>
 </head>
-<body>
+<body class="hud">
 <div id="panes">
-  <div class="pane" id="pane0" data-testid="pane-a"><div class="label"><div class="chip"><b class="title" data-i18n="viewer.loading">Loading…</b><span class="stats">&nbsp;</span></div></div>
-    <div class="loading"><div class="chip"><div class="msg" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
-  <div class="pane" id="pane1" data-testid="pane-b"><div class="label"><div class="chip"><b class="title" data-i18n="viewer.loading">Loading…</b><span class="stats">&nbsp;</span></div></div>
-    <div class="loading"><div class="chip"><div class="msg" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
+  <div class="pane" id="pane0" data-testid="pane-a"><div class="pane-label"><span class="slot" aria-hidden="true">A</span><div class="hud-chip pad"><b class="title hud-title" data-i18n="viewer.loading">Loading…</b><span class="stats hud-sub">&nbsp;</span></div></div>
+    <div class="loading"><div class="hud-chip pad"><div class="msg hud-title" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
+  <div class="pane" id="pane1" data-testid="pane-b"><div class="pane-label"><span class="slot" aria-hidden="true">B</span><div class="hud-chip pad"><b class="title hud-title" data-i18n="viewer.loading">Loading…</b><span class="stats hud-sub">&nbsp;</span></div></div>
+    <div class="loading"><div class="hud-chip pad"><div class="msg hud-title" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
 </div>
 
-<div class="bar">
-  <div class="chip group">
+<div class="dock">
+  <div class="hud-chip hud-bar">
     <button id="link" class="on" data-testid="link-toggle" data-i18n="compare.link" data-i18n-title="compare.link.title">Linked cameras</button>
     <button id="reset" data-i18n="viewer.reset" data-i18n-title="viewer.reset.title">Reset view</button>
     <button id="spin" data-i18n="viewer.spin" data-i18n-title="viewer.spin.title">Auto-rotate</button>
   </div>
-  <div class="chip group">
+  <div class="hud-chip hud-bar">
     <button id="swap" class="hide-sm" data-i18n="compare.swap">Swap</button>
     <button id="bg">Light</button>
     <button id="full" class="hide-sm" data-i18n="viewer.fullscreen">Fullscreen</button>
     <span data-lang-switcher></span>
   </div>
-  <div class="chip group app-only">
+  <div class="hud-chip hud-bar app-only">
     <a class="back" href="/"><button data-i18n="viewer.studio">← Studio</button></a>
     <button id="export" class="primary" data-testid="compare-export" data-i18n="viewer.export" data-i18n-title="compare.export.title">Export website</button>
   </div>
@@ -283,7 +269,7 @@ function bgLabel() { $("bg").textContent = document.documentElement.dataset.bg =
 function $(id) { return document.getElementById(id); }
 function applyBackground() {
   const light = document.documentElement.dataset.bg === "light";
-  panes.forEach((p) => p.renderer.setClearColor(light ? 0xeef0f2 : 0x0d0f12, 1));
+  panes.forEach((p) => p.renderer.setClearColor(light ? 0xefede7 : 0x0b0b0a, 1));
   bgLabel();
 }
 document.documentElement.dataset.bg = store.get("viewer:bg") || "dark";

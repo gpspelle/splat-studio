@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- **Design system "Instrument"** (`static/design.css`, documented in `docs/design-system.md`):
+  colour, type, spacing, shape and motion tokens, plus buttons, segmented controls, checkboxes,
+  panels, status, progress, dialogs and the viewer HUD. Used by every page and exported website.
+- **Light and dark themes.** Follows the computer's setting, with a Theme menu (System / Light / Dark)
+  remembered per browser.
+- Bundled fonts: Inter and JetBrains Mono (SIL Open Font License); still nothing loads from the internet.
+- Accessibility: WCAG 2.2 AA contrast for all text (checked by `tests/unit/test_design.py`),
+  visible keyboard focus, 24px+ targets, keyboard-operable drop zone, reduced-motion support.
+- `/api/setup` also returns the app `version` (shown next to the name).
+
+### Changed
+- New look for the Studio page, viewer and comparison page. Element ids, test ids and all
+  behaviour are unchanged. Exported websites now also contain `design.css` and `fonts/`.
+
 ## 0.3.0
 
 ### Added

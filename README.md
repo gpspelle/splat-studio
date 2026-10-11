@@ -112,6 +112,12 @@ settings used, and the full log.
 **Train again** re-trains a finished run with other settings, reusing its camera poses (no
 COLMAP). Every splat is kept, so you can compare.
 
+### Look and feel
+
+The app follows your computer's light or dark setting; the **Theme** menu at the top right
+overrides it. The design system (colours, type, components, accessibility rules) is described
+in [docs/design-system.md](docs/design-system.md).
+
 ### Language
 
 Use the language menu at the top right to switch between **English** and **Português**. The
