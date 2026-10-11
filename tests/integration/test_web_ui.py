@@ -261,3 +261,116 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.assertEqual(self.page.inner_text("#export"), "Exportar site")
         self.assertIn("splats", self.page.inner_text("#stats"))
         self.assertEqual(self.errors, [])
+
+
+@unittest.skipIf(sync_playwright is None, "playwright not installed")
+@needs_ffmpeg
+class CompareAndBackgroundUiTest(BrowserTestCase):
+    """Two splats side by side with linked cameras, and background removal from the library."""
+
+    def open_studio(self):
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        self.page.reload()
+        self.page.get_by_test_id("setup-pill").wait_for()
+
+    def import_two(self):
+        self.page.set_input_files("#importInput", str(write_ply(self.tmp / "vase.ply", n=4000)))
+        self.page.wait_for_selector(".tile >> text=vase.ply")
+        self.page.set_input_files("#importInput", str(write_foggy_scene(self.tmp / "jar.ply", n_object=3000, n_fog=500)))
+        self.page.wait_for_selector(".tile >> text=jar.ply")
+
+    def open_compare(self):
+        self.page.click(".tile[data-path$='vase.ply'] [data-testid=compare-select]")
+        self.assertIn("1/2", self.page.inner_text("[data-testid=compare-open]"))
+        self.page.click(".tile[data-path$='jar.ply'] [data-testid=compare-select]")
+        self.assertEqual(self.page.locator(".tile.picked").count(), 2)
+        self.page.click("[data-testid=compare-open]")
+        self.page.wait_for_function("window.compareViewer && window.compareViewer.ready()", timeout=90000)
+
+    def test_compare_two_splats_with_linked_cameras(self):
+        self.page.set_viewport_size({"width": 900, "height": 520})       # software rendering in CI is slow
+        self.open_studio()
+        self.import_two()
+        self.open_compare()
+        cv = "window.compareViewer"
+        self.assertEqual(self.page.evaluate(f"{cv}.numSplats(0)"), 4040)
+        self.assertEqual(self.page.evaluate(f"{cv}.numSplats(1)"), 3500)
+        titles = self.page.locator(".pane .title").all_inner_texts()
+        self.assertEqual(titles, ["vase.ply", "jar.ply"])
+        # side by side on a wide screen
+        a, b = (self.page.get_by_test_id(t).bounding_box() for t in ("pane-a", "pane-b"))
+        self.assertLess(a["x"] + a["width"], b["x"] + 5)
+        self.page.wait_for_timeout(800)
+        self.shot("compare")
+
+        def same_view():
+            va, vb = self.page.evaluate(f"[{cv}.view(0), {cv}.view(1)]")
+            return max(abs(x - y) for x, y in zip(va, vb)) < 1e-3
+
+        self.page.evaluate(f"{cv}.orbit(0, 70)")                       # turn the left model...
+        self.page.wait_for_timeout(400)
+        self.assertTrue(same_view())                                     # ...the right one follows
+        self.page.evaluate(f"{cv}.orbit(1, -30)")                      # and the other way round
+        self.page.wait_for_timeout(400)
+        self.assertTrue(same_view())
+        self.page.get_by_test_id("link-toggle").click()                  # unlink
+        self.assertFalse(self.page.evaluate(f"{cv}.linked()"))
+        self.page.evaluate(f"{cv}.orbit(0, 90)")
+        self.page.wait_for_timeout(400)
+        self.assertFalse(same_view())
+        with self.page.expect_download() as dl:
+            self.page.get_by_test_id("compare-export").click()
+        self.assertTrue(dl.value.suggested_filename.endswith("_compare.zip"))
+        self.assertEqual(self.errors, [])
+
+    def test_compare_stacks_on_phones(self):
+        self.page.set_viewport_size({"width": 390, "height": 760})
+        self.open_studio()
+        self.import_two()
+        self.open_compare()
+        a, b = (self.page.get_by_test_id(t).bounding_box() for t in ("pane-a", "pane-b"))
+        self.assertLess(a["y"] + a["height"], b["y"] + 5)                # one above the other
+        self.assertGreater(a["width"], 380)
+        self.assertEqual(self.errors, [])
+
+    def test_exported_comparison_site_works_standalone(self):
+        import io, zipfile, http.server, threading, functools
+        self.page.set_viewport_size({"width": 800, "height": 480})
+        self.open_studio()
+        self.import_two()
+        q = "a=imports/vase.ply&b=imports/jar.ply&ta=Vase&tb=Jar"
+        import urllib.request
+        with urllib.request.urlopen(f"{self.url}/api/export-compare?{q}") as r:
+            data = r.read()
+        site = self.tmp / "site"
+        zipfile.ZipFile(io.BytesIO(data)).extractall(site)
+        class Quiet(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+        handler = functools.partial(Quiet, directory=str(site))
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            self.page.goto(f"http://127.0.0.1:{srv.server_address[1]}/")
+            self.page.wait_for_function("window.compareViewer && window.compareViewer.ready()", timeout=90000)
+            self.assertEqual(self.page.locator(".pane .title").all_inner_texts(), ["Vase", "Jar"])
+            self.assertFalse(self.page.locator("[data-testid=compare-export]").is_visible())   # app-only
+        finally:
+            srv.shutdown()
+        self.assertEqual(self.errors, [])
+
+    def test_remove_background_from_library(self):
+        from plyfile import write_room_scene
+        self.open_studio()
+        self.assertFalse(self.page.get_by_test_id("remove-bg-option").is_checked())   # opt-in
+        self.page.set_input_files("#importInput", str(write_room_scene(self.tmp / "room.ply")))
+        self.page.wait_for_selector(".tile >> text=room.ply")
+        self.page.click(".tile[data-path$='room.ply'] [data-testid=isolate-button]")
+        self.page.wait_for_selector(".tile >> text=room_object.ply", timeout=60000)
+        # the object copy offers neither fog cleaning nor another background removal
+        tile = self.page.locator(".tile[data-path$='room_object.ply']")
+        self.assertEqual(tile.locator("[data-testid=isolate-button]").count(), 0)
+        self.assertEqual(tile.locator("[data-testid=clean-button]").count(), 0)
+        self.page.wait_for_selector("text=Background removed", timeout=30000)        # advice on the run card
+        self.assertEqual(self.errors, [])

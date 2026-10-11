@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+- **Compare two splats.** Pick two splats in the library with **Compare** and open them side
+  by side (stacked on phones). Cameras are linked, relative to each model's size, with a toggle
+  to move them separately. **Export website** downloads a self-contained comparison site
+  (`/api/export-compare`). New page: `/compare?a=…&b=…`.
+- **Background removal.** `splat-studio isolate MODEL.ply` saves `MODEL_object.ply` with only
+  the object: it removes the surface it stands on (found along the model's up axis) and keeps
+  the connected blob around the object. The original file is never modified.
+- In the app: a **Remove the background** option for new runs (off by default), a **Remove
+  background** button on library splats, and an **Object only** button on runs that have one.
+- `splat-studio run --remove-background`. Jobs have new fields `object_splat` and `isolated`,
+  a new job type `isolate`, and library items a new `isolated` flag.
+
+### Changed
+- Fog removal without camera positions now finds the object as the densest connected cluster
+  of opaque splats, so opaque walls no longer pull the kept region away from the object.
+
+### Compatibility
+- Nothing existing was renamed or removed: all 0.2.0 fields, options, outputs and exported
+  sites are unchanged, and the new options default to off.
+
 ## 0.2.0
 
 ### Added

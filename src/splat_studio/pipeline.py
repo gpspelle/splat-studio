@@ -80,6 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-train", action="store_true", help="stop after COLMAP")
     ap.add_argument("--clean", action="store_true",
                     help="also save NAME_clean.ply without background fog (the original is kept)")
+    ap.add_argument("--remove-background", action="store_true",
+                    help="also save NAME_object.ply with only the object: no table, floor or room "
+                         "(the original is kept)")
     ap.add_argument("--viewer", action="store_true", help="open the Brush window while training")
     ap.add_argument("--brush", help="path to the brush binary")
     ap.add_argument("--dry-run", action="store_true", help="print the commands without running them")
@@ -181,6 +184,17 @@ def main(argv: list[str] | None = None) -> None:
                 append_summary(ws, [("clean splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
             except (PlyError, OSError, ValueError) as e:
                 say(f"    couldn't clean the splat: {e}")
+        if args.remove_background:
+            say("\n==> Removing the background (the original is kept)")
+            from .splats import PlyError, isolate
+            try:
+                s = isolate(plys[-1], run_dir=ws)
+                say(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed"
+                    f"{', support surface removed' if s['plane'] else ''})")
+                say(f"Object copy: {s['output']}")                # parsed by the web UI
+                append_summary(ws, [("object splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
+            except (PlyError, OSError, ValueError) as e:
+                say(f"    couldn't remove the background: {e}")
     else:
         say(f"\nBrush finished but no .ply was found in {out_dir} - check its output above.")
 

@@ -130,3 +130,82 @@ class CleanTest(TempDirTestCase):
         self.assertIn("Clean copy: ", text)
         with self.assertRaises(SystemExit):
             splats.main_inspect([str(self.tmp / "missing.ply")])
+
+
+def kinds(path):
+    """Count splats per part of write_room_scene / write_ply, told apart by their size."""
+    d = splats.load(splats.PlyFile(path))
+    out = {"object": 0, "table": 0, "walls": 0, "fog": 0}
+    for s in d["size"]:
+        out["object" if s < 0.012 else "table" if s < 0.025 else "walls" if s < 0.05 else "fog"] += 1
+    return out
+
+
+class RoomSceneTest(TempDirTestCase):
+    """A vase on a table with opaque walls and fog around it: what a real indoor capture looks like."""
+
+    def setUp(self):
+        super().setUp()
+        from plyfile import write_room_scene
+        self.src = write_room_scene(self.tmp / "room.ply")
+        self.run = self.tmp / "run"
+        write_images_bin(self.run / "dense" / "sparse" / "0" / "images.bin", n=36, radius=1.4, target=(0.0, -0.55, 0.0))
+
+    def test_clean_removes_walls_and_fog_even_without_cameras(self):
+        for run in (None, self.run):
+            k = kinds(splats.clean(self.src, self.tmp / f"c{bool(run)}.ply", run_dir=run)["output"])
+            self.assertEqual((k["object"], k["table"]), (6000, 5000), run)     # object and its table kept
+            self.assertEqual(k["walls"], 0, run)
+            self.assertLess(k["fog"], 0.1 * 3000, run)
+
+    def test_isolate_keeps_only_the_object(self):
+        for run in (None, self.run):
+            s = splats.isolate(self.src, self.tmp / f"o{bool(run)}.ply", run_dir=run)
+            k = kinds(s["output"])
+            self.assertTrue(s["plane"], run)
+            self.assertEqual((k["table"], k["walls"], k["fog"]), (0, 0, 0), run)
+            self.assertGreater(k["object"], 0.93 * 6000, run)                  # a thin band at the base may go
+
+
+class IsolateTest(TempDirTestCase):
+    def test_vase_on_disc(self):
+        src = write_ply(self.tmp / "vase.ply", n=20000)                         # 14000 vase, 6000 disc, 40 floaters
+        before = sha(src)
+        s = splats.isolate(src)
+        self.assertEqual(sha(src), before)                                      # original untouched
+        self.assertEqual(s["output"], str(self.tmp / "vase_object.ply"))
+        k = kinds(s["output"])
+        self.assertEqual((k["table"], k["walls"] + k["fog"]), (0, 0))
+        self.assertGreater(k["object"], 0.95 * 14000)
+        out = splats.PlyFile(s["output"])
+        self.assertEqual(out.up_axis(), (0.0, -1.0, 0.0))
+        self.assertTrue(any("Background removed" in c for c in out.comments))
+
+    def test_object_without_a_surface(self):
+        src = write_foggy_scene(self.tmp / "float.ply", n_object=3000, n_fog=2000)   # nothing to stand on
+        s = splats.isolate(src)
+        self.assertFalse(s["plane"])
+        k = kinds(s["output"])
+        self.assertGreater(k["object"], 0.95 * 3000)
+        self.assertLess(k["fog"], 50)
+
+    def test_refuses_overwrite_and_cli(self):
+        src = write_ply(self.tmp / "v.ply", n=3000)
+        with self.assertRaises(ValueError):
+            splats.isolate(src, src)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            splats.main_isolate([str(src)])
+        self.assertIn("support surface removed", out.getvalue())
+        self.assertIn("Object copy: ", out.getvalue())
+
+    def test_support_plane_detection(self):
+        import random
+        rnd = random.Random(1)
+        floor = [(rnd.uniform(-1, 1), 0.0 + rnd.uniform(-0.002, 0.002), rnd.uniform(-1, 1)) for _ in range(800)]
+        blob = [(rnd.gauss(0, 0.1), rnd.uniform(0.05, 0.5), rnd.gauss(0, 0.1)) for _ in range(400)]
+        n, d, share = splats.find_support_plane(floor + blob, eps=0.01, up=(0, 1, 0))
+        self.assertGreater(abs(n[1]), 0.99)
+        self.assertAlmostEqual(d * (1 if n[1] > 0 else -1), 0.0, places=2)
+        self.assertGreater(share, 0.5)
+        self.assertIsNone(splats.find_support_plane(blob, eps=0.01, up=(0, 1, 0)))   # no surface in a blob

@@ -127,6 +127,10 @@ def run_advice(job: dict) -> list[dict]:
         c = job["cleaned"]
         tips.append(tip("ok", "run.cleaned", f"Fog removed: kept {c['kept']:,} of {c['total']:,} splats. "
                         "The original is kept next to it.", kept=f"{c['kept']:,}", total=f"{c['total']:,}"))
+    if job.get("isolated"):
+        c = job["isolated"]
+        tips.append(tip("ok", "run.isolated", f"Background removed: kept {c['kept']:,} of {c['total']:,} splats. "
+                        "The original is kept next to it.", kept=f"{c['kept']:,}", total=f"{c['total']:,}"))
     status, error = job.get("status"), (job.get("error") or "")
     ratio = registered_ratio(job.get("registered"))
     breaks = job.get("track_breaks") or []

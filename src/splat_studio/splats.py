@@ -232,9 +232,44 @@ def object_region(d: dict, cams: list[dict] | None = None) -> dict:
             return {"center": centre, "radius": 0.8 * ring, "camera_distance": ring, "source": "cameras"}
     idx = [i for i, o in enumerate(d["opacity"]) if o >= 0.5] or list(range(len(d["opacity"])))
     xs, ys, zs = ([d[k][i] for i in idx] for k in ("x", "y", "z"))
-    centre = median3(xs, ys, zs)
-    dist = sorted(math.dist((x, y, z), centre) for x, y, z in zip(xs, ys, zs))
-    return {"center": centre, "radius": 1.5 * percentile(dist, 0.8), "camera_distance": None, "source": "opaque splats"}
+    centre, radius = densest_cluster(xs, ys, zs)
+    return {"center": centre, "radius": radius, "camera_distance": None, "source": "opaque splats"}
+
+
+def densest_cluster(xs, ys, zs) -> tuple[tuple[float, float, float], float]:
+    """Centre and radius of the object without camera information.
+
+    Start at the densest spot of opaque splats and flood-fill through occupied voxels: the
+    object and what it stands on form one connected piece, while walls and furniture further
+    away are separate pieces and are left out. (If a floor connects everything, the whole
+    connected room is kept - camera positions from a run avoid that.)"""
+    n = len(xs)
+    if n == 0:
+        return (0.0, 0.0, 0.0), 1.0
+    sx, sy, sz = sorted(xs), sorted(ys), sorted(zs)
+    span = max(percentile(sx, 0.98) - percentile(sx, 0.02), percentile(sy, 0.98) - percentile(sy, 0.02),
+               percentile(sz, 0.98) - percentile(sz, 0.02)) or 1.0
+    cell = span / 40
+    key = lambda x, y, z: (int(math.floor(x / cell)), int(math.floor(y / cell)), int(math.floor(z / cell)))
+    occupied: dict = {}
+    for i, p in enumerate(zip(xs, ys, zs)):
+        occupied.setdefault(key(*p), []).append(i)
+    # densest spot: the voxel whose 5x5x5 neighbourhood holds the most points
+    coarse: dict = {}
+    for k, v in occupied.items():
+        ck = (k[0] // 5, k[1] // 5, k[2] // 5)
+        coarse[ck] = coarse.get(ck, 0) + len(v)
+    best_c = max(coarse, key=lambda c: sum(coarse.get((c[0] + a, c[1] + b, c[2] + e), 0)
+                                            for a in (-1, 0, 1) for b in (-1, 0, 1) for e in (-1, 0, 1)))
+    seed = (best_c[0] * 5 + 2, best_c[1] * 5 + 2, best_c[2] * 5 + 2)
+    blob = _largest_cluster_near(occupied, seed)
+    idx = [i for k in blob for i in occupied[k]]
+    if len(idx) < 0.05 * n:                       # a tiny speck won: fall back to everything
+        idx = list(range(n))
+    pts = [(xs[i], ys[i], zs[i]) for i in idx]
+    centre = median3(*zip(*pts))
+    dist = sorted(math.dist(p, centre) for p in pts)
+    return centre, 1.15 * percentile(dist, 0.98) + cell
 
 
 def analyze(path: Path, run_dir: Path | None = None) -> dict:
@@ -392,3 +427,180 @@ def main_clean(argv: list[str] | None = None) -> None:
         sys.exit(f"Can't clean {a.ply}: {e}")
     print(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed)")
     print(f"Clean copy: {s['output']}")                      # parsed by the web UI
+
+
+# ---------------------------------------------------------------- background removal (object only)
+
+def _plane_from(p1, p2, p3):
+    u = [p2[i] - p1[i] for i in range(3)]
+    v = [p3[i] - p1[i] for i in range(3)]
+    n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+    ln = math.sqrt(sum(c * c for c in n))
+    if ln < 1e-12:
+        return None
+    n = [c / ln for c in n]
+    return n, sum(n[i] * p1[i] for i in range(3))
+
+
+def find_support_plane(points, eps: float, up=None, iters: int = 200, seed: int = 7, min_share: float = 0.12):
+    """RANSAC: the flat surface the object stands on (table, floor). Returns (normal, d, share)
+    or None. With a known up axis, only near-horizontal planes count."""
+    import random
+    rnd = random.Random(seed)
+    if len(points) < 50:
+        return None
+    sample = points if len(points) <= 6000 else rnd.sample(points, 6000)
+    best = None
+    count = lambda n, d: sum(1 for p in sample if abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d) < eps)
+    if up is not None:
+        # a support surface is horizontal: try the most crowded height along the up axis first,
+        # so detection doesn't depend on RANSAC luck when the surface is a small share
+        nu = math.sqrt(sum(v * v for v in up)) or 1.0
+        n0 = [v / nu for v in up]
+        heights = [n0[0] * p[0] + n0[1] * p[1] + n0[2] * p[2] for p in sample]
+        bins = {}
+        for h in heights:
+            b = math.floor(h / eps)
+            bins[b] = bins.get(b, 0) + 1
+        top = max(bins, key=lambda b: bins[b] + bins.get(b - 1, 0) + bins.get(b + 1, 0))
+        near = [h for h in heights if (top - 1) * eps <= h < (top + 2) * eps]
+        d0 = sorted(near)[len(near) // 2]                    # the crowded height itself
+        best = (n0, d0, count(n0, d0))
+    for _ in range(iters):
+        pl = _plane_from(*rnd.sample(sample, 3))
+        if not pl:
+            continue
+        n, d = pl
+        if up is not None and abs(sum(n[i] * up[i] for i in range(3))) < 0.85:
+            continue
+        inl = count(n, d)
+        if best is None or inl > best[2]:
+            best = (n, d, inl)
+    if not best or best[2] / len(sample) < min_share:
+        return None
+    # refine: least-squares-free re-centring - average the inliers' offset along the normal
+    n, d, _ = best
+    inliers = [p for p in sample if abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d) < eps]
+    d = sum(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] for p in inliers) / len(inliers)
+    return n, d, len(inliers) / len(sample)
+
+
+def _largest_cluster_near(voxels: dict, seed_key) -> set:
+    """Flood-fill over occupied voxels (26-neighbourhood), starting from the occupied voxel
+    closest to seed_key; returns the voxel keys of that connected blob."""
+    if not voxels:
+        return set()
+    start = min(voxels, key=lambda k: sum((k[i] - seed_key[i]) ** 2 for i in range(3)))
+    seen, stack = {start}, [start]
+    while stack:
+        x, y, z = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    k = (x + dx, y + dy, z + dz)
+                    if k in voxels and k not in seen:
+                        seen.add(k)
+                        stack.append(k)
+    return seen
+
+
+def isolate(path: Path, out: Path | None = None, run_dir: Path | None = None, radius_scale: float = 1.0,
+            min_opacity: float = 0.05) -> dict:
+    """Write NAME_object.ply with only the object: no fog, no table/floor, no surroundings.
+
+    1. keep the region around the object (like clean());
+    2. find the flat surface it stands on and drop it, plus everything on the far side of it;
+    3. keep the connected blob of splats around the object's centre.
+    The input file is only read."""
+    path = Path(path)
+    out = Path(out) if out else path.with_name(path.stem + "_object" + path.suffix)
+    if out.resolve() == path.resolve():
+        raise ValueError("refusing to overwrite the original file")
+    ply = PlyFile(path)
+    d = load(ply)
+    cams = find_cameras(run_dir) if run_dir else []
+    region = object_region(d, cams)
+    c, r = region["center"], region["radius"] * radius_scale
+    n_all = ply.count
+    pts = list(zip(d["x"], d["y"], d["z"]))
+    inside = [i for i in range(n_all) if d["opacity"][i] >= min_opacity and math.dist(pts[i], c) <= r]
+    solid = [i for i in inside if d["opacity"][i] >= 0.3]
+
+    # 2. support plane
+    up = ply.up_axis()
+    eps = max(0.012 * r, 1e-6)
+    plane = find_support_plane([pts[i] for i in solid], eps, up)
+    removed_plane = 0
+    if plane:
+        n, dd, _ = plane
+        side = lambda p: n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - dd
+        # the object is on the side where most solid splats away from the plane are
+        above = sum(1 for i in solid if side(pts[i]) > 2 * eps)
+        below = sum(1 for i in solid if side(pts[i]) < -2 * eps)
+        sign = 1 if above >= below else -1
+        keep_side = [i for i in inside if sign * side(pts[i]) > 1.5 * eps]
+        removed_plane = len(inside) - len(keep_side)
+        inside = keep_side
+        solid = [i for i in inside if d["opacity"][i] >= 0.3]
+
+    # 3. connected blob around the centre (on a voxel grid of the solid splats)
+    vox = r / 30
+    key = lambda p: (int(math.floor(p[0] / vox)), int(math.floor(p[1] / vox)), int(math.floor(p[2] / vox)))
+    occupied = {}
+    for i in solid:
+        occupied.setdefault(key(pts[i]), []).append(i)
+    if occupied:
+        centre_of_rest = median3([pts[i][0] for i in solid], [pts[i][1] for i in solid], [pts[i][2] for i in solid])
+        blob = _largest_cluster_near(occupied, key(centre_of_rest))
+        grown = {(x + a, y + b, z + e) for (x, y, z) in blob for a in (-1, 0, 1) for b in (-1, 0, 1) for e in (-1, 0, 1)}
+        keep_idx = {i for i in inside if key(pts[i]) in grown}
+    else:
+        keep_idx = set(inside)
+
+    keep = bytearray(n_all)
+    for i in keep_idx:
+        keep[i] = 1
+    kept = len(keep_idx)
+    header = [f"element vertex {kept}" if l.startswith("element vertex") else l for l in ply.header_lines]
+    header.insert(2, f"comment Background removed by Splat Studio: kept {kept} of {n_all} splats"
+                     f"{' (support plane removed)' if plane else ''}")
+    _write_rows(path, ply, out, header, keep)
+    return {"input": str(path), "output": str(out), "kept": kept, "total": n_all,
+            "removed_share": 1 - kept / n_all if n_all else 0, "plane": bool(plane),
+            "plane_removed": removed_plane, "region": {**region, "radius": r}}
+
+
+def _write_rows(path: Path, ply: PlyFile, out: Path, header: list[str], keep: bytearray) -> None:
+    tmp = out.with_name(out.name + ".part")
+    with open(path, "rb") as src, open(tmp, "wb") as dst:
+        dst.write(("\n".join(header) + "\nend_header\n").encode("latin1"))
+        src.seek(ply.header_size)
+        i = 0
+        while i < ply.count:
+            n = min(CHUNK_ROWS, ply.count - i)
+            mv = memoryview(src.read(n * ply.stride))
+            buf = bytearray()
+            for k in range(n):
+                if keep[i + k]:
+                    buf += mv[k * ply.stride:(k + 1) * ply.stride]
+            dst.write(buf)
+            i += n
+    tmp.replace(out)
+
+
+def main_isolate(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="splat-studio isolate",
+                                 description="Remove the background: writes NAME_object.ply with only the object "
+                                             "(no table, floor or room). The original is kept.")
+    ap.add_argument("ply", type=Path)
+    ap.add_argument("--run", type=Path, help="the COLMAP run folder it was trained from (uses camera positions)")
+    ap.add_argument("--out", type=Path, help="output file (default: NAME_object.ply next to the input)")
+    ap.add_argument("--radius", type=float, default=1.0, help="scale the search region (e.g. 1.3 keeps more)")
+    a = ap.parse_args(argv)
+    try:
+        s = isolate(a.ply, a.out, a.run, a.radius)
+    except (PlyError, OSError, ValueError) as e:
+        sys.exit(f"Can't remove the background from {a.ply}: {e}")
+    print(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed"
+          f"{', support surface removed' if s['plane'] else ''})")
+    print(f"Object copy: {s['output']}")                     # parsed by the web UI

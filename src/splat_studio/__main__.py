@@ -8,6 +8,7 @@
     splat-studio frames | colmap ...  run a single stage
     splat-studio inspect MODEL.ply    explain fog / background in a trained splat
     splat-studio clean MODEL.ply      save MODEL_clean.ply without the background fog
+    splat-studio isolate MODEL.ply    save MODEL_object.ply with only the object (no table, floor, room)
 """
 from __future__ import annotations
 
@@ -72,6 +73,9 @@ def main(argv: list[str] | None = None) -> None:
     if cmd == "clean":
         from .splats import main_clean
         return main_clean(rest)
+    if cmd == "isolate":
+        from .splats import main_isolate
+        return main_isolate(rest)
     sys.exit(f"unknown command {cmd!r}. Try: splat-studio --help")
 
 

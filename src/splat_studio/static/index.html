@@ -130,6 +130,10 @@
   .tile .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
   .tile .body b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tile .acts { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
+  .tile.picked { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tile button.picked { background: var(--accent); color: #1a0d05; border-color: transparent; }
+  #compareBar[hidden] { display: none; }
+  #compareBar, #compareBar * { text-transform: none; letter-spacing: normal; }
   .right { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
     padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; z-index: 9; }
@@ -218,7 +222,8 @@
         </div>
         <div class="help" id="detailHelp"></div>
       </div>
-      <label class="check"><input type="checkbox" id="clean" checked data-testid="clean-option"> <span><span data-i18n="clean.label">Remove background fog</span><br><span class="meta" data-i18n="clean.help">Also saves a cleaned copy that keeps only the object (the original is kept).</span></span></label>
+      <label class="check"><input type="checkbox" id="clean" checked data-testid="clean-option"> <span><span data-i18n="clean.label">Remove background fog</span><br><span class="meta" data-i18n="clean.help">Also saves a copy without the haze and far-away surroundings (the original is kept).</span></span></label>
+      <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object: no table, floor or room (the original is kept).</span></span></label>
       <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number.</span></span></label>
       <details class="adv">
         <summary data-i18n="adv.title">Advanced</summary>
@@ -243,7 +248,10 @@
     </section>
     <section class="card">
       <h2><span data-i18n="lib.title">Splat library</span>
-        <span><button class="small" id="importBtn" data-i18n="lib.import">Import .ply</button>
+        <span><span id="compareBar" hidden><span class="meta" id="compareHint"></span>
+          <a class="btn small primary" id="compareBtn" data-testid="compare-open"></a>
+          <button class="small ghost" id="compareClear" data-i18n="lib.compare.clear">Clear</button></span>
+        <button class="small" id="importBtn" data-i18n="lib.import">Import .ply</button>
         <input id="importInput" type="file" accept=".ply,.spz,.splat,.ksplat" hidden></span></h2>
       <div class="pad"><div class="lib" id="lib"><div class="empty" style="grid-column:1/-1" data-i18n="lib.empty">Trained splats and imported files appear here.</div></div></div>
     </section>
@@ -472,7 +480,7 @@ function renderVideoOptions() {
 // ---------------------------------------------------------------- starting jobs
 $("startBtn").onclick = async () => {
   const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
-    eval: $("eval").checked, clean: $("clean").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    eval: $("eval").checked, clean: $("clean").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
     start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim() };
   try { await postJSON("/api/jobs", body); toast(t("toast.queued")); setChosen(null); $("prevVideo").value = ""; refresh(); }
   catch (e) { toast(e.message); }
@@ -482,11 +490,15 @@ function retrain(runDir) { retrainDir = runDir; $("retrainDlg").showModal(); }
 $("retrainDlg").addEventListener("close", async () => {
   if ($("retrainDlg").returnValue !== "ok") return;
   try { await postJSON("/api/jobs", { type: "retrain", run_dir: retrainDir, quality: seg("rq"), detail: seg("rd"),
-                                      eval: $("rEval").checked, clean: $("clean").checked, brush_args: $("rArgs").value.trim() });
+                                      eval: $("rEval").checked, clean: $("clean").checked, remove_background: $("removeBg").checked, brush_args: $("rArgs").value.trim() });
     toast(t("toast.trainQueued")); refresh(); } catch (e) { toast(e.message); }
 });
 async function cleanSplat(path) {
   try { await postJSON("/api/jobs", { type: "clean", splat: path }); toast(t("toast.cleanQueued")); refresh(); }
+  catch (e) { toast(e.message); }
+}
+async function isolateSplat(path) {
+  try { await postJSON("/api/jobs", { type: "isolate", splat: path }); toast(t("toast.isolateQueued")); refresh(); }
   catch (e) { toast(e.message); }
 }
 async function cancelJob(id) { if (!confirm(t("confirm.stop"))) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
@@ -494,7 +506,7 @@ async function cancelJob(id) { if (!confirm(t("confirm.stop"))) return; await ap
 // ---------------------------------------------------------------- runs list
 const open = new Set();
 function stepper(j) {
-  if (j.type === "setup" || j.type === "clean") return "";
+  if (j.type === "setup" || j.type === "clean" || j.type === "isolate") return "";
   const st = j.stage ?? -1, first = j.type === "retrain" ? 3 : 0;
   return `<div class="steps">${[0, 1, 2, 3].map((i) => {
     const label = t("stage." + i);
@@ -507,6 +519,7 @@ function stepper(j) {
 function runTitle(j) {
   if (j.type === "setup") return t("run.setup");
   if (j.type === "clean") return t("run.clean", { name: splatTitle((j.options || {}).splat || "") });
+  if (j.type === "isolate") return t("run.isolate", { name: splatTitle((j.options || {}).splat || "") });
   const base = (j.video || j.run_dir || "").split("/").pop();
   return j.type === "retrain" ? t("run.retrain", { name: (j.run_dir || "").split("/")[1] || "" }) : base;
 }
@@ -518,7 +531,7 @@ function runHTML(j) {
   const o = j.options || {};
   const tags = [j.source === "cli" ? t("tag.cli") : null, o.quality ? t("quality." + o.quality).toLowerCase() : null,
                 o.detail && o.detail !== "auto" ? t("tag.detail", { d: t("detail." + o.detail) }) : null,
-                o.eval ? t("tag.eval") : null, o.clean ? t("tag.clean") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
+                o.eval ? t("tag.eval") : null, o.clean ? t("tag.clean") : null, o.remove_background ? t("tag.removeBg") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
   const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
     : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
     : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);
@@ -532,10 +545,11 @@ function runHTML(j) {
       <span>${j.eta ? esc(t("run.left", { t: j.eta })) : ""}${j.eta_worst ? `<br>${esc(t("run.worst", { t: j.eta_worst }))}` : ""}</span></div>`;
   }
   const best = j.splat, title = best ? splatTitle(best) : "";       // the original, as always
-  const canRetrain = !running && !qd && j.type !== "clean" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
+  const canRetrain = !running && !qd && j.type !== "clean" && j.type !== "isolate" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
   const actions = [
     best ? `<a class="btn small primary" href="${viewerUrl(best, title)}">${esc(t("btn.viewSplat"))}</a>` : "",
     j.clean_splat && j.clean_splat !== best ? `<a class="btn small" data-testid="view-clean" href="${viewerUrl(j.clean_splat, splatTitle(j.clean_splat))}">${esc(t("btn.viewClean"))}</a>` : "",
+    j.object_splat && j.object_splat !== best ? `<a class="btn small" data-testid="view-object" href="${viewerUrl(j.object_splat, splatTitle(j.object_splat))}">${esc(t("btn.viewObject"))}</a>` : "",
     `<div class="row">` +
       (running || qd ? `<button class="small" onclick="cancelJob('${esc(j.id)}')">${esc(t("btn.stop"))}</button>` : "") +
       (canRetrain ? `<button class="small" onclick="retrain('${esc(j.run_dir)}')">${esc(t("btn.trainAgain"))}</button>` : "") +
@@ -565,11 +579,12 @@ function runHTML(j) {
 }
 function splatTitle(p) {
   const parts = p.split("/"), file = parts[parts.length - 1] || "";
-  const cleaned = /_clean\.ply$/.test(file);
-  const q = file.replace(/_clean\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
+  const cleaned = /_clean\.ply$/.test(file), isolated = /_object\.ply$/.test(file);
+  const q = file.replace(/_clean\.ply$|_object\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
   // English output stays exactly "<name> · preview"; other languages translate the quality word
   const base = parts[0] !== "workspace" ? file : `${parts[1]} · ${tr("quality.", q).toLowerCase()}`;
-  return cleaned && parts[0] === "workspace" ? `${base} · ${t("lib.cleaned")}` : base;
+  if (parts[0] !== "workspace") return base;
+  return cleaned ? `${base} · ${t("lib.cleaned")}` : isolated ? `${base} · ${t("lib.isolated")}` : base;
 }
 async function toggle(id) { open.has(id) ? open.delete(id) : open.add(id); renderRuns(); if (open.has(id)) loadLog(id); }
 async function loadLog(id) {
@@ -589,7 +604,7 @@ function renderRuns() {
 }
 async function refresh() {
   try { jobs = await api("/api/jobs"); } catch { return; }
-  const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat, j.clean_splat]));
+  const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat, j.clean_splat, j.object_splat]));
   renderRuns();
   open.forEach((id) => loadLog(id));
   if (sig !== lastSig) { if (lastSig && jobs.some((j) => j.type === "setup" && j.status === "done")) loadSetup(); lastSig = sig; loadLibrary(); }
@@ -597,19 +612,47 @@ async function refresh() {
 
 // ---------------------------------------------------------------- library
 async function loadLibrary() {
-  const items = await api("/api/splats").catch(() => []);
+  libItems = await api("/api/splats").catch(() => []);
+  renderCompareBar(); renderLibrary();
+}
+function renderLibrary() {
+  const items = libItems;
   $("lib").innerHTML = items.length ? items.map((s) => {
     const title = splatTitle(s.path);
-    return `<div class="tile" data-path="${esc(s.path)}">
+    const picked = comparePick.includes(s.path);
+    return `<div class="tile${picked ? " picked" : ""}" data-path="${esc(s.path)}">
       <a class="img" href="${viewerUrl(s.path, title)}" style="${s.thumb ? `background-image:url('${fileUrl(s.thumb)}')` : ""}">${s.thumb ? "" : esc(t("lib.placeholder"))}</a>
       <div class="body"><b title="${esc(s.path)}">${esc(title)}</b>
         <span class="meta">${mb(s.size)} · ${ago(s.mtime)}${s.source === "imported" ? " · " + esc(t("lib.imported")) : ""}${s.cleaned && s.source === "imported" ? " · " + esc(t("lib.cleaned")) : ""}</span></div>
       <div class="acts"><a class="btn small primary" href="${viewerUrl(s.path, title)}">${esc(t("lib.view"))}</a>
         <a class="btn small" href="${fileUrl(s.path)}?download=1">${esc(t("lib.download"))}</a>
         <a class="btn small" href="/api/export?${new URLSearchParams({ file: s.path, title })}" title="${esc(t("lib.website.title"))}">${esc(t("lib.website"))}</a>
-        ${!s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="clean-button" title="${esc(t("lib.clean.title"))}" onclick="cleanSplat('${esc(s.path)}')">${esc(t("lib.clean"))}</button>` : ""}</div>
+        ${!s.cleaned && !s.isolated && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="clean-button" title="${esc(t("lib.clean.title"))}" onclick="cleanSplat('${esc(s.path)}')">${esc(t("lib.clean"))}</button>` : ""}
+        <button class="small${picked ? " picked" : ""}" data-testid="compare-select" title="${esc(t("lib.select.title"))}" onclick="pickCompare('${esc(s.path)}')">${esc(t("lib.select"))}</button>
+        ${!s.isolated && !s.cleaned && /\.ply$/i.test(s.path) ? `<button class="small" data-testid="isolate-button" title="${esc(t("lib.isolate.title"))}" onclick="isolateSplat('${esc(s.path)}')">${esc(t("lib.isolate"))}</button>` : ""}</div>
     </div>`; }).join("") : `<div class="empty" style="grid-column:1/-1">${esc(t("lib.empty"))}</div>`;
 }
+// ---------------------------------------------------------------- compare two splats
+let comparePick = [], libItems = [];
+function pickCompare(path) {
+  comparePick = comparePick.includes(path) ? comparePick.filter((p) => p !== path) : [...comparePick, path].slice(-2);
+  renderCompareBar(); renderLibrary();
+}
+function renderCompareBar() {
+  comparePick = comparePick.filter((p) => libItems.some((s) => s.path === p));     // drop deleted files
+  $("compareBar").hidden = !comparePick.length;
+  $("compareBtn").textContent = t("lib.compare", { n: comparePick.length });
+  $("compareHint").textContent = comparePick.length === 1 ? t("lib.compare.hint") : "";
+  if (comparePick.length === 2) {
+    const [a, b] = comparePick;
+    $("compareBtn").href = "/compare?" + new URLSearchParams({ a, b, ta: splatTitle(a), tb: splatTitle(b) });
+    $("compareBtn").removeAttribute("aria-disabled"); $("compareBtn").style.pointerEvents = "";
+  } else {
+    $("compareBtn").removeAttribute("href");
+    $("compareBtn").setAttribute("aria-disabled", "true"); $("compareBtn").style.pointerEvents = "none";
+  }
+}
+$("compareClear").onclick = () => { comparePick = []; renderCompareBar(); renderLibrary(); };
 $("importBtn").onclick = () => $("importInput").click();
 $("importInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0], "/api/import", (d) => toast(t("toast.imported", { name: d.name })));
 

@@ -44,7 +44,8 @@ src/splat_studio/
   setup_deps.py    dependency check/install (macOS)
   guidance.py      recording advice
   server/          web UI: app.py (HTTP), jobs.py (queue), library.py (files)
-  static/          Studio page, viewer, bundled three.js + Spark
+  splats.py        reading splats: inspect, fog cleaning, background removal
+  static/          Studio page, viewer, comparison page, bundled three.js + Spark
 tests/unit, tests/integration, tests/fakes
 docs/              recording guide, how it works, screenshots
 scripts/readme_screenshots.py   regenerates docs/images
@@ -58,7 +59,8 @@ docker/            experimental container
   records, API fields, advice and error shapes, exported-site config. Don't edit those tests to
   make a change pass; if the break is intended, say so in `CHANGELOG.md`.
 - New features are additive: new fields, new options defaulting to the old behaviour, new files
-  next to existing ones (the cleaner writes `NAME_clean.ply` and never touches `NAME.ply`).
+  next to existing ones (the cleaner writes `NAME_clean.ply` and background removal `NAME_object.ply`; neither ever
+  touches `NAME.ply`).
 
 ## Translations
 

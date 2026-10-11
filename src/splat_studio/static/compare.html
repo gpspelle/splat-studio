@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare – Splat Viewer</title>
+<style>
+  :root {
+    --bg: #0d0f12; --panel: rgba(20, 23, 28, .82); --line: rgba(255,255,255,.09);
+    --text: #e9ecef; --muted: #98a0aa; --accent: #ff7a3d; --accent-ink: #1a0d05;
+  }
+  :root[data-bg="light"] { --bg: #eef0f2; --panel: rgba(255,255,255,.86); --line: rgba(0,0,0,.08);
+    --text: #15181c; --muted: #5d6570; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  #panes { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--line); }
+  @media (max-width: 760px), (orientation: portrait) and (max-width: 1024px) {
+    #panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+  .pane { position: relative; overflow: hidden; background: var(--bg); min-width: 0; min-height: 0; }
+  .pane canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .label { position: absolute; left: 12px; top: 12px; right: 12px; display: flex; pointer-events: none; z-index: 2; }
+  .chip { background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .label .chip { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
+  .label b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .label span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 1; }
+  .progress { height: 4px; width: 200px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .err { color: #ff8a80; max-width: 420px; white-space: pre-wrap; }
+  .bar { position: fixed; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 8px; justify-content: center;
+    flex-wrap: wrap; pointer-events: none; z-index: 3; }
+  .bar > * { pointer-events: auto; }
+  .group { display: flex; gap: 2px; padding: 4px; align-items: center; }
+  button { appearance: none; border: 0; background: transparent; color: var(--text); font: inherit;
+    padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  button:hover { background: var(--line); }
+  button.on { background: var(--accent); color: var(--accent-ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  a.back { color: var(--text); text-decoration: none; }
+  .lang-select { font: inherit; color: var(--text); background: transparent; border: 0; padding: 4px; }
+  .lang-select option { color: #000; }
+  .app-only { display: none !important; }
+  body.app .app-only { display: flex !important; }
+  @media (max-width: 640px) { .hide-sm { display: none; } .bar { left: 8px; right: 8px; bottom: 8px; } }
+</style>
+<script src="./i18n.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/",
+    "@sparkjsdev/spark": "./vendor/spark/spark.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="panes">
+  <div class="pane" id="pane0" data-testid="pane-a"><div class="label"><div class="chip"><b class="title" data-i18n="viewer.loading">Loading…</b><span class="stats">&nbsp;</span></div></div>
+    <div class="loading"><div class="chip"><div class="msg" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
+  <div class="pane" id="pane1" data-testid="pane-b"><div class="label"><div class="chip"><b class="title" data-i18n="viewer.loading">Loading…</b><span class="stats">&nbsp;</span></div></div>
+    <div class="loading"><div class="chip"><div class="msg" data-i18n="viewer.loading">Loading splat…</div><div class="progress"><i></i></div></div></div></div>
+</div>
+
+<div class="bar">
+  <div class="chip group">
+    <button id="link" class="on" data-testid="link-toggle" data-i18n="compare.link" data-i18n-title="compare.link.title">Linked cameras</button>
+    <button id="reset" data-i18n="viewer.reset" data-i18n-title="viewer.reset.title">Reset view</button>
+    <button id="spin" data-i18n="viewer.spin" data-i18n-title="viewer.spin.title">Auto-rotate</button>
+  </div>
+  <div class="chip group">
+    <button id="swap" class="hide-sm" data-i18n="compare.swap">Swap</button>
+    <button id="bg">Light</button>
+    <button id="full" class="hide-sm" data-i18n="viewer.fullscreen">Fullscreen</button>
+    <span data-lang-switcher></span>
+  </div>
+  <div class="chip group app-only">
+    <a class="back" href="/"><button data-i18n="viewer.studio">← Studio</button></a>
+    <button id="export" class="primary" data-testid="compare-export" data-i18n="viewer.export" data-i18n-title="compare.export.title">Export website</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { SparkRenderer, SplatMesh, SplatEdit, SplatEditSdf, SplatEditSdfType, SplatEditRgbaBlendMode } from "@sparkjsdev/spark";
+
+const t = window.t;
+const params = new URLSearchParams(location.search);
+const appMode = params.has("a") && params.has("b");
+if (appMode) document.body.classList.add("app");
+window.i18n.mountSwitcher();
+window.i18n.apply();
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------------------------------------------------------------- config
+// App:      /compare?a=<file>&b=<file>&ta=<title>&tb=<title>   (orientation and crop saved in the viewer are used)
+// Website:  compare-config.json {models: [{file, title, rotation, crop}, {…}], linked}
+async function loadConfig() {
+  if (appMode) {
+    const m = (file, title) => ({ url: "/files/" + file.split("/").map(encodeURIComponent).join("/"), file,
+      title: title || file.split("/").pop(), rotation: store.get("rot:" + file), crop: store.get("crop:" + file) });
+    return { models: [m(params.get("a"), params.get("ta")), m(params.get("b"), params.get("tb"))], linked: true };
+  }
+  const r = await fetch("compare-config.json");
+  if (!r.ok) throw new Error(t("compare.notFound"));
+  const c = await r.json();
+  return { models: c.models.map((x) => ({ url: x.file, file: x.file, title: x.title || x.file,
+                                          rotation: x.rotation, crop: x.crop ?? null })), linked: c.linked !== false };
+}
+
+// ---------------------------------------------------------------- shared helpers (same logic as viewer.html)
+function upAxisFromPly(bytes) {
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(bytes.length, 65536)));
+  const end = head.indexOf("end_header");
+  if (!head.startsWith("ply") || end < 0) return null;
+  const m = head.slice(0, end).match(/comment\s+Vertical axis:\s*([^\n\r]+)/);
+  if (!m) return null;
+  const nums = m[1].match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+  let v = null;
+  if (nums && nums.length === 3) v = new THREE.Vector3(+nums[0], +nums[1], +nums[2]);
+  else v = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) }[m[1].trim().toLowerCase()] || null;
+  return v && v.lengthSq() > 1e-8 ? v.normalize() : null;
+}
+
+function computeFit(mesh, holder) {
+  holder.updateMatrixWorld(true);
+  const m = holder.matrixWorld, n = mesh.numSplats || 0;
+  const stride = Math.max(1, Math.floor(n / 150000));
+  const pts = { 0.5: [[], [], []], 0.15: [[], [], []] }, p = new THREE.Vector3();
+  mesh.forEachSplat((i, center, _s, _q, opacity) => {
+    if (i % stride || opacity < 0.15) return;
+    p.copy(center).applyMatrix4(m);
+    for (const th of [0.5, 0.15]) if (opacity >= th) { pts[th][0].push(p.x); pts[th][1].push(p.y); pts[th][2].push(p.z); }
+  });
+  const sampled = Math.ceil(n / stride);
+  const use = pts[0.5][0].length >= Math.max(10, 0.05 * sampled) ? pts[0.5] : pts[0.15];
+  if (use[0].length < 10) {
+    const box = mesh.getBoundingBox(true).applyMatrix4(m);
+    return { center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()).length() || 1 };
+  }
+  const pct = (a, q) => { a.sort((x, y) => x - y); return a[Math.floor(q * (a.length - 1))]; };
+  const lo = new THREE.Vector3(pct(use[0], .05), pct(use[1], .05), pct(use[2], .05));
+  const hi = new THREE.Vector3(pct(use[0], .95), pct(use[1], .95), pct(use[2], .95));
+  return { center: lo.clone().add(hi).multiplyScalar(.5), size: hi.clone().sub(lo).length() || 1 };
+}
+
+async function fetchWithProgress(url, bar) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(t("viewer.loadFailed", { url, status: res.status }));
+  const total = +res.headers.get("Content-Length") || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total) bar.style.width = (100 * got / total).toFixed(1) + "%";
+  }
+  const out = new Uint8Array(got); let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+// ---------------------------------------------------------------- one pane = one renderer, scene, camera
+class Pane {
+  constructor(el) {
+    this.el = el;
+    this.renderer = new THREE.WebGLRenderer({ antialias: false });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    el.prepend(this.renderer.domElement);
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+    this.scene.add(new SparkRenderer({ renderer: this.renderer }));
+    this.holder = new THREE.Group();
+    this.scene.add(this.holder);
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.autoRotateSpeed = 1.2;
+    this.mesh = null; this.fit = null; this.up = null; this.bytes = 0;
+    for (const ev of ["pointerdown", "wheel", "touchstart"]) {
+      this.renderer.domElement.addEventListener(ev, () => { leader = this; }, { passive: true });
+    }
+    new ResizeObserver(() => this.resize()).observe(el);
+    this.resize();
+  }
+  resize() {
+    const w = this.el.clientWidth || 1, h = this.el.clientHeight || 1;
+    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h, false);
+  }
+  async load(model) {
+    this.model = model;
+    const title = this.el.querySelector(".title");
+    title.removeAttribute("data-i18n"); title.textContent = model.title;
+    const bytes = await fetchWithProgress(model.url, this.el.querySelector(".progress i"));
+    this.bytes = bytes.length;
+    const msg = this.el.querySelector(".msg"); msg.removeAttribute("data-i18n"); msg.textContent = t("viewer.decoding");
+    this.up = upAxisFromPly(bytes);
+    this.defaultQuat = new THREE.Quaternion();
+    if (this.up) this.defaultQuat.setFromUnitVectors(this.up, new THREE.Vector3(0, 1, 0));
+    else this.defaultQuat.set(1, 0, 0, 0);
+    this.mesh = new SplatMesh({ fileBytes: bytes, fileName: model.file });
+    this.holder.add(this.mesh);
+    await this.mesh.initialized;
+    if (Array.isArray(model.rotation) && model.rotation.length === 4) this.holder.quaternion.fromArray(model.rotation);
+    else this.holder.quaternion.copy(this.defaultQuat);
+    this.reset();
+    if (typeof model.crop === "number" && model.crop > 0) this.applyCrop(model.crop);
+    this.updateStats();
+    this.el.querySelector(".loading").style.display = "none";
+  }
+  applyCrop(factor) {
+    const edit = new SplatEdit({ rgbaBlendMode: SplatEditRgbaBlendMode.MULTIPLY, invert: true, softEdge: 0 });
+    const sphere = new SplatEditSdf({ type: SplatEditSdfType.SPHERE, radius: (this.fit.size / 2) * factor, opacity: 0 });
+    sphere.position.copy(this.fit.center);
+    edit.add(sphere);
+    this.scene.add(edit);
+  }
+  reset() {
+    this.fit = computeFit(this.mesh, this.holder);
+    const { center, size } = this.fit;
+    this.camera.near = size / 500; this.camera.far = size * 50; this.camera.updateProjectionMatrix();
+    const dist = size * 0.95 / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 0.8;
+    this.camera.position.copy(center).add(new THREE.Vector3(0.0, 0.32, 1).normalize().multiplyScalar(dist));
+    this.controls.target.copy(center);
+    this.controls.minDistance = size * 0.05; this.controls.maxDistance = size * 8;
+    this.controls.update();
+  }
+  updateStats() {
+    if (!this.mesh) return;
+    this.el.querySelector(".stats").textContent =
+      t("viewer.stats", { n: (this.mesh.numSplats || 0).toLocaleString(), mb: (this.bytes / 1e6).toFixed(1) });
+  }
+  // The view, relative to the object: same angle and the same distance in units of object size,
+  // so two objects of different sizes are seen the same way.
+  relView() {
+    const s = this.fit.size;
+    return { off: this.camera.position.clone().sub(this.controls.target).divideScalar(s),
+             pan: this.controls.target.clone().sub(this.fit.center).divideScalar(s) };
+  }
+  setRelView(v) {
+    const s = this.fit.size;
+    this.controls.target.copy(this.fit.center).addScaledVector(v.pan, s);
+    this.camera.position.copy(this.controls.target).addScaledVector(v.off, s);
+  }
+  failed(e) {
+    const msg = this.el.querySelector(".msg");
+    msg.removeAttribute("data-i18n");
+    msg.innerHTML = `<div class="err">${String(e.message || e).replace(/[<>&]/g, "")}</div>`;
+    this.el.querySelector(".progress").style.display = "none";
+  }
+}
+
+const panes = [new Pane(document.getElementById("pane0")), new Pane(document.getElementById("pane1"))];
+let leader = panes[0], linked = true, cfg = null;
+const ready = () => panes.every((p) => p.fit);
+
+function frame() {
+  if (linked && ready()) {
+    const other = panes[leader === panes[0] ? 1 : 0];
+    leader.controls.update();
+    other.setRelView(leader.relView());
+    other.controls.update();
+  } else {
+    panes.forEach((p) => p.controls.update());
+  }
+  panes.forEach((p) => p.renderer.render(p.scene, p.camera));
+}
+panes.forEach((p) => p.renderer.setAnimationLoop(null));
+panes[0].renderer.setAnimationLoop(frame);
+
+// ---------------------------------------------------------------- toolbar
+function bgLabel() { $("bg").textContent = document.documentElement.dataset.bg === "light" ? t("viewer.dark") : t("viewer.light"); }
+function $(id) { return document.getElementById(id); }
+function applyBackground() {
+  const light = document.documentElement.dataset.bg === "light";
+  panes.forEach((p) => p.renderer.setClearColor(light ? 0xeef0f2 : 0x0d0f12, 1));
+  bgLabel();
+}
+document.documentElement.dataset.bg = store.get("viewer:bg") || "dark";
+applyBackground();
+addEventListener("langchange", () => { bgLabel(); panes.forEach((p) => p.updateStats()); });
+
+function setLinked(on) {
+  linked = on;
+  $("link").classList.toggle("on", on);
+  $("link").textContent = t(on ? "compare.link" : "compare.unlinked");
+  setSpin(spinning);
+}
+let spinning = false;
+function setSpin(on) {
+  spinning = on;
+  $("spin").classList.toggle("on", on);
+  // linked: only the leader turns (the other follows); unlinked: both turn
+  panes.forEach((p) => { p.controls.autoRotate = on && (!linked || p === leader); });
+}
+$("link").onclick = () => setLinked(!linked);
+$("reset").onclick = () => { if (!ready()) return; panes.forEach((p) => p.reset()); };
+$("spin").onclick = () => { leader = panes[0]; setSpin(!spinning); };
+$("swap").onclick = () => {
+  const box = $("panes"); box.appendChild(box.firstElementChild);
+};
+$("bg").onclick = () => {
+  const d = document.documentElement;
+  d.dataset.bg = d.dataset.bg === "light" ? "dark" : "light";
+  store.set("viewer:bg", d.dataset.bg); applyBackground();
+};
+$("full").onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
+$("export").onclick = () => {
+  const [a, b] = cfg.models, q = new URLSearchParams({ a: a.file, b: b.file, ta: a.title, tb: b.title,
+    ra: JSON.stringify(panes[0].holder.quaternion.toArray()), rb: JSON.stringify(panes[1].holder.quaternion.toArray()) });
+  if (a.crop) q.set("ca", String(a.crop));
+  if (b.crop) q.set("cb", String(b.crop));
+  location.href = "/api/export-compare?" + q;
+};
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "r" || e.key === "R") $("reset").click();
+  if (e.key === "a" || e.key === "A") $("spin").click();
+  if (e.key === "l" || e.key === "L") $("link").click();
+});
+
+async function main() {
+  cfg = await loadConfig();
+  document.title = `${cfg.models[0].title} · ${cfg.models[1].title} – Splat Viewer`;
+  setLinked(cfg.linked);
+  await Promise.all(panes.map((p, i) => p.load(cfg.models[i]).catch((e) => { console.error(e); p.failed(e); })));
+  // read-only status + helpers for the automated tests
+  window.compareViewer = {
+    ready,
+    linked: () => linked,
+    numSplats: (i) => panes[i].mesh?.numSplats || 0,
+    view: (i) => panes[i].relView().off.toArray(),
+    orbit: (i, deg) => {
+      leader = panes[i];
+      const p = panes[i], off = p.camera.position.clone().sub(p.controls.target);
+      off.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(deg));
+      p.camera.position.copy(p.controls.target).add(off);
+    },
+  };
+}
+main().catch((e) => { console.error(e); panes.forEach((p) => p.failed(e)); });
+</script>
+</body>
+</html>

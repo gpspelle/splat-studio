@@ -62,7 +62,7 @@ class CoverageTest(unittest.TestCase):
         return keys
 
     def test_markup_and_script_keys_exist(self):
-        for page in ("index.html", "viewer.html"):
+        for page in ("index.html", "viewer.html", "compare.html"):
             keys = {k for k in self.keys_in((STATIC / page).read_text()) if not k.endswith(".")}  # skip "prefix." + x
             missing = sorted(k for k in keys if k not in EN)
             self.assertEqual(missing, [], page)

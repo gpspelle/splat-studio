@@ -27,6 +27,8 @@ It wires together three open-source tools and handles the fiddly parts for you:
 - [Using the app](#using-the-app)
 - [Command line](#command-line)
 - [Removing background fog](#removing-background-fog)
+- [Removing the background](#removing-the-background)
+- [Comparing two splats](#comparing-two-splats)
 - [Putting a splat on your website](#putting-a-splat-on-your-website)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -121,7 +123,8 @@ choice is remembered in your browser; the first time, it follows your browser's 
 |---|---|---|
 | Quality | Preview · Standard · High | Preview is ~4× faster, good for checking a capture. High takes longer and gives finer detail. |
 | Detail | Auto · Low · Normal · High | Auto judges it from how much texture the footage has. |
-| Remove background fog | on/off (on) | Also saves a cleaned copy that keeps only the object. The original is always kept. |
+| Remove background fog | on/off (on) | Also saves a copy without the haze and far-away surroundings. The original is always kept. |
+| Remove the background | on/off (off) | Also saves a copy with only the object: no table, floor or room. The original is always kept. |
 | Measure quality | on/off | Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number. |
 | Advanced | frames, trim start/end, extra Brush options | e.g. trim the first seconds while you were pressing record. |
 
@@ -159,7 +162,8 @@ colmap.log     COLMAP's full output
 ```
 
 You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`,
-and add `--clean` to `run` to also save a fog-free copy.
+and add `--clean` to `run` to also save a fog-free copy, or `--remove-background` to also save
+a copy with only the object. `./splat-studio isolate NAME.ply` does the latter for any splat.
 
 ## Removing background fog
 
@@ -187,6 +191,36 @@ Add `--run workspace/<video>/run_<date_time>` to use the run's camera positions.
 diagnosis says *most splats are nearly transparent even near the object*, cleaning won't help:
 the camera positions were inaccurate. Re-run COLMAP or re-film following the recording guide.
 
+## Removing the background
+
+Fog removal keeps the object *and* what it stands on. To show the object alone, for example on
+a product page, use **Remove background** (in the library, or the option on new runs), or
+`./splat-studio isolate NAME.ply [--run workspace/<video>/run_<date_time>]`. It saves
+`NAME_object.ply` next to the original, which is never changed:
+
+1. It keeps the region around the object, like fog removal.
+2. It finds the flat surface the object stands on (table, floor, rug) along the model's "up"
+   direction, and drops it together with everything below it.
+3. It keeps the connected blob of splats around the object, which drops what's left of the
+   room: walls, shelves, other things on the table that don't touch the object.
+
+The object's very bottom edge, where it touches the table, may lose a thin band. If too much
+or too little is removed, `--radius 1.3` (or `0.8`) widens or narrows the search region.
+
+This works on the geometry of the trained splat. Removing the background from the video
+frames before training (segmentation masks) would give cleaner edges and is planned.
+
+## Comparing two splats
+
+![Comparing a splat with fog removed (left) and the same splat with the background removed (right)](docs/images/compare.png)
+
+In the library, click **Compare** on two splats, then **Compare 2/2**. They open side by side
+(one above the other on a phone). Their cameras are linked: turning or zooming one turns the
+other the same way, with each model framed to its own size, so objects of different sizes are
+seen alike. **Linked cameras** toggles this (key `L`). **Export website** downloads a
+comparison website that works like the single-splat one (`index.html`, `compare-config.json`,
+`model_a.ply`, `model_b.ply`, `vendor/`). Orientation and crop saved in the viewer are used.
+
 ## Putting a splat on your website
 
 **Export website** (in the viewer or the library) downloads a zip:
@@ -212,6 +246,7 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 | "Not good enough to train on" | The camera track broke too often. Check the advice on the run: it names the seconds where it broke. Re-film more slowly, in better light, on a textured surface. |
 | The model has holes or blurry sides | Those angles weren't filmed, or their frames weren't placed. Add the missing loop (usually the high one). |
 | Foggy haze around the model | Use **Remove fog**, or **Crop** in the viewer. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
+| The table or room is still around the object | Use **Remove background** (see [Removing the background](#removing-the-background)). |
 | Floating specks around the model | Normal for splats. **Remove fog** removes most of them; for fine control use [SuperSplat](https://superspl.at/editor). |
 | The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save view**. |
 | A tool is missing | Click the tools badge (top right) or run `./splat-studio check`, then `./splat-studio setup`. |
@@ -254,7 +289,10 @@ andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× se
 sobre uma superfície com textura. O guia completo está no app (**Guia de gravação**).
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
-visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa.
+visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
+sem mesa nem ambiente, use **Remover fundo**. Para ver dois splats lado a lado, clique em
+**Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
+exportada como site.
 
 ## Credits
 

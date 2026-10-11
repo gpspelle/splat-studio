@@ -113,6 +113,23 @@ def main():
         page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
         page.wait_for_timeout(1500)
         page.screenshot(path=str(OUT / "viewer.png"))
+
+        # 4. background removal + comparison: a vase on a table (fog removed) vs the object alone
+        from plyfile import write_room_scene
+        page.goto(url)
+        page.set_input_files("#importInput", str(write_room_scene(tmp / "Vase_on_table.ply")))
+        page.wait_for_selector(".tile >> text=Vase_on_table.ply")
+        page.click(".tile[data-path$='Vase_on_table.ply'] [data-testid=isolate-button]")
+        page.wait_for_selector(".tile >> text=Vase_on_table_object.ply", timeout=120000)
+        page.click(".tile[data-path$='Vase_on_table.ply'] [data-testid=clean-button]")      # fog only, for "before"
+        page.wait_for_selector(".tile >> text=Vase_on_table_clean.ply", timeout=120000)
+        page.click(".tile[data-path$='Vase_on_table_clean.ply'] [data-testid=compare-select]")
+        page.click(".tile[data-path$='Vase_on_table_object.ply'] [data-testid=compare-select]")
+        page.click("[data-testid=compare-open]")
+        page.wait_for_function("window.compareViewer && window.compareViewer.ready()", timeout=120000)
+        page.evaluate("window.compareViewer.orbit(0, 25)")
+        page.wait_for_timeout(2500)
+        page.screenshot(path=str(OUT / "compare.png"), timeout=300000)
         browser.close()
     srv.shutdown()
     print("\n".join(str(p.relative_to(ROOT)) for p in sorted(OUT.glob("*.png"))))
