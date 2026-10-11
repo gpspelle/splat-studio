@@ -25,6 +25,24 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("--total-train-iters", summary)
         self.assertIn("splat:", summary)
 
+    def test_clean_option_adds_a_clean_copy_and_keeps_the_original(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--clean")
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        names = sorted(p.name for p in (run / "splat").glob("*.ply"))
+        self.assertEqual(names, ["preview_3000_clean.ply", "preview_3000.ply"][::-1] if names[0].endswith("0.ply")
+                         else names)
+        self.assertTrue((run / "splat" / "preview_3000.ply").exists())
+        self.assertTrue((run / "splat" / "preview_3000_clean.ply").exists())
+        self.assertIn("Clean copy:", r.stdout)
+        self.assertIn("clean splat:", (run / "summary.txt").read_text())
+
+    def test_without_clean_option_output_is_unchanged(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview")
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        self.assertEqual([p.name for p in (run / "splat").glob("*.ply")], ["preview_3000.ply"])
+        self.assertNotIn("Clean copy", r.stdout)
+
     def test_frames_are_reused_and_retrain_skips_colmap(self):
         self.assertEqual(self.run_pipeline(self.video, "--frames", "30", "--quality", "preview").returncode, 0)
         r = self.run_pipeline(self.video, "--quality", "preview")

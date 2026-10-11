@@ -110,7 +110,7 @@ def main():
 
         # 3. the viewer
         page.click("text=View splat")
-        page.wait_for_function("document.getElementById('overlay').style.display === 'none'", timeout=60000)
+        page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
         page.wait_for_timeout(1500)
         page.screenshot(path=str(OUT / "viewer.png"))
         browser.close()

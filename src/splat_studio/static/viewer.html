@@ -25,23 +25,28 @@
   .title { display: flex; flex-direction: column; min-width: 0; max-width: 60vw; }
   .title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   .title span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .group { display: flex; gap: 2px; padding: 4px; }
+  .group { display: flex; gap: 2px; padding: 4px; align-items: center; }
+  .right { display: flex; gap: 8px; }
   button { appearance: none; border: 0; background: transparent; color: var(--text); font: inherit;
     padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
   button:hover { background: var(--line); }
   button.on { background: var(--accent); color: var(--accent-ink); }
   button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   a.back { color: var(--text); text-decoration: none; }
+  input[type=range] { width: 120px; accent-color: var(--accent); margin: 0 6px; }
+  .lang-select { font: inherit; color: var(--text); background: transparent; border: 0; padding: 4px; }
+  .lang-select option { color: #000; }
   #overlay { position: fixed; inset: 0; display: grid; place-items: center; z-index: 3; pointer-events: none; }
   #overlay .box { text-align: center; min-width: 240px; }
   .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; }
   .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
   .err { color: #ff8a80; max-width: 520px; white-space: pre-wrap; }
   .hint { color: var(--muted); font-size: 12px; }
-  .app-only { display: none; }
-  body.app .app-only { display: flex; }
+  .app-only { display: none !important; }
+  body.app .app-only { display: flex !important; }
   @media (max-width: 640px) { .hide-sm { display: none; } .bottom { left: 8px; right: 8px; bottom: 8px; } }
 </style>
+<script src="./i18n.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -54,45 +59,53 @@
 </head>
 <body>
 <div class="bar top">
-  <div class="chip title"><b id="title">Loading…</b><span id="stats">&nbsp;</span></div>
-  <div class="chip group app-only">
-    <a class="back" href="/"><button>← Studio</button></a>
+  <div class="chip title"><b id="title" data-i18n="viewer.loading">Loading…</b><span id="stats">&nbsp;</span></div>
+  <div class="right">
+    <div class="chip group"><span data-lang-switcher></span></div>
+    <div class="chip group app-only"><a class="back" href="/"><button data-i18n="viewer.studio">← Studio</button></a></div>
   </div>
 </div>
 
 <div class="bar bottom">
   <div class="chip group">
-    <button id="reset" title="Reset view (R)">Reset view</button>
-    <button id="spin" title="Auto-rotate (A)">Auto-rotate</button>
+    <button id="reset" data-i18n="viewer.reset" data-i18n-title="viewer.reset.title">Reset view</button>
+    <button id="spin" data-i18n="viewer.spin" data-i18n-title="viewer.spin.title">Auto-rotate</button>
   </div>
-  <div class="chip group" title="Fix the orientation if the model is sideways or upside down">
-    <button id="flip">Flip</button>
-    <button id="rotx">Tilt 90°</button>
-    <button id="rotz" class="hide-sm">Roll 90°</button>
+  <div class="chip group" data-i18n-title="viewer.orient.title">
+    <button id="flip" data-i18n="viewer.flip">Flip</button>
+    <button id="rotx" data-i18n="viewer.tilt">Tilt 90°</button>
+    <button id="rotz" class="hide-sm" data-i18n="viewer.roll">Roll 90°</button>
+  </div>
+  <div class="chip group" data-i18n-title="viewer.crop.title">
+    <button id="crop" data-testid="crop-toggle" data-i18n="viewer.crop">Crop</button>
+    <input id="cropRange" type="range" min="40" max="300" value="120" hidden aria-label="Crop">
   </div>
   <div class="chip group">
     <button id="bg">Light</button>
-    <button id="full" class="hide-sm">Fullscreen</button>
+    <button id="full" class="hide-sm" data-i18n="viewer.fullscreen">Fullscreen</button>
   </div>
   <div class="chip group app-only">
-    <button id="save" title="Remember this orientation for this file">Save orientation</button>
-    <button id="download">Download</button>
-    <button id="export" class="primary" title="Download a self-contained viewer website for this splat">Export website</button>
+    <button id="save" data-i18n="viewer.save" data-i18n-title="viewer.save.title">Save view</button>
+    <button id="download" data-i18n="viewer.download">Download</button>
+    <button id="export" class="primary" data-i18n="viewer.export" data-i18n-title="viewer.export.title">Export website</button>
   </div>
 </div>
 
-<div id="overlay"><div class="box chip"><div id="msg">Loading splat…</div>
+<div id="overlay"><div class="box chip"><div id="msg" data-i18n="viewer.loading">Loading splat…</div>
   <div class="progress"><i id="prog"></i></div><div class="hint" id="sub">&nbsp;</div></div></div>
 
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+import { SparkRenderer, SplatMesh, SplatEdit, SplatEditSdf, SplatEditSdfType, SplatEditRgbaBlendMode } from "@sparkjsdev/spark";
 
 const $ = (id) => document.getElementById(id);
+const t = window.t;
 const params = new URLSearchParams(location.search);
 const appMode = params.has("file");
 if (appMode) document.body.classList.add("app");
+window.i18n.mountSwitcher();
+window.i18n.apply();
 
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -105,12 +118,12 @@ async function loadConfig() {
     const file = params.get("file");
     return { url: "/files/" + file.split("/").map(encodeURIComponent).join("/"), file,
              title: params.get("title") || file.split("/").pop(),
-             rotation: store.get("rot:" + file) };
+             rotation: store.get("rot:" + file), crop: store.get("crop:" + file) };
   }
   const r = await fetch("viewer-config.json");
-  if (!r.ok) throw new Error("viewer-config.json not found next to this page");
+  if (!r.ok) throw new Error(t("viewer.notFound"));
   const c = await r.json();
-  return { url: c.file, file: c.file, title: c.title || c.file, rotation: c.rotation };
+  return { url: c.file, file: c.file, title: c.title || c.file, rotation: c.rotation, crop: c.crop ?? null };
 }
 
 // ---------------------------------------------------------------- scene
@@ -129,13 +142,21 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.autoRotateSpeed = 1.2;
 
+// Crop: an inverted sphere edit makes every splat outside the sphere fully transparent.
+const cropEdit = new SplatEdit({ rgbaBlendMode: SplatEditRgbaBlendMode.MULTIPLY, invert: true, softEdge: 0 });
+const cropSphere = new SplatEditSdf({ type: SplatEditSdfType.SPHERE, radius: 1, opacity: 0 });
+cropEdit.add(cropSphere);
+let cropFactor = null;                     // null = off; else radius as a multiple of the object's half-size
+
+function bgLabel() { $("bg").textContent = document.documentElement.dataset.bg === "light" ? t("viewer.dark") : t("viewer.light"); }
 function applyBackground() {
   const light = document.documentElement.dataset.bg === "light";
   renderer.setClearColor(light ? 0xeef0f2 : 0x0d0f12, 1);
-  $("bg").textContent = light ? "Dark" : "Light";
+  bgLabel();
 }
 document.documentElement.dataset.bg = store.get("viewer:bg") || "dark";
 applyBackground();
+addEventListener("langchange", () => { bgLabel(); updateStats(); });
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
@@ -147,7 +168,7 @@ renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, came
 // ---------------------------------------------------------------- loading
 async function fetchWithProgress(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
+  if (!res.ok) throw new Error(t("viewer.loadFailed", { url, status: res.status }));
   const total = +res.headers.get("Content-Length") || 0;
   const reader = res.body.getReader();
   const chunks = []; let got = 0;
@@ -163,50 +184,68 @@ async function fetchWithProgress(url) {
   return out;
 }
 
-// Brush writes the scene's estimated up direction into the PLY header:
-//   comment Vertical axis: x y z
+// Brush writes the scene's up direction into the PLY header, as numbers or as a letter:
+//   comment Vertical axis: 0.02 -0.99 0.05      or      comment Vertical axis: y
 function upAxisFromPly(bytes) {
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(bytes.length, 65536)));
   const end = head.indexOf("end_header");
   if (!head.startsWith("ply") || end < 0) return null;
-  const m = head.slice(0, end).match(/comment\s+Vertical axis:\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/);
+  const m = head.slice(0, end).match(/comment\s+Vertical axis:\s*([^\n\r]+)/);
   if (!m) return null;
-  const v = new THREE.Vector3(+m[1], +m[2], +m[3]);
-  return v.lengthSq() > 1e-8 ? v.normalize() : null;
+  const nums = m[1].match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+  let v = null;
+  if (nums && nums.length === 3) v = new THREE.Vector3(+nums[0], +nums[1], +nums[2]);
+  else v = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) }[m[1].trim().toLowerCase()] || null;
+  return v && v.lengthSq() > 1e-8 ? v.normalize() : null;
 }
 
-let mesh, cfg, defaultQuat = new THREE.Quaternion(), fit = null;
+let mesh, cfg, up = null, defaultQuat = new THREE.Quaternion(), fit = null, nBytes = 0;
 
-// Frame the camera on the bulk of the splats (ignoring stray floaters) after rotation.
+// Frame the camera on the object: the bulk of the *opaque* splats. Background "fog" is
+// mostly faint splats, so it no longer drags the camera into the cloud.
 function computeFit() {
   holder.updateMatrixWorld(true);
   const m = holder.matrixWorld, n = mesh.numSplats || 0;
   const stride = Math.max(1, Math.floor(n / 150000));
-  const xs = [], ys = [], zs = [], p = new THREE.Vector3();
+  const pts = { 0.5: [[], [], []], 0.15: [[], [], []] }, p = new THREE.Vector3();
   mesh.forEachSplat((i, center, _s, _q, opacity) => {
     if (i % stride || opacity < 0.15) return;
     p.copy(center).applyMatrix4(m);
-    xs.push(p.x); ys.push(p.y); zs.push(p.z);
+    for (const th of [0.5, 0.15]) if (opacity >= th) { pts[th][0].push(p.x); pts[th][1].push(p.y); pts[th][2].push(p.z); }
   });
-  if (xs.length < 10) {
+  const sampled = Math.ceil(n / stride);
+  const use = pts[0.5][0].length >= Math.max(10, 0.05 * sampled) ? pts[0.5] : pts[0.15];
+  if (use[0].length < 10) {
     const box = mesh.getBoundingBox(true).applyMatrix4(m);
     return { center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()).length() || 1 };
   }
   const pct = (a, q) => { a.sort((x, y) => x - y); return a[Math.floor(q * (a.length - 1))]; };
-  const lo = new THREE.Vector3(pct(xs, .03), pct(ys, .03), pct(zs, .03));
-  const hi = new THREE.Vector3(pct(xs, .97), pct(ys, .97), pct(zs, .97));
+  const lo = new THREE.Vector3(pct(use[0], .05), pct(use[1], .05), pct(use[2], .05));
+  const hi = new THREE.Vector3(pct(use[0], .95), pct(use[1], .95), pct(use[2], .95));
   return { center: lo.clone().add(hi).multiplyScalar(.5), size: hi.clone().sub(lo).length() || 1 };
+}
+
+function applyCrop() {
+  const on = cropFactor != null && fit;
+  $("crop").classList.toggle("on", !!on);
+  $("cropRange").hidden = !on;
+  if (!on) { scene.remove(cropEdit); return; }
+  cropSphere.position.copy(fit.center);
+  cropSphere.radius = (fit.size / 2) * cropFactor;
+  if (!cropEdit.parent) scene.add(cropEdit);
+  $("cropRange").value = Math.round(cropFactor * 100);
 }
 
 function resetView() {
   fit = computeFit();
   const { center, size } = fit;
   camera.near = size / 500; camera.far = size * 50; camera.updateProjectionMatrix();
-  const dist = size * 0.95 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.55;
+  const dist = size * 0.95 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.8;   // with a margin
   camera.position.copy(center).add(new THREE.Vector3(0.0, 0.32, 1).normalize().multiplyScalar(dist));
   controls.target.copy(center);
   controls.minDistance = size * 0.05; controls.maxDistance = size * 8;
   controls.update();
+  applyCrop();
 }
 
 function rotateBy(axis, deg) {
@@ -215,13 +254,22 @@ function rotateBy(axis, deg) {
   resetView();
 }
 
+function updateStats() {
+  if (!mesh) return;
+  $("stats").textContent = t("viewer.stats", { n: (mesh.numSplats || 0).toLocaleString(), mb: (nBytes / 1e6).toFixed(1) })
+    + (up ? "" : t("viewer.noUp"));
+}
+
 async function main() {
   cfg = await loadConfig();
   document.title = cfg.title + " – Splat Viewer";
+  $("title").removeAttribute("data-i18n");
   $("title").textContent = cfg.title;
   const bytes = await fetchWithProgress(cfg.url);
-  $("msg").textContent = "Decoding…"; $("sub").textContent = "";
-  const up = upAxisFromPly(bytes);
+  nBytes = bytes.length;
+  $("msg").removeAttribute("data-i18n");
+  $("msg").textContent = t("viewer.decoding"); $("sub").textContent = "";
+  up = upAxisFromPly(bytes);
   if (up) defaultQuat.setFromUnitVectors(up, new THREE.Vector3(0, 1, 0));
   else defaultQuat.set(1, 0, 0, 0);       // COLMAP-style data is usually y-down: flip by default
   mesh = new SplatMesh({ fileBytes: bytes, fileName: cfg.file });
@@ -229,21 +277,22 @@ async function main() {
   await mesh.initialized;
   if (Array.isArray(cfg.rotation) && cfg.rotation.length === 4) holder.quaternion.fromArray(cfg.rotation);
   else holder.quaternion.copy(defaultQuat);
+  cropFactor = typeof cfg.crop === "number" && cfg.crop > 0 ? cfg.crop : null;
   resetView();
-  // read-only status, used by the automated tests
+  // read-only status + helpers, used by the automated tests and the demo-filming script
   window.splatViewer = {
     numSplats: () => mesh.numSplats || 0,
     worldUp: () => (up || new THREE.Vector3(0, -1, 0)).clone().applyQuaternion(holder.quaternion).toArray(),
     fitSize: () => fit.size,
-    orbit: (deg) => {                       // turn the camera around the object (used to film demos)
+    fitCenter: () => fit.center.toArray(),
+    cropRadius: () => (cropFactor == null ? null : cropSphere.radius),
+    orbit: (deg) => {
       const off = camera.position.clone().sub(controls.target);
       off.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(deg));
       camera.position.copy(controls.target).add(off); controls.update();
     },
   };
-  const n = mesh.numSplats || 0;
-  $("stats").textContent = `${n.toLocaleString()} splats · ${(bytes.length / 1e6).toFixed(1)} MB`
-    + (up ? "" : " · no up-axis info, flipped by default");
+  updateStats();
   $("overlay").style.display = "none";
 }
 
@@ -253,6 +302,8 @@ $("spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("spin"
 $("flip").onclick = () => mesh && rotateBy(new THREE.Vector3(1, 0, 0), 180);
 $("rotx").onclick = () => mesh && rotateBy(new THREE.Vector3(1, 0, 0), 90);
 $("rotz").onclick = () => mesh && rotateBy(new THREE.Vector3(0, 0, 1), 90);
+$("crop").onclick = () => { if (!mesh) return; cropFactor = cropFactor == null ? 1.2 : null; applyCrop(); };
+$("cropRange").oninput = (e) => { cropFactor = +e.target.value / 100; applyCrop(); };
 $("bg").onclick = () => {
   const d = document.documentElement;
   d.dataset.bg = d.dataset.bg === "light" ? "dark" : "light";
@@ -261,22 +312,25 @@ $("bg").onclick = () => {
 $("full").onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
 $("save").onclick = () => {
   store.set("rot:" + cfg.file, holder.quaternion.toArray());
-  $("save").textContent = "Saved ✓"; setTimeout(() => ($("save").textContent = "Save orientation"), 1500);
+  store.set("crop:" + cfg.file, cropFactor);
+  $("save").textContent = t("viewer.saved"); setTimeout(() => ($("save").textContent = t("viewer.save")), 1500);
 };
 $("download").onclick = () => { location.href = cfg.url + "?download=1"; };
 $("export").onclick = () => {
   const q = new URLSearchParams({ file: cfg.file, title: cfg.title, rotation: JSON.stringify(holder.quaternion.toArray()) });
+  if (cropFactor != null) q.set("crop", String(cropFactor));
   location.href = "/api/export?" + q;
 };
 addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT") return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
   if (e.key === "r" || e.key === "R") $("reset").click();
   if (e.key === "a" || e.key === "A") $("spin").click();
 });
 
 main().catch((e) => {
   console.error(e);
-  $("msg").innerHTML = `<div class="err">${String(e.message || e)}</div>`;
+  $("msg").removeAttribute("data-i18n");
+  $("msg").innerHTML = `<div class="err">${String(e.message || e).replace(/[<>&]/g, "")}</div>`;
   $("prog").parentElement.style.display = "none";
 });
 </script>

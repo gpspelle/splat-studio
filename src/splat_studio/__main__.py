@@ -6,6 +6,8 @@
     splat-studio setup                install missing tools and build Brush (may ask for a password)
     splat-studio check                show which tools are installed
     splat-studio frames | colmap ...  run a single stage
+    splat-studio inspect MODEL.ply    explain fog / background in a trained splat
+    splat-studio clean MODEL.ply      save MODEL_clean.ply without the background fog
 """
 from __future__ import annotations
 
@@ -64,6 +66,12 @@ def main(argv: list[str] | None = None) -> None:
     if cmd == "colmap":
         from .colmap import main as colmap_main
         return colmap_main(rest)
+    if cmd == "inspect":
+        from .splats import main_inspect
+        return main_inspect(rest)
+    if cmd == "clean":
+        from .splats import main_clean
+        return main_clean(rest)
     sys.exit(f"unknown command {cmd!r}. Try: splat-studio --help")
 
 

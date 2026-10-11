@@ -53,36 +53,42 @@ def parse_probe(data: dict) -> dict | None:
             "portrait": h > w}
 
 
+def tip(level: str, code: str, text: str, **params) -> dict:
+    """One piece of advice. `text` is English; `code` + `params` let the UI translate it."""
+    return {"level": level, "code": code, "params": {k: str(v) for k, v in params.items()}, "text": text}
+
+
 def video_advice(meta: dict | None) -> list[dict]:
-    """Checks on an uploaded video. Each item: {level: ok|info|warn, text}."""
+    """Checks on an uploaded video. Each item: {level: ok|info|warn, code, params, text}."""
     if not meta:
-        return [{"level": "warn", "text": "Couldn't read this video. Is it a normal .mov / .mp4 file?"}]
+        return [tip("warn", "video.unreadable", "Couldn't read this video. Is it a normal .mov / .mp4 file?")]
     tips = []
     d, long_side = meta["duration"], max(meta["width"], meta["height"])
     if d < 25:
-        tips.append({"level": "warn", "text": f"Only {fmt_timestamp(d)} long. That's usually too few viewpoints - "
-                     "walk slower and do 3 loops (low, middle, high): aim for 1½-4 minutes."})
+        tips.append(tip("warn", "video.short_warn", f"Only {fmt_timestamp(d)} long. That's usually too few viewpoints - "
+                        "walk slower and do 3 loops (low, middle, high): aim for 1½-4 minutes.", d=fmt_timestamp(d)))
     elif d < 60:
-        tips.append({"level": "info", "text": f"{fmt_timestamp(d)} is on the short side. It can work for a small "
-                     "object; 1½-4 minutes with 3 loops is more reliable."})
+        tips.append(tip("info", "video.short_info", f"{fmt_timestamp(d)} is on the short side. It can work for a small "
+                        "object; 1½-4 minutes with 3 loops is more reliable.", d=fmt_timestamp(d)))
     elif d > 600:
-        tips.append({"level": "info", "text": f"{fmt_timestamp(d)} is long. That's fine - frames are spread "
-                     "evenly - but trim any parts that don't show the object."})
+        tips.append(tip("info", "video.long", f"{fmt_timestamp(d)} is long. That's fine - frames are spread "
+                        "evenly - but trim any parts that don't show the object.", d=fmt_timestamp(d)))
     if long_side and long_side < 1920:
-        tips.append({"level": "warn", "text": f"Low resolution ({meta['width']}×{meta['height']}). Record in 4K "
-                     "(or at least 1080p) for sharp detail."})
+        tips.append(tip("warn", "video.low_res", f"Low resolution ({meta['width']}×{meta['height']}). Record in 4K "
+                        "(or at least 1080p) for sharp detail.", w=meta["width"], h=meta["height"]))
     if meta["fps"] and meta["fps"] < 24:
-        tips.append({"level": "warn", "text": f"Low frame rate ({meta['fps']:g} fps) means more motion blur. "
-                     "Record at 30 fps."})
+        tips.append(tip("warn", "video.low_fps", f"Low frame rate ({meta['fps']:g} fps) means more motion blur. "
+                        "Record at 30 fps.", fps=f"{meta['fps']:g}"))
     if meta["hdr"]:
-        tips.append({"level": "info", "text": "HDR video: colours are converted automatically. For the most "
-                     "faithful colours, turn off HDR Video (Settings → Camera → Record Video)."})
+        tips.append(tip("info", "video.hdr", "HDR video: colours are converted automatically. For the most "
+                        "faithful colours, turn off HDR Video (Settings → Camera → Record Video)."))
     if meta["portrait"]:
-        tips.append({"level": "info", "text": "Recorded in portrait. Fine for tall objects; for wide ones, "
-                     "landscape keeps the whole object in frame more easily."})
+        tips.append(tip("info", "video.portrait", "Recorded in portrait. Fine for tall objects; for wide ones, "
+                        "landscape keeps the whole object in frame more easily."))
     if not any(t["level"] == "warn" for t in tips):
         q = "4K" if long_side >= 3840 else f"{long_side}p" if long_side else ""
-        tips.insert(0, {"level": "ok", "text": f"Looks good: {q} {meta['fps']:g} fps, {fmt_timestamp(d)} long."})
+        tips.insert(0, tip("ok", "video.good", f"Looks good: {q} {meta['fps']:g} fps, {fmt_timestamp(d)} long.",
+                           q=q, fps=f"{meta['fps']:g}", d=fmt_timestamp(d)))
     return tips
 
 
@@ -115,35 +121,41 @@ def registered_ratio(text: str | None) -> float | None:
 
 
 def run_advice(job: dict) -> list[dict]:
-    """Lessons from a run's outcome, for recording the next one. Items: {level, text}."""
+    """Lessons from a run's outcome, for recording the next one. Items: {level, code, params, text}."""
     tips = []
+    if job.get("cleaned"):
+        c = job["cleaned"]
+        tips.append(tip("ok", "run.cleaned", f"Fog removed: kept {c['kept']:,} of {c['total']:,} splats. "
+                        "The original is kept next to it.", kept=f"{c['kept']:,}", total=f"{c['total']:,}"))
     status, error = job.get("status"), (job.get("error") or "")
     ratio = registered_ratio(job.get("registered"))
     breaks = job.get("track_breaks") or []
     frames, blurry = job.get("frames") or 0, job.get("blurry") or 0
 
     if blurry and frames and blurry / (frames + blurry) > 0.15:
-        tips.append({"level": "warn", "text": f"{blurry} of {frames + blurry} frames were blurry and set aside. "
-                     "Move more slowly, add light, and lock focus (press and hold on the object)."})
+        tips.append(tip("warn", "run.blurry", f"{blurry} of {frames + blurry} frames were blurry and set aside. "
+                        "Move more slowly, add light, and lock focus (press and hold on the object).",
+                        blurry=blurry, total=frames + blurry))
     if breaks:
-        when = [b["when"] for b in breaks if b.get("when")]
-        where = f" around {', '.join(when[:4])} in the video" if when else ""
-        tips.append({"level": "warn" if (ratio or 0) < 0.9 else "info",
-                     "text": f"The camera track broke{where}. Look at those moments: usually a fast turn, "
-                             "motion blur, something passing in front, or the object leaving the frame."})
+        when = ", ".join(b["when"] for b in breaks[:4] if b.get("when"))
+        where = f" around {when} in the video" if when else ""
+        level = "warn" if (ratio or 0) < 0.9 else "info"
+        text = (f"The camera track broke{where}. Look at those moments: usually a fast turn, "
+                "motion blur, something passing in front, or the object leaving the frame.")
+        tips.append(tip(level, "run.track_break_at", text, when=when) if when else tip(level, "run.track_break", text))
     if "Not good enough" in error or (ratio is not None and ratio < 0.6):
-        tips.append({"level": "warn", "text": "Too few frames could be placed to train on. Re-record in one "
-                     "continuous take, walking slowly, with the whole object in frame. Avoid shiny, transparent "
-                     "or plain textureless objects and backgrounds."})
+        tips.append(tip("warn", "run.too_few", "Too few frames could be placed to train on. Re-record in one "
+                        "continuous take, walking slowly, with the whole object in frame. Avoid shiny, transparent "
+                        "or plain textureless objects and backgrounds."))
     elif ratio is not None and ratio < 0.9:
-        tips.append({"level": "info", "text": f"{ratio:.0%} of frames were placed - usable, but the missing parts "
-                     "will look thinner. A smoother re-take of those moments would fill them in."})
+        tips.append(tip("info", "run.partial", f"{ratio:.0%} of frames were placed - usable, but the missing parts "
+                        "will look thinner. A smoother re-take of those moments would fill them in.", pct=f"{ratio:.0%}"))
     elif status == "done" and ratio is not None and ratio >= 0.97 and not breaks:
-        tips.append({"level": "ok", "text": "Excellent capture: every frame was placed."})
+        tips.append(tip("ok", "run.excellent", "Excellent capture: every frame was placed."))
     if "could not reconstruct anything" in error:
-        tips.append({"level": "warn", "text": "COLMAP found nothing to match. The video may be very blurry, too "
-                     "dark, or show a plain/reflective surface. Put the object on a textured surface "
-                     "(newspaper, patterned cloth) in soft, even light."})
+        tips.append(tip("warn", "run.nothing", "COLMAP found nothing to match. The video may be very blurry, too "
+                        "dark, or show a plain/reflective surface. Put the object on a textured surface "
+                        "(newspaper, patterned cloth) in soft, even light."))
     return tips
 
 

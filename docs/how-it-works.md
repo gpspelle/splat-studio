@@ -66,6 +66,33 @@ to compare settings with PSNR/SSIM.
 Brush writes the scene's estimated up direction into the `.ply` header
 (`comment Vertical axis: x y z`). The viewer reads it to stand the model upright.
 
+## Fog: diagnosis and cleanup (`splat_studio/splats.py`)
+
+- Reads standard 3DGS PLY files in chunks with `struct` (no numpy needed): position, opacity
+  (stored as a logit) and scale (stored as a log).
+- **Object region.** With a run folder, it reads the camera centres and viewing directions from
+  COLMAP's `images.bin` and finds the point closest to all viewing rays: what the cameras were
+  filming. The kept radius is 0.8 × the median camera distance. Without cameras, it uses the
+  median of the opaque splats and 1.5 × their 80th-percentile distance (weaker indoors, where
+  walls are opaque too).
+- **inspect** reports the share of splats outside that region, the share that are large and
+  faint ("fog"), the share that are nearly invisible everywhere (a sign of inaccurate camera
+  positions), and how much bigger the whole scene is than the object.
+- **clean** copies the rows of splats inside the region with opacity ≥ 0.02 into
+  `NAME_clean.ply`, keeping the header comments (including the up axis). It refuses to
+  overwrite its input.
+- The viewer frames the camera on the 5th–95th percentile of opaque splats and implements
+  **Crop** with Spark's `SplatEdit` (an inverted sphere that makes everything outside it
+  transparent).
+
+Tested on a synthetic object-in-a-foggy-room scene with known answers: all object splats kept,
+fog removed, and a real browser confirms the crop removes the fog from the frame.
+
+## Languages (`static/i18n.js`)
+
+One dictionary per language, shared by the Studio page, the viewer and exported websites.
+Server-side advice and errors carry codes and parameters, so they're translated in the browser.
+
 ## The web app (`splat_studio/server/`)
 
 - `app.py`: a standard-library HTTP server bound to `127.0.0.1` only.

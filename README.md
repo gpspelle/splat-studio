@@ -2,6 +2,8 @@
 
 **Turn a phone video into a 3D Gaussian splat on your own Mac, then put it on a website.**
 
+*English · [Português](#português)* — the app itself switches between English and Portuguese.
+
 Film an object by walking around it, drop the video into Splat Studio, and get a 3D model
 you can orbit, zoom and share. Everything runs locally: no uploads, no accounts, no cloud GPU.
 
@@ -24,6 +26,7 @@ It wires together three open-source tools and handles the fiddly parts for you:
 - [Recording a good video](#recording-a-good-video)
 - [Using the app](#using-the-app)
 - [Command line](#command-line)
+- [Removing background fog](#removing-background-fog)
 - [Putting a splat on your website](#putting-a-splat-on-your-website)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -107,12 +110,18 @@ settings used, and the full log.
 **Train again** re-trains a finished run with other settings, reusing its camera poses (no
 COLMAP). Every splat is kept, so you can compare.
 
+### Language
+
+Use the language menu at the top right to switch between **English** and **Português**. The
+choice is remembered in your browser; the first time, it follows your browser's language.
+
 ### Settings
 
 | Setting | Options | Notes |
 |---|---|---|
 | Quality | Preview · Standard · High | Preview is ~4× faster, good for checking a capture. High takes longer and gives finer detail. |
 | Detail | Auto · Low · Normal · High | Auto judges it from how much texture the footage has. |
+| Remove background fog | on/off (on) | Also saves a cleaned copy that keeps only the object. The original is always kept. |
 | Measure quality | on/off | Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number. |
 | Advanced | frames, trim start/end, extra Brush options | e.g. trim the first seconds while you were pressing record. |
 
@@ -121,8 +130,10 @@ COLMAP). Every splat is kept, so you can compare.
 ![Viewer](docs/images/viewer.png)
 
 Drag to orbit, scroll to zoom, right-drag to pan. The model is stood upright automatically,
-using the "up" direction Brush saves in the file. If it's still tilted, use **Flip**,
-**Tilt** or **Roll** and then **Save orientation**. You can also import any `.ply`, `.spz`,
+using the "up" direction Brush saves in the file, and the camera is framed on the object. If
+it's still tilted, use **Flip**, **Tilt** or **Roll**. **Crop** hides everything outside a
+sphere around the object (drag the slider to resize it). **Save view** remembers orientation
+and crop, and both are included when you export a website. You can also import any `.ply`, `.spz`,
 `.splat` or `.ksplat` file into the library.
 
 ## Command line
@@ -147,7 +158,34 @@ summary.txt    settings, each COLMAP attempt, track breaks, the Brush command, t
 colmap.log     COLMAP's full output
 ```
 
-You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`.
+You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`,
+and add `--clean` to `run` to also save a fog-free copy.
+
+## Removing background fog
+
+Splats of indoor scenes often look foggy: the room around the object was only seen from a
+distance and a few angles, so the trainer fills it with large, faint splats. Splat Studio
+handles this in three ways:
+
+- **The viewer frames the object**, not the whole cloud, and **Crop** hides the rest.
+- **Remove fog** (in the library, or the option on new runs) saves `NAME_clean.ply` with only
+  the object. For splats from a Splat Studio run, the object is located from where the cameras
+  were pointing. The original file is never changed.
+- **`./splat-studio inspect NAME.ply`** prints numbers that explain the fog, with a diagnosis:
+
+```text
+Outside object:  43% of splats   (farthest 5.99 from the centre)
+Fog-like:        43% of splats (large, faint, outside the object)
+Framing:         whole scene 8.31 across vs object 0.871
+
+Diagnosis:
+  - 43% of splats are large and faint, outside the object: background fog. ...
+  - The viewer frames everything (8.3 units across) while the object is about 0.87: ...
+```
+
+Add `--run workspace/<video>/run_<date_time>` to use the run's camera positions. If the
+diagnosis says *most splats are nearly transparent even near the object*, cleaning won't help:
+the camera positions were inaccurate. Re-run COLMAP or re-film following the recording guide.
 
 ## Putting a splat on your website
 
@@ -173,8 +211,9 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 |---|---|
 | "Not good enough to train on" | The camera track broke too often. Check the advice on the run: it names the seconds where it broke. Re-film more slowly, in better light, on a textured surface. |
 | The model has holes or blurry sides | Those angles weren't filmed, or their frames weren't placed. Add the missing loop (usually the high one). |
-| Floating specks around the model | Normal for splats. Crop them in [SuperSplat](https://superspl.at/editor). |
-| The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save orientation**. |
+| Foggy haze around the model | Use **Remove fog**, or **Crop** in the viewer. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
+| Floating specks around the model | Normal for splats. **Remove fog** removes most of them; for fine control use [SuperSplat](https://superspl.at/editor). |
+| The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save view**. |
 | A tool is missing | Click the tools badge (top right) or run `./splat-studio check`, then `./splat-studio setup`. |
 | `command not found: colmap` after installing | Open a new terminal, or run `./splat-studio setup` again: it adds Homebrew and Rust to the path. |
 | Time estimates are rough (`~`) | They're defaults until your Mac has been timed once. From the second run on, they use your Mac's speed. |
@@ -185,6 +224,10 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 python3 -m unittest discover -s tests -t .      # all tests, no extra packages needed
 ```
 
+Every change must keep the whole suite passing. `tests/integration/test_compat.py` pins what
+earlier versions produced (run folders, job records, API fields, exported sites); if a change
+breaks it, that's a breaking change and needs a note in [CHANGELOG.md](CHANGELOG.md).
+
 The tests run the real pipeline code with real ffmpeg, plus stand-ins for COLMAP and Brush
 that print the real tools' output formats. The fake Brush rejects any option the real Brush
 doesn't have. Browser tests run when Playwright is installed.
@@ -192,6 +235,26 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[docs/how-it-works.md](docs/how
 
 An experimental Docker setup is in [`docker/`](docker/). It's mostly useful on Linux with an
 NVIDIA GPU: on a Mac, Docker can't use the Apple GPU.
+
+## Português
+
+O Splat Studio transforma um vídeo de celular em um splat gaussiano 3D no seu próprio Mac e
+gera um site para mostrá-lo. A interface está em inglês e português: escolha o idioma no menu
+no canto superior direito.
+
+```bash
+git clone https://github.com/gpspelle/splat-studio.git
+cd splat-studio
+./splat-studio setup      # instala o que falta e compila o Brush (uma vez)
+./splat-studio            # abre o app no navegador
+```
+
+Para gravar bem: **uma gravação contínua com 3 voltas** ao redor do objeto (baixa, média, alta),
+andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× sem zoom; objeto fosco
+sobre uma superfície com textura. O guia completo está no app (**Guia de gravação**).
+
+Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
+visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa.
 
 ## Credits
 

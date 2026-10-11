@@ -9,7 +9,11 @@ import unittest
 from pathlib import Path
 
 from tests.helpers import make_video, needs_ffmpeg, write_ply
+from plyfile import write_foggy_scene  # tests/fakes
 from tests.integration.test_server_api import ServerTestCase
+
+import struct
+import zlib
 
 try:
     from playwright.sync_api import sync_playwright
@@ -17,12 +21,52 @@ except ImportError:              # pragma: no cover
     sync_playwright = None
 
 SHOTS = os.environ.get("SPLAT_SCREENSHOTS")
+
+
+def decode_png(data: bytes):
+    """Minimal PNG decoder (8-bit RGB/RGBA, non-interlaced - what Chromium screenshots are).
+    Returns (width, height, RGBA bytes)."""
+    pos, chunks, w = 8, [], None
+    while pos < len(data):
+        n, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + n]
+        if kind == b"IHDR":
+            w, h, depth, ctype = struct.unpack(">IIBB", body[:10])
+            assert depth == 8 and ctype in (2, 6), (depth, ctype)
+            bpp = 4 if ctype == 6 else 3
+        elif kind == b"IDAT":
+            chunks.append(body)
+        pos += 12 + n
+    raw, stride = zlib.decompress(b"".join(chunks)), w * bpp
+    out, prev = bytearray(), bytearray(stride)
+    for y in range(h):
+        f, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b, c = prev[x], prev[x - bpp] if x >= bpp else 0
+            if f == 1:
+                line[x] = (line[x] + a) & 255
+            elif f == 2:
+                line[x] = (line[x] + b) & 255
+            elif f == 3:
+                line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        prev = line
+        if bpp == 4:
+            out += line
+        else:
+            for x in range(0, stride, 3):
+                out += line[x:x + 3] + b"\xff"
+    return w, h, bytes(out)
 BROWSER_ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 
 
-@unittest.skipIf(sync_playwright is None, "playwright not installed")
-@needs_ffmpeg
-class WebUiTest(ServerTestCase):
+class BrowserTestCase(ServerTestCase):
+    """A running server plus a headless Chromium page (self.page)."""
+
     def setUp(self):
         super().setUp()
         self.pw = sync_playwright().start()
@@ -48,6 +92,22 @@ class WebUiTest(ServerTestCase):
             Path(SHOTS).mkdir(parents=True, exist_ok=True)
             (page or self.page).screenshot(path=str(Path(SHOTS) / f"{name}.png"), full_page=full_page)
 
+    def coverage(self, background=(13, 15, 18)):
+        """Share of the screenshot (excluding the toolbars) that isn't background colour."""
+        vp = self.page.viewport_size
+        clip = {"x": 0, "y": 70, "width": vp["width"], "height": vp["height"] - 150}
+        w, h, px = decode_png(self.page.screenshot(clip=clip, timeout=180000))
+        hit = total = 0
+        for i in range(0, len(px), 4 * 7):                     # every 7th pixel is plenty
+            total += 1
+            if abs(px[i] - background[0]) + abs(px[i + 1] - background[1]) + abs(px[i + 2] - background[2]) > 30:
+                hit += 1
+        return hit / total
+
+
+@unittest.skipIf(sync_playwright is None, "playwright not installed")
+@needs_ffmpeg
+class WebUiTest(BrowserTestCase):
     def test_first_visit_shows_recording_guide(self):
         self.page.goto(self.url)
         guide = self.page.get_by_test_id("guide")
@@ -88,7 +148,7 @@ class WebUiTest(ServerTestCase):
         self.shot("studio", full_page=True)
 
         self.page.click("text=View splat")
-        self.page.wait_for_function("document.getElementById('overlay').style.display === 'none' "
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none' "
                                     "|| document.querySelector('.err')", timeout=60000)
         self.assertRegex(self.page.inner_text("#stats"), r"[\d,]+ splats")
         self.assertEqual(self.page.inner_text("#title"), "IMG_4821 · preview")
@@ -107,7 +167,7 @@ class WebUiTest(ServerTestCase):
         self.page.set_input_files("#importInput", str(ply))
         self.page.wait_for_selector(".tile >> text=vase.ply")
         self.page.click(".tile >> text=View")
-        self.page.wait_for_function("document.getElementById('overlay').style.display === 'none'", timeout=60000)
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
         self.assertIn("30,040 splats", self.page.inner_text("#stats"))
         self.assertNotIn("no up-axis", self.page.inner_text("#stats"))   # read from the PLY header
         # the file's "Vertical axis: 0 -1 0" must end up pointing up on screen
@@ -118,4 +178,86 @@ class WebUiTest(ServerTestCase):
         self.assertLess(size, 5)
         self.page.click("#flip")
         self.assertAlmostEqual(self.page.evaluate("window.splatViewer.worldUp()")[1], -1.0, places=3)
+        self.assertEqual(self.errors, [])
+
+
+@unittest.skipIf(sync_playwright is None, "playwright not installed")
+@needs_ffmpeg
+class LanguageAndFogUiTest(BrowserTestCase):
+    """Portuguese/English switching, and the viewer's handling of background fog."""
+
+    def open_studio(self, lang=None):
+        self.page.goto(self.url)
+        self.page.evaluate("localStorage.setItem('guide:seen', 'true')")
+        if lang:
+            self.page.evaluate(f"localStorage.setItem('lang', '{lang}')")
+        self.page.reload()
+        self.page.get_by_test_id("setup-pill").wait_for()
+
+    def test_switch_to_portuguese_and_back(self):
+        self.open_studio()
+        self.assertEqual(self.page.text_content("[data-i18n='new.title']"), "New run")
+        self.page.get_by_test_id("lang-select").select_option("pt")
+        self.assertEqual(self.page.text_content("[data-i18n='new.title']"), "Nova execução")
+        self.assertIn("3 voltas", self.page.get_by_test_id("tips-strip").inner_text())
+        self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
+        self.assertEqual(self.page.evaluate("document.documentElement.lang"), "pt-BR")
+        self.page.reload()                                            # remembered
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
+        self.page.wait_for_function("/ok|bad/.test(document.getElementById('setupPill').className)")
+        self.assertIn("erramenta", self.page.inner_text("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
+        self.page.get_by_test_id("guide-button").click()
+        self.assertIn("Trave foco e exposição", self.page.get_by_test_id("guide").inner_text())
+        self.shot("guide-pt")
+        self.page.locator("#guide button[data-i18n='dlg.close']").click()
+        self.page.get_by_test_id("lang-select").select_option("en")
+        self.assertEqual(self.page.inner_text("#startBtn"), "Start run")
+        self.assertEqual(self.errors, [])
+
+    def test_upload_advice_is_translated(self):
+        self.open_studio("pt")
+        video = make_video(self.tmp / "curto.mov", seconds=5)
+        self.page.set_input_files("#fileInput", str(video))
+        advice = self.page.get_by_test_id("video-advice")
+        advice.wait_for(state="visible")
+        self.assertIn("poucos pontos de vista", advice.inner_text())
+        self.page.get_by_test_id("lang-select").select_option("en")
+        self.assertIn("too few viewpoints", advice.inner_text())
+        self.assertEqual(self.errors, [])
+
+    def test_viewer_frames_the_object_and_crops_the_fog(self):
+        ply = write_foggy_scene(self.tmp / "room.ply", n_object=4000, n_fog=3000)
+        self.page.set_viewport_size({"width": 640, "height": 480})   # software rendering in CI is slow
+        self.open_studio()
+        self.page.set_input_files("#importInput", str(ply))
+        self.page.wait_for_selector(".tile >> text=room.ply")
+        self.page.click(".tile >> text=View")
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        # framed on the object (~0.9 across), not the whole fog cloud (~8 across)
+        self.assertLess(self.page.evaluate("window.splatViewer.fitSize()"), 2.0)
+        self.page.wait_for_timeout(1500)
+        self.shot("fog-before")
+        before = self.coverage()
+        self.page.get_by_test_id("crop-toggle").click()
+        self.assertIsNotNone(self.page.evaluate("window.splatViewer.cropRadius()"))
+        self.page.wait_for_timeout(2500)
+        after = self.coverage()
+        self.shot("fog-cropped")
+        self.assertLess(after, before * 0.8, (before, after))         # fog no longer fills the frame
+        self.assertGreater(after, 0.01)                               # but the object is still there
+        self.page.get_by_test_id("crop-toggle").click()
+        self.assertIsNone(self.page.evaluate("window.splatViewer.cropRadius()"))
+        self.assertEqual(self.errors, [])
+
+    def test_viewer_in_portuguese(self):
+        ply = write_ply(self.tmp / "vaso.ply", n=5000)
+        self.open_studio("pt")
+        self.page.set_input_files("#importInput", str(ply))
+        self.page.wait_for_selector(".tile >> text=vaso.ply")
+        self.page.click(".tile >> text=Ver")
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        self.assertEqual(self.page.inner_text("#crop"), "Recortar")
+        self.assertEqual(self.page.inner_text("#export"), "Exportar site")
+        self.assertIn("splats", self.page.inner_text("#stats"))
         self.assertEqual(self.errors, [])

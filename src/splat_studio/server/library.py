@@ -123,6 +123,14 @@ class DataDir:
                         "thumb": self.thumbnail(run_dir=r)})
         return out
 
+    def run_dir_of(self, splat: Path) -> str | None:
+        """workspace/<name>/run_x/splat/file.ply -> workspace/<name>/run_x (if it has camera poses)."""
+        parts = Path(self.rel(splat)).parts
+        if len(parts) >= 5 and parts[0] == "workspace" and parts[3] == "splat":
+            rd = "/".join(parts[:3])
+            return rd if (self.root / rd / "dense").is_dir() else None
+        return None
+
     # ---- splat library
     def list_splats(self) -> list[dict]:
         items = []
@@ -133,6 +141,7 @@ class DataDir:
                 src = "imported" if imported else self.rel(p.parent.parent)
                 items.append({"path": self.rel(p), "name": p.name, "size": st.st_size, "mtime": st.st_mtime,
                               "source": src, "title": splat_title(self.rel(p)),
+                              "cleaned": p.stem.endswith("_clean"),
                               "thumb": None if imported else self.thumbnail(run_dir=src)})
         return sorted(items, key=lambda i: -i["mtime"])
 
@@ -141,7 +150,7 @@ def splat_title(relpath: str) -> str:
     """'workspace/IMG_4821/run_x/splat/high_40000.ply' -> 'IMG_4821 · high'; imports keep their name."""
     parts = Path(relpath).parts
     if len(parts) >= 5 and parts[0] == "workspace":
-        quality = re.sub(r"_\d+$", "", Path(parts[-1]).stem)
+        quality = re.sub(r"_\d+$", "", re.sub(r"_clean$", "", Path(parts[-1]).stem))
         return f"{parts[1]} · {quality}"
     return Path(relpath).name
 
@@ -165,12 +174,16 @@ def read_summary(run_dir: Path) -> dict:
     return out
 
 
-def export_site(splat: Path, title: str, rotation: list | None, static_dir: Path = STATIC_DIR) -> bytes:
-    """A self-contained viewer website (zip): index.html + vendor libs + the model + config."""
+def export_site(splat: Path, title: str, rotation: list | None, static_dir: Path = STATIC_DIR,
+                crop: float | None = None) -> bytes:
+    """A self-contained viewer website (zip): index.html + i18n + vendor libs + the model + config."""
     buf = io.BytesIO()
     cfg = {"file": "model" + splat.suffix.lower(), "title": title, "rotation": rotation}
+    if crop:
+        cfg["crop"] = crop                  # only when set, so earlier exports stay identical
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(static_dir / "viewer.html", "index.html")
+        z.write(static_dir / "i18n.js", "i18n.js")
         for f in (static_dir / "vendor").rglob("*"):
             if f.is_file() and not f.name.endswith(".map"):
                 z.write(f, "vendor/" + str(f.relative_to(static_dir / "vendor")))
