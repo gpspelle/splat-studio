@@ -34,12 +34,19 @@ contains ≥ 90% of the frames:
 Matches are kept in COLMAP's database between attempts, so later attempts only pay for new pairs.
 Below 60% the run stops, with advice, instead of training on a bad model.
 
-**Time estimates.** COLMAP's own log counters drive the progress bar. The time left is
-estimated from the number of image pairs each attempt will match, the feature count per image
-(matching cost grows with its square), and a superlinear model for mapping. Estimates start
-from defaults for an M1 CPU (marked `~`) and switch to measured speeds of your computer.
-Those speeds are saved in `~/.cache/splat-studio/rates.json`, so the second run on a machine
-is accurate from the start.
+**Time estimates** (`splat_studio/eta.py`). The app never shows a made-up number:
+- *This step* is measured from the step's own progress over a recent window (the last 30% of
+  the step, at least 20 s), so start-up time and changing speed don't skew it. Mapping adds
+  images more slowly as it goes (cost grows as images^1.5). Until a step has run for 8 s and
+  moved 2%, the UI says *measuring speed*; a COLMAP step stuck near 100% (the final bundle
+  adjustment) says *finishing up* rather than "0s".
+- *Training* slows down while the splat grows. Step time is modelled as overhead plus a cost
+  per splat, fitted on the splat counts Brush prints, and the count is projected to where
+  growth stops (half the steps), following how its growth has been slowing.
+- *Whole run* adds the parts still to come, from how long they took on this computer before,
+  per frame, per training step (per quality) and per million splats, saved in
+  `~/.cache/splat-studio/timings.json`. Until a first full run has been timed, it says so.
+- Every UI job writes `timeline.jsonl` (progress with timestamps) next to its log.
 
 **Safety.** Every run has its own folder `workspace/<video>/run_<date_time>/` with a
 `summary.txt`, and a lock file stops two runs from ever writing to the same folder.

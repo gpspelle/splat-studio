@@ -196,3 +196,51 @@ class JobsApiTest(ServerTestCase):
         self.assertTrue(res["ok"])
         _, jobs = self.json("GET", "/api/jobs")
         self.assertNotIn(second["id"], [j["id"] for j in jobs])
+
+
+class TimeLeftTest(ServerTestCase):
+    """Time-left estimates during a real (stand-in) run, and what the next run learns from it."""
+
+    def job(self, jid):
+        _, jobs = self.json("GET", "/api/jobs")
+        return next(j for j in jobs if j["id"] == jid)
+
+    def test_estimates_during_training_and_history_for_the_next_run(self):
+        import os
+        from splat_studio.eta import History, default_timings_file
+        os.environ["FAKE_BRUSH_LINES"], os.environ["FAKE_BRUSH_DELAY"] = "40", "0.4"
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in ("FAKE_BRUSH_LINES", "FAKE_BRUSH_DELAY")])
+        video = make_video(self.tmp / "vase.mov", seconds=6)
+        _, data = self.upload(video)
+        _, job = self.json("POST", "/api/jobs", {"type": "video", "video": json.loads(data)["video"],
+                                                 "quality": "preview", "frames": 40})
+        seen = None
+        end = time.time() + 180
+        while time.time() < end:
+            j = self.job(job["id"])
+            if j["status"] != "running" and j["status"] != "queued":
+                break
+            if j.get("train_total") and j["train_step"] >= 0.7 * j["train_total"]:
+                seen = seen or j
+            time.sleep(0.3)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertIsNotNone(seen, "never saw training past 70%")
+        self.assertRegex(seen["eta"] or "", r"^\d+s$")                     # a few seconds, measured
+        self.assertIsNone(seen["eta_worst"])
+        self.assertIsNone(j["eta"])                                        # finished: nothing left
+        h = History(default_timings_file())
+        self.assertIsNotNone(h.get("train.per_step.preview"))
+        self.assertIsNotNone(h.get("colmap.extract"))
+        timeline = (self.data.jobs / job["id"] / "timeline.jsonl").read_text().splitlines()
+        self.assertGreater(len(timeline), 5)
+        self.assertEqual(json.loads(timeline[-1])["stage"], 3)
+        # the next run on this computer knows the total from the start
+        _, rt = self.json("POST", "/api/jobs", {"type": "retrain", "run_dir": j["run_dir"], "quality": "preview"})
+        end = time.time() + 60
+        while time.time() < end:
+            r = self.job(rt["id"])
+            if r["status"] == "running" and r.get("eta_total"):
+                break
+            time.sleep(0.2)
+        self.assertTrue(r.get("eta_total"), r)
+        self.wait_done(rt["id"])

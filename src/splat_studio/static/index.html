@@ -48,6 +48,7 @@
   .run .head { display: flex; align-items: center; gap: var(--s-2) var(--s-3); flex-wrap: wrap; }
   .run .name { font: var(--text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
   .run .meta { margin-top: 3px; }
+  .now-line .eta { text-align: right; }
   .now-line { display: flex; justify-content: space-between; gap: var(--s-3); margin-top: 6px; font: var(--text-meta); color: var(--ink-2);
     font-variant-numeric: tabular-nums; }
   .err { color: var(--bad); font: var(--text-meta); margin-top: 6px; word-break: break-word; }
@@ -385,6 +386,14 @@ function runTitle(j) {
   const base = (j.video || j.run_dir || "").split("/").pop();
   return j.type === "retrain" ? t("run.retrain", { name: (j.run_dir || "").split("/")[1] || "" }) : base;
 }
+// time left: measured for this step, from this computer's history for the whole run; never a guess
+function etaHTML(j) {
+  const step = j.eta ? t("run.stepLeft", { t: j.eta })
+    : j.eta_note === "finishing" ? t("run.finishing") : t("run.estimating");
+  const total = j.eta_total ? t("run.totalLeft", { t: j.eta_total }) : j.eta_note === "first_run" ? t("run.firstRun") : "";
+  const more = j.eta_total && j.eta_note === "more_attempts" ? ` title="${esc(t("run.moreAttempts"))}"` : "";
+  return `${esc(step)}${total ? `<br><span${more}>${esc(total)}${more ? " *" : ""}</span>` : ""}`;
+}
 function attemptText(a) {                       // "2/3 - wider overlap ..." -> translated label
   const m = /^(\d+\/\d+) - (.+)$/.exec(a || ""); return m ? `${m[1]} - ${tr("attempt.", m[2])}` : (a || "");
 }
@@ -404,7 +413,7 @@ function runHTML(j) {
     now = `<div class="bar ${pct == null ? "indet" : ""}" style="margin-top:4px"><i style="width:${pct ?? 0}%"></i></div>
       <div class="now-line"><span>${esc(j.stage != null ? t("stage." + j.stage) : t("run.starting"))}${j.step_label ? " · " + esc(tr("step.", j.step_label)) : ""}${pct != null ? " · " + pct + "%" : ""}
       ${j.stage === 2 && j.attempt ? `<br>${esc(t("run.attempt", { a: attemptText(j.attempt) }))}` : ""}</span>
-      <span>${j.eta ? esc(t("run.left", { t: j.eta })) : ""}${j.eta_worst ? `<br>${esc(t("run.worst", { t: j.eta_worst }))}` : ""}</span></div>`;
+      <span class="eta" data-testid="eta">${etaHTML(j)}</span></div>`;
   }
   const best = j.clean_splat || j.splat, title = best ? splatTitle(best) : "";   // fog removed when there is a copy
   const canRetrain = !running && !qd && j.type !== "clean" && j.type !== "isolate" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));

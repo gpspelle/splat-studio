@@ -45,19 +45,29 @@ class ParseLineTest(unittest.TestCase):
 
     def test_colmap_progress_line(self):
         j = job()
-        parse_line(j, "==> Attempt 2/3: wider overlap + loop closure, relaxed mapper")
+        parse_line(j, "==> Attempt 2/3: wider overlap + loop closure, relaxed mapper", now=100.0)
         parse_line(j, "    matching (sequential)      ██████████░░░░░░░░░░░░░░  42%  step left 1m10s | "
-                      "total 3m05s | left ~4m00s (worst case ~25m00s)")
+                      "total 3m05s | left ~4m00s (worst case ~25m00s)", now=101.0)
         self.assertEqual(j.attempt, "2/3 - wider overlap + loop closure, relaxed mapper")
-        self.assertEqual((j.step_label, j.step_pct, j.eta, j.eta_worst),
-                         ("matching (sequential)", 42, "~4m00s", "~25m00s"))
+        self.assertEqual((j.step_label, j.step_pct), ("matching (sequential)", 42))
+        # one line is not enough to measure: no number rather than the tool's guess
+        self.assertEqual((j.eta, j.eta_worst, j.eta_total, j.eta_note), (None, None, None, "estimating"))
+
+    def test_time_left_is_measured_from_progress(self):
+        j = job()
+        for i in range(0, 61, 2):                      # 1% every 2 s after a 10 s start-up
+            parse_line(j, f"    extracting features        ░░  {i // 2}%  step left 1s | total 1s | left ~1s",
+                       now=10.0 + i)
+        self.assertEqual(j.eta, "2 min")              # 70% left at 0.5%/s = 140 s
+        self.assertEqual(j.eta_note, "first_run")      # the rest of the run hasn't been timed yet
 
     def test_brush_progress_line_in_real_format(self):
         # Brush's indicatif template: "[{elapsed}] {bar:40} {pos:>7}/{len:7} {msg} ({per_sec}, {eta} remaining)"
         j = job()
         parse_line(j, "[00:01:12] ◍◍◍◍◍◍◍◍◍◍○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○    7421/30000   Steps "
                       "(103.2/s, 3m 39s remaining)")
-        self.assertEqual((j.stage, j.train_step, j.train_total, j.step_pct, j.eta), (3, 7421, 30000, 24, "3m 39s"))
+        self.assertEqual((j.stage, j.train_step, j.train_total, j.step_pct), (3, 7421, 30000, 24))
+        self.assertEqual(j.train_eta, "3m 39s")        # Brush's own figure is kept, but not shown as "left"
 
     def test_results(self):
         j = job()

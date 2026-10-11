@@ -256,7 +256,7 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 | The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save view**. |
 | A tool is missing | Click the tools badge (top right) or run `./splat-studio check`, then `./splat-studio setup`. |
 | `command not found: colmap` after installing | Open a new terminal, or run `./splat-studio setup` again: it adds Homebrew and Rust to the path. |
-| Time estimates are rough (`~`) | They're defaults until your Mac has been timed once. From the second run on, they use your Mac's speed. |
+| Time left says "measuring speed" or no total | Each step is timed as it runs; the whole-run total appears once your Mac has finished one full run. |
 
 ## Development
 

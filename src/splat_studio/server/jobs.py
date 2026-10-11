@@ -21,6 +21,7 @@ from pathlib import Path
 from .. import guidance
 from ..colmap import pid_alive
 from ..common import child_env, module_cmd
+from ..eta import RunClock, fmt_left
 from .library import DataDir, read_summary
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[=>]")
@@ -33,7 +34,7 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated"]
+              "object_splat", "isolated", "eta_total", "eta_note"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -82,31 +83,60 @@ RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
 RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
 RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
+RE_STAGE_CLEAN = re.compile(r"==> Removing background fog")
 STAGE_NAMES = {"0": "Setup", "1": "Frames", "2": "Camera poses", "3": "Training"}
 ERROR_HINTS = ("failed", "Error", "error:", "Not good enough", "not found", "Traceback", "isn't installed",
                "could not reconstruct")
 
 
-def parse_line(job: Job, line: str, rel=lambda p: p) -> None:
+def job_clock(job: Job) -> RunClock:
+    """The job's time-left estimator (created on first use, kept in memory only)."""
+    c = getattr(job, "_clock", None)
+    if c is None:
+        o = job.options or {}
+        c = job._clock = RunClock(kind=job.type or "video", frames_hint=int(o.get("frames") or 250),
+                                  isolate_after=bool(o.get("remove_background")),
+                                  quality=o.get("quality") or "standard")
+        if job.type in ("clean", "isolate"):
+            c.start_phase(job.type, job.started or time.time())
+    return c
+
+
+def update_eta(job: Job, now: float | None = None) -> None:
+    e = job_clock(job).estimate(time.time() if now is None else now)
+    job.eta, job.eta_total, job.eta_note = fmt_left(e["step_left"]), fmt_left(e["total_left"]), e["note"]
+    job.eta_worst = None
+
+
+def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -> None:
     """Update a job's status from one line of pipeline output."""
     line = line.rstrip()
     if not line.strip():
         return
+    t = time.time() if now is None else now
+    clock = job_clock(job)
+    clock.line(t, line)
     m = RE_STAGE.search(line)
     if m:
         job.stage = int(m.group(1))
         job.stage_label = STAGE_NAMES.get(m.group(1), m.group(2))
         job.step_label = job.step_pct = job.eta = job.eta_worst = None
+        if job.stage == 1:
+            clock.start_phase("frames", t)
+        elif job.stage == 3:
+            clock.start_training(t)
     m = RE_WS.search(line)
     if m:
         job.run_dir = rel(m.group(1).strip())
     m = RE_ATTEMPT.search(line)
     if m:
         job.attempt = f"{m.group(1)}/{m.group(2)} - {m.group(3)}"
+        clock.set_attempt(t, int(m.group(1)))
     m = RE_COLMAP_BAR.search(line)
     if m:
         job.step_label, job.step_pct = m.group(1).strip(), int(m.group(2))
-        job.eta, job.eta_worst = m.group(4), m.group(5)
+        clock.start_phase(job.step_label, t)
+        clock.progress(t, job.step_pct / 100)
     m = RE_REGISTERED.search(line)
     if m:
         job.registered = f"{m.group(1)}/{m.group(2)} frames ({m.group(3)}%)"
@@ -117,23 +147,26 @@ def parse_line(job: Job, line: str, rel=lambda p: p) -> None:
         job.train_eta = m.group(4).strip()
         job.step_label = "training splat"
         job.step_pct = int(100 * job.train_step / job.train_total) if job.train_total else None
-        job.eta, job.eta_worst = job.train_eta, None
+        clock.brush_step(t, job.train_step, job.train_total)
     m = RE_SPLAT.search(line)
     if m:
         job.splat = rel(m.group(1).strip())
     m = RE_KEPT.search(line)
     if m:
-        job.frames = int(m.group(1))
+        job.frames = clock.frames = int(m.group(1))
         job.blurry = int(m.group(2)) if m.group(2) else 0
     m = RE_REUSE.search(line)
     if m:
-        job.frames = int(m.group(1))
+        job.frames = clock.frames = int(m.group(1))
     m = RE_TRACK.search(line)
     if m:
         brk = {"first": m.group(1), "last": m.group(2), "count": int(m.group(3))}
         job.track_breaks = [b for b in (job.track_breaks or []) if b["first"] != brk["first"]] + [brk]
+    if RE_STAGE_CLEAN.search(line):
+        clock.start_phase("clean", t)
     if RE_STAGE_ISOLATE.search(line):
         job._isolating = True
+        clock.start_phase("isolate", t)
     m = RE_CLEAN_KEPT.search(line)
     if m:
         counts = {"kept": int(m.group(1).replace(",", "")), "total": int(m.group(2).replace(",", ""))}
@@ -153,6 +186,27 @@ def parse_line(job: Job, line: str, rel=lambda p: p) -> None:
             job.splat = job.clean_splat
     if any(k in line for k in ERROR_HINTS):
         job.error = line.strip()[:400]
+    update_eta(job, t)
+    record_timeline(job, t)
+
+
+def record_timeline(job: Job, t: float) -> None:
+    """Append progress changes to timeline.jsonl next to the job's log (at most once a second).
+    Plain output logs have no timestamps; this is what time estimates can be checked against."""
+    key = (job.stage, job.step_label, job.step_pct, job.attempt)
+    if getattr(job, "_tl_key", None) == key or t - getattr(job, "_tl_t", 0.0) < 1.0 or not job.jobs_dir:
+        return
+    job._tl_key, job._tl_t = key, t
+    c = job_clock(job)
+    row = {"t": round(t, 2), "stage": job.stage, "step": job.step_label, "pct": job.step_pct,
+           "attempt": job.attempt, "train_step": job.train_step, "splats": c.final_splats(),
+           "eta": job.eta, "eta_total": job.eta_total}
+    try:
+        if job.dir.is_dir():
+            with open(job.dir / "timeline.jsonl", "a") as f:
+                f.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
 
 
 def build_cmd(job: Job) -> list[str]:
@@ -297,6 +351,8 @@ class Runner:
 
     # ---- views
     def view(self, j: Job) -> dict:
+        if j.status == "running":
+            update_eta(j)                             # estimates move on even when output pauses
         d = j.to_dict()
         d["source"] = "ui"
         if j.run_dir:
@@ -379,6 +435,8 @@ class Runner:
             job.status = "cancelled"
         elif job.returncode == 0:
             job.status, job.error, job.step_pct = "done", None, 100
+            job_clock(job).end_phase(job.finished)          # remember how long the last part took
+            job.eta = job.eta_total = job.eta_note = None
             if job.type in ("video", "retrain") and not job.splat and job.run_dir:
                 job.splat = self.data.latest_splat(job.run_dir)
         else:

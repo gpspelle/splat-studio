@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from .common import fmt_time
+from .eta import MAP_EXPONENT as _MAP_EXP, STALL, Window
 
 # Seconds per unit of "work" for each kind of step:
 #   extract / undistort: per image
@@ -32,7 +33,7 @@ PRIOR_RATES = {
     "map": 0.6 / 250 ** 0.5,
     "undistort": 0.15,
 }
-MAP_EXPONENT = 1.5
+MAP_EXPONENT = _MAP_EXP
 
 
 def default_rates_file() -> Path:
@@ -144,6 +145,7 @@ class Progress:
     def start(self, label: str, kind: str | None, units: float) -> None:
         self.label, self.kind, self.units = label, kind, units
         self.frac, self.step_t0 = 0.0, self.clock()
+        self.window = Window(self.step_t0)
         self._feature_counts = []
         self.draw(force=True)
 
@@ -156,6 +158,7 @@ class Progress:
     def update(self, frac: float | None) -> None:
         if frac is not None and frac > self.frac:
             self.frac = min(frac, 1.0)
+            self.window.add(self.clock(), self.frac ** MAP_EXPONENT if self.kind == "map" else self.frac)
         self.draw()
 
     def finish(self) -> None:
@@ -178,21 +181,19 @@ class Progress:
             self.out.flush()
 
     def step_left(self) -> float | None:
-        elapsed = self.clock() - self.step_t0
+        """Seconds left in this step: measured over a recent window once possible (start-up
+        and slow-downs don't skew it), the expected time before that, None when unknown."""
+        now = self.clock()
         if self.frac >= 1.0:
             return 0.0
-        expected = self.estimate(self.kind, self.units) if self.kind in PRIOR_RATES and self.units else None
-        if self.frac >= 0.03 and elapsed > 3:
-            if self.kind == "map":                       # each new image is slower to place
-                live = elapsed * (self.frac ** -MAP_EXPONENT - 1)
-            else:
-                live = elapsed * (1 - self.frac) / self.frac
-            if expected is None or self.frac > 0.25:
-                return live
-            w = self.frac / 0.25                         # early on, blend with the expectation
-            return w * live + (1 - w) * max(expected - elapsed, 0)
-        if expected is not None:
-            return max(expected - elapsed, 0)
+        w = getattr(self, "window", None)
+        if w is not None and self.frac >= 0.95 and now - w.last_change > STALL:
+            return None                                  # finishing (e.g. final bundle adjustment)
+        live = w.left(now) if w is not None else None
+        if live is not None:
+            return live
+        if self.kind in PRIOR_RATES and self.units and self.rate(self.kind)[1] != "guess":
+            return max(self.estimate(self.kind, self.units) - (now - self.step_t0), 0)
         return None
 
     def render(self) -> str:

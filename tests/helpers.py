@@ -16,6 +16,9 @@ FAKE_BIN = FAKES / "bin"
 sys.path.insert(0, str(FAKES))
 from plyfile import write_ply  # noqa: E402,F401
 
+# Time estimates learn from timings.json; tests must never read or change the real one.
+os.environ.setdefault("SPLAT_STUDIO_TIMINGS", str(Path(tempfile.mkdtemp(prefix="splat-timings-")) / "timings.json"))
+
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 needs_ffmpeg = unittest.skipUnless(HAS_FFMPEG, "ffmpeg/ffprobe not installed")
 
@@ -28,6 +31,7 @@ class TempDirTestCase(unittest.TestCase):
         self.tmp = Path(self._td.name).resolve()
         self._env = mock_env({
             "SPLAT_STUDIO_RATES": str(self.tmp / "rates.json"),
+            "SPLAT_STUDIO_TIMINGS": str(self.tmp / "timings.json"),
             "SPLAT_STUDIO_TOOLS": str(self.tmp / "tools"),
             "HOME": str(self.tmp / "home"),
         })

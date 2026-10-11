@@ -27,6 +27,23 @@
   (all runs of that video together), newest first, with imported files in their own group.
   Library items have a new `video` field (the video's name, or `null` for imports).
 
+### Fixed
+- **Time left is measured, and covers the whole run.** The old figures only covered part of
+  the run (COLMAP alone, or Brush's own guess during training), started from built-in M1
+  defaults, averaged speed since the step began, and said "0s" while COLMAP was still
+  finishing. Now (`splat_studio/eta.py`):
+  - each step's time left is measured over a recent window, so start-up time and slow-downs
+    don't skew it; until it can be measured the UI says *measuring speed*, and at the end of a
+    COLMAP step that is still working it says *finishing up*;
+  - training accounts for Brush slowing down as the splat grows, from the splat counts Brush
+    reports;
+  - **whole run** adds the remaining parts (camera poses, training, fog removal) from how long
+    they took on this computer before (`~/.cache/splat-studio/timings.json`). Before the first
+    full run it says so instead of guessing.
+- Jobs have new fields `eta_total` and `eta_note`; `eta` now holds this step's measured time
+  left ("3 min"), and `eta_worst` is no longer filled. Each job also writes `timeline.jsonl`
+  (progress with timestamps) next to its log, to check estimates against.
+
 ## 0.4.0
 
 ### Added
