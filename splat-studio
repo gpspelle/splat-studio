@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run Splat Studio straight from a clone, without installing anything:
+#   ./splat-studio            open the web UI
+#   ./splat-studio setup      install missing tools and build Brush
+#   ./splat-studio --help
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$HERE/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m splat_studio "$@"

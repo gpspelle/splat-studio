@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Stand-in for the `brush` trainer used by the integration tests.
+
+Rejects any option Brush doesn't have (list taken from Brush's source), prints progress in
+Brush's own indicatif format, and exports a real (synthetic) splat where Brush would.
+  FAKE_BRUSH_DELAY   seconds between progress updates (default 0.01)
+"""
+import os
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from plyfile import write_ply  # noqa: E402
+
+known = {l.strip() for l in (HERE.parent / "brush_flags.txt").read_text().splitlines()
+         if l.strip() and not l.startswith("#")}
+args = sys.argv[1:]
+if not args or args[0].startswith("-"):
+    sys.exit("error: a dataset path is required")
+src, opts, i = Path(args[0]), {}, 1
+while i < len(args):
+    k = args[i]
+    if k not in known:
+        sys.exit(f"error: unexpected argument '{k}' found")
+    if k == "--with-viewer":
+        opts[k], i = True, i + 1
+        continue
+    opts[k], i = args[i + 1], i + 2
+if not (src / "sparse" / "0").is_dir():
+    sys.exit(f"error: no COLMAP data in {src}")
+
+iters = int(opts.get("--total-train-iters", 30000))
+delay = float(os.environ.get("FAKE_BRUSH_DELAY", "0.01"))
+print("[INFO  brush_cli] Compute backend: Metal (fake)", flush=True)
+for step in range(0, iters + 1, max(1, iters // 10)):
+    done = int(40 * step / iters)
+    print(f"\r[00:00:0{step * 9 // iters}] {'◍' * done}{'○' * (40 - done)} {step:>7}/{iters:<7} Steps "
+          f"({iters / 6:.1f}/s, {(iters - step) / iters * 6:.0f}s remaining)", end="", flush=True)
+    time.sleep(delay)
+print()
+out = src.parent / opts.get("--export-path", "./{dataset}_exports/").replace("{dataset}", src.name)
+name = opts.get("--export-name", "export_{iter}.ply").replace("{iter}", str(iters))
+write_ply(out / name, n=3000)

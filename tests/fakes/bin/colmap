@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Stand-in for the `colmap` CLI used by the integration tests.
+
+Prints the same kinds of progress lines as real COLMAP and writes the minimal outputs
+the pipeline reads. Behaviour knobs (environment variables):
+  FAKE_COLMAP_REGISTER  fraction of frames the mapper registers (default 1.0)
+  FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
+"""
+import glob
+import math
+import os
+import shutil
+import sys
+import time
+
+cmd, args = sys.argv[1], sys.argv[2:]
+
+
+def opt(k):
+    return args[args.index(k) + 1] if k in args else None
+
+
+if "-h" in args:
+    print("  --SiftExtraction.use_gpu arg (=1)")
+    sys.exit(0)
+DELAY = float(os.environ.get("FAKE_COLMAP_DELAY", "0.001"))
+REGISTER = float(os.environ.get("FAKE_COLMAP_REGISTER", "1.0"))
+
+
+def images():
+    p = opt("--image_path") or os.path.join(os.path.dirname(opt("--database_path")), "images")
+    return sorted(os.path.basename(x) for x in glob.glob(os.path.join(p, "*.jpg")))
+
+
+if cmd == "feature_extractor":
+    open(opt("--database_path"), "w").close()
+    n = len(images())
+    for i in range(1, n + 1):
+        print(f"I1011 feature_extraction.cc:257] Processed file [{i}/{n}]")
+        print("I1011 feature_extraction.cc:260]   Features:        4000", flush=True)
+        time.sleep(DELAY)
+elif cmd == "sequential_matcher":
+    n = len(images())
+    for i in range(1, n + 1):
+        print(f"I1011 pairing.cc:180] Processing image [{i}/{n}]", flush=True)
+        time.sleep(DELAY)
+elif cmd == "matches_importer":
+    for i in range(1, 4):
+        print(f"I1011 pairing.cc:301] Processing block [{i}/3]", flush=True)
+        time.sleep(DELAY)
+elif cmd == "exhaustive_matcher":
+    b = max(1, math.ceil(len(images()) / 50))
+    for x in range(1, b + 1):
+        for y in range(1, b + 1):
+            print(f"I1011 pairing.cc:214] Processing block [{x}/{b}, {y}/{b}]", flush=True)
+            time.sleep(DELAY)
+elif cmd == "mapper":
+    names, out = images(), opt("--output_path")
+    keep = names[: int(round(len(names) * REGISTER))]
+    # a gap in the middle when not everything registers, like a real broken track
+    if REGISTER < 1.0:
+        k = len(names) - len(keep)
+        mid = len(names) // 2
+        keep = names[:mid - k // 2] + names[mid - k // 2 + k:]
+    for i, _ in enumerate(keep, 1):
+        print(f"I1011 incremental_mapper.cc:620] Registering image #{i} ({i})", flush=True)
+        time.sleep(DELAY)
+    os.makedirs(os.path.join(out, "0"))
+    open(os.path.join(out, "0", "registered.txt"), "w").write("\n".join(keep))
+    os.makedirs(os.path.join(out, "1"))                      # a tiny second model, as real COLMAP often makes
+    open(os.path.join(out, "1", "registered.txt"), "w").write("\n".join(names[:3]))
+elif cmd == "model_converter":
+    reg = open(os.path.join(opt("--input_path"), "registered.txt")).read().split()
+    with open(os.path.join(opt("--output_path"), "images.txt"), "w") as f:
+        f.write("# Image list with two lines of data per image:\n")
+        for i, name in enumerate(reg, 1):
+            f.write(f"{i} 1 0 0 0 0 0 0 1 {name}\n\n")       # empty 2D-points line
+elif cmd == "model_analyzer":
+    path = opt("--path")
+    # the pipeline moves the undistorted model into sparse/0; the list stays one level up
+    reg_file = next((f for f in (os.path.join(path, "registered.txt"), os.path.join(path, "..", "registered.txt"))
+                     if os.path.exists(f)), None)
+    n = len(open(reg_file).read().split()) if reg_file else 0
+    print(f"I1011 model.cc:12] Registered images: {n}\nI1011 model.cc:13] Points: {n * 240}\n"
+          "I1011 model.cc:14] Mean reprojection error: 0.61px")
+elif cmd == "image_undistorter":
+    reg = open(os.path.join(opt("--input_path"), "registered.txt")).read().split()
+    out = opt("--output_path")
+    os.makedirs(os.path.join(out, "images"), exist_ok=True)
+    os.makedirs(os.path.join(out, "sparse"), exist_ok=True)
+    src = opt("--image_path")
+    for i, name in enumerate(reg, 1):
+        print(f"I1011 undistortion.cc:150] Undistorting image [{i}/{len(reg)}]", flush=True)
+        shutil.copy(os.path.join(src, name), os.path.join(out, "images", name))
+        time.sleep(DELAY)
+    for b in ("cameras", "images", "points3D"):
+        open(os.path.join(out, "sparse", f"{b}.bin"), "w").close()
+    open(os.path.join(out, "sparse", "registered.txt"), "w").write("\n".join(reg))
+else:
+    sys.exit(f"fake colmap: unknown command {cmd}")

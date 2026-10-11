@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Experimental: run the video -> splat pipeline in Docker, on files in the current folder.
+#
+#   docker/splat IMG_1234.MOV                        # frames + COLMAP (+ Brush, see below)
+#   docker/splat IMG_1234.MOV --quality preview
+#   docker/splat --train-only workspace/IMG_1234/latest --quality high
+#   docker/splat --rebuild                           # rebuild the image (e.g. after editing the scripts)
+#
+# All options of `splat-studio run` work. Results land in ./frames and ./workspace.
+#
+# Training (Brush) needs a GPU, which Docker can only provide on Linux with NVIDIA:
+#   - NVIDIA GPU detected -> everything runs in the container, on the GPU.
+#   - macOS -> the container stops after COLMAP, then Brush trains natively on the Mac's
+#     GPU (Metal) via `splat-studio run --train-only` on the host. Force training in the container
+#     anyway (software rendering, very slow) with --train-in-container.
+#   - Linux without NVIDIA -> trains in the container with software rendering (slow).
+set -euo pipefail
+
+IMAGE="${SPLAT_IMAGE:-splat-studio}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+die() { echo "splat: $*" >&2; exit 1; }
+command -v docker >/dev/null || die "Docker isn't installed (macOS: install Docker Desktop, then open it once)"
+docker info >/dev/null 2>&1 || die "Docker isn't running - start Docker Desktop (or the docker service) and retry"
+
+# ---- our own flags
+rebuild=0; train_in_container=0; args=()
+for a in "$@"; do
+  case "$a" in
+    --rebuild) rebuild=1 ;;
+    --train-in-container) train_in_container=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+
+# ---- build the image once (first build compiles Brush: ~10-30 min)
+if [[ $rebuild == 1 ]] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "==> Building the $IMAGE image (first time only; compiling Brush takes a while)"
+  docker build -t "$IMAGE" -f "$HERE/Dockerfile" "$HERE/.."
+fi
+[[ ${#args[@]} == 0 ]] && { [[ $rebuild == 1 ]] && exit 0; args=(--help); }
+
+# ---- paths must be inside the current folder (it's the only one the container sees)
+for a in "${args[@]}"; do
+  if [[ "$a" != -* && -e "$a" ]]; then
+    real="$(cd "$(dirname "$a")" && pwd)/$(basename "$a")"
+    [[ "$real" == "$PWD"/* ]] || die "'$a' is outside the current folder - cd to the folder that contains it"
+  fi
+done
+
+# ---- GPU / where to train
+gpu=()
+mac_host_train=0
+if [[ "$(uname)" == "Darwin" ]]; then
+  if [[ $train_in_container == 0 && ! " ${args[*]} " =~ " --train-only " && ! " ${args[*]} " =~ " --no-train " ]]; then
+    args+=(--no-train); mac_host_train=1
+  fi
+elif command -v nvidia-smi >/dev/null 2>&1 && docker info 2>/dev/null | grep -qi nvidia; then
+  gpu=(--gpus all)
+  echo "==> NVIDIA GPU found - training on the GPU"
+else
+  echo "==> No NVIDIA GPU available to Docker - Brush will use software rendering (slow)"
+fi
+
+tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
+docker run --rm "${tty[@]}" "${gpu[@]}" \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/work -w /work \
+  "$IMAGE" "${args[@]}"
+
+# ---- macOS: finish with native Brush on the Mac's GPU
+if [[ $mac_host_train == 1 ]]; then
+  # pass through the training options, drop the ones only meant for frames/COLMAP
+  train_args=(); skip=0
+  for ((i = 1; i < ${#args[@]}; i++)); do   # args[0] is the video
+    a="${args[$i]}"
+    if [[ $skip == 1 ]]; then skip=0; continue; fi
+    case "$a" in
+      --no-train|--re-extract|--dry-run) ;;
+      --frames|--start|--end|--max-size) skip=1 ;;
+      *) train_args+=("$a") ;;
+    esac
+  done
+  name="$(basename "${args[0]}")"; name="${name%.*}"; name="${name// /_}"
+  echo
+  echo "==> Training natively on the Mac's GPU"
+  exec "$HERE/../splat-studio" run --skip-setup --train-only "workspace/$name/latest" "${train_args[@]}"
+fi

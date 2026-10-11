@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat Studio</title>
+<style>
+  :root {
+    --bg: #f4f2ef; --surface: #ffffff; --surface-2: #faf9f7; --line: #e7e3dd; --text: #1d1b19;
+    --muted: #77716a; --accent: #e8622c; --accent-hover: #d4561f; --accent-soft: #fdeee6; --ok: #2f8f5b; --ok-soft: #e6f4ec;
+    --bad: #c8372d; --bad-soft: #fbe9e7; --warn: #a86b00; --warn-soft: #fbf1dc; --run: #2b62d9; --run-soft: #e8eefc;
+    --radius: 14px; --shadow: 0 1px 2px rgba(30,20,10,.04), 0 4px 16px rgba(30,20,10,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141312; --surface: #1d1c1a; --surface-2: #232220; --line: #33312e; --text: #ecebe8;
+      --muted: #9d978f; --accent-soft: #3a2418; --ok-soft: #17301f; --bad-soft: #3a1b18; --warn-soft: #33270e;
+      --run-soft: #19243d; --shadow: none; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    max-width: 1180px; margin: 0 auto; padding: 22px 20px 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo { width: 30px; height: 30px; border-radius: 9px;
+    background: radial-gradient(circle at 30% 30%, #ffb38a, var(--accent) 55%, #9b2f0b); }
+  .brand h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  .brand span { color: var(--muted); font-size: 13px; }
+  .head-actions { display: flex; gap: 8px; align-items: center; }
+  main { max-width: 1180px; margin: 0 auto; padding: 12px 20px 60px; display: grid; gap: 20px;
+    grid-template-columns: 380px 1fr; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 0; padding: 16px 18px 0; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pad { padding: 14px 18px 18px; }
+  button, .btn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    font: inherit; padding: 7px 12px; border-radius: 9px; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button:hover, .btn:hover { background: var(--surface-2); }
+  button:disabled { opacity: .5; cursor: default; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .primary:hover { background: var(--accent-hover); }
+  .ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .small { padding: 4px 9px; font-size: 13px; border-radius: 8px; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; }
+  .link:hover { background: none; text-decoration: underline; }
+  .status-pill { font-size: 12px; padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line); cursor: pointer; background: var(--surface); }
+  .status-pill.ok { color: var(--ok); }
+  .status-pill.bad { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+  .tips-strip { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; }
+  .tips-strip > b { display: block; margin-bottom: 4px; }
+  .tips-strip ul { margin: 0 0 6px; padding-left: 18px; }
+  .tips-strip li { margin: 2px 0; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 24px 16px; text-align: center;
+    cursor: pointer; transition: .15s; background: var(--surface-2); }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .drop small { color: var(--muted); }
+  .field { margin-top: 14px; }
+  .field > label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { border: 0; background: transparent; padding: 6px 4px; border-radius: 7px; font-size: 13px; }
+  .seg button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 600; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 5px; min-height: 16px; }
+  input[type=text], input[type=number], select { width: 100%; font: inherit; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .check { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 13px; }
+  .check input { margin-top: 3px; }
+  details.adv { margin-top: 12px; }
+  details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .chosen { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--surface-2); }
+  .chosen .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .bar { height: 6px; background: var(--line); border-radius: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .bar.indet i { width: 30% !important; animation: slide 1.2s infinite ease-in-out; }
+  @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+
+  .advice { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .advice li { font-size: 12.5px; padding: 7px 10px 7px 30px; border-radius: 9px; position: relative; line-height: 1.4; }
+  .advice li::before { position: absolute; left: 10px; top: 7px; font-weight: 700; }
+  .advice li.ok { background: var(--ok-soft); } .advice li.ok::before { content: "✓"; color: var(--ok); }
+  .advice li.info { background: var(--surface-2); border: 1px solid var(--line); } .advice li.info::before { content: "i"; color: var(--run); font-style: italic; font-family: Georgia, serif; }
+  .advice li.warn { background: var(--warn-soft); } .advice li.warn::before { content: "!"; color: var(--warn); }
+
+  /* runs */
+  .runs { display: flex; flex-direction: column; }
+  .run { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); }
+  .run:first-child { border-top: 0; }
+  .thumb { width: 64px; height: 48px; border-radius: 8px; background: var(--surface-2) center/cover no-repeat; border: 1px solid var(--line); }
+  .run .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .run .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; text-transform: capitalize; }
+  .pill.queued { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .pill.running { background: var(--run-soft); color: var(--run); }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.failed, .pill.interrupted { background: var(--bad-soft); color: var(--bad); }
+  .pill.cancelled, .pill.unknown { background: var(--warn-soft); color: var(--warn); }
+  .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
+  .steps { display: flex; gap: 4px; margin: 10px 0 6px; }
+  .steps span { flex: 1; font-size: 11px; color: var(--muted); padding-top: 6px; border-top: 3px solid var(--line); }
+  .steps span.done { border-color: var(--ok); color: var(--text); }
+  .steps span.now { border-color: var(--accent); color: var(--text); font-weight: 600; }
+  .steps span.fail { border-color: var(--bad); color: var(--bad); }
+  .now-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .err { color: var(--bad); font-size: 12px; margin-top: 6px; word-break: break-word; }
+  .actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .actions .row { flex: none; gap: 6px; }
+  .more { grid-column: 2 / 4; display: none; }
+  .run.open .more { display: block; }
+  pre.log { background: #15130f; color: #ddd6cc; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 12px; border-radius: 10px; max-height: 320px; overflow: auto; margin: 10px 0 0; white-space: pre-wrap; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 4px 12px; font-size: 12px; margin-top: 8px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .empty { color: var(--muted); text-align: center; padding: 30px 18px; }
+
+  /* library */
+  .lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface-2); display: flex; flex-direction: column; }
+  .tile .img { aspect-ratio: 16/10; background: var(--line) center/cover no-repeat; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .tile .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+  .tile .body b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile .acts { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
+  .right { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; z-index: 9; }
+  .toast.show { opacity: 1; }
+
+  /* dialogs */
+  dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); width: min(440px, 94vw); padding: 22px; }
+  dialog::backdrop { background: rgba(20,15,10,.45); }
+  dialog h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
+  dialog.guide { width: min(860px, 96vw); max-height: 92vh; padding: 0; }
+  .guide-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 26px 6px; }
+  .guide-head p { margin: 4px 0 0; color: var(--muted); }
+  .guide-body { padding: 8px 26px 24px; display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+  @media (max-width: 760px) { .guide-body { grid-template-columns: 1fr; } }
+  .diagram { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .guide-sec { margin-bottom: 16px; }
+  .guide-sec h4 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .guide-sec h4 span { width: 22px; height: 22px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 12px; }
+  .guide-sec ul { margin: 0; padding-left: 18px; }
+  .guide-sec li { margin: 3px 0; }
+  .guide-sec li em { color: var(--muted); font-style: normal; }
+  .avoid { background: var(--bad-soft); border-radius: 12px; padding: 12px 14px; margin-top: 4px; }
+  .avoid b { color: var(--bad); }
+  .setup-list { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+  .setup-list li { display: grid; grid-template-columns: 22px 90px 1fr; gap: 8px; font-size: 13px; align-items: baseline; }
+  .setup-list .y { color: var(--ok); font-weight: 700; } .setup-list .n { color: var(--bad); font-weight: 700; } .setup-list .o { color: var(--muted); }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo"></div><div><h1>Splat Studio</h1><span>Video → 3D Gaussian splat, on this computer</span></div></div>
+  <div class="head-actions">
+    <button id="guideBtn" data-testid="guide-button">📹 Recording guide</button>
+    <button id="setupPill" class="status-pill" data-testid="setup-pill">Checking tools…</button>
+  </div>
+</header>
+
+<main>
+  <!-- ---------------------------------------------------------------- new run -->
+  <section class="card">
+    <h2>New run</h2>
+    <div class="pad">
+      <div class="tips-strip" data-testid="tips-strip">
+        <b>For a first-try success</b>
+        <ul>
+          <li>One slow, continuous take: <b>3 loops</b> around the object (low, middle, high)</li>
+          <li>Soft, even light · lock focus &amp; exposure · 1× lens, no zoom</li>
+          <li>A matte object on a textured surface - nothing moving in the scene</li>
+        </ul>
+        <button class="link" id="guideLink">Read the full recording guide →</button>
+      </div>
+      <div id="dropZone" class="drop">
+        <b>Drop a video here</b>
+        <small>or click to choose · .mov / .mp4 from your phone works as-is</small>
+        <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" hidden>
+      </div>
+      <div id="uploading" hidden style="margin-top:12px">
+        <div class="meta" id="upLabel">Uploading…</div>
+        <div class="bar" style="margin-top:6px"><i id="upBar"></i></div>
+      </div>
+      <div id="chosen" class="chosen" hidden style="margin-top:12px">
+        <div class="name" id="chosenName"></div>
+        <button class="ghost small" id="clearVideo">Change</button>
+      </div>
+      <ul class="advice" id="videoAdvice" data-testid="video-advice" hidden></ul>
+      <div class="field" id="pickField">
+        <label for="prevVideo">…or reuse an uploaded video</label>
+        <select id="prevVideo"><option value="">Choose…</option></select>
+      </div>
+
+      <div class="field">
+        <label>Quality</label>
+        <div class="seg" data-name="quality">
+          <button data-v="preview">Preview</button><button data-v="standard" class="on">Standard</button><button data-v="high">High</button>
+        </div>
+        <div class="help" id="qualityHelp"></div>
+      </div>
+      <div class="field">
+        <label>Detail</label>
+        <div class="seg" data-name="detail">
+          <button data-v="auto" class="on">Auto</button><button data-v="low">Low</button><button data-v="normal">Normal</button><button data-v="high">High</button>
+        </div>
+        <div class="help" id="detailHelp"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="eval"> <span>Measure quality<br><span class="meta">Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number.</span></span></label>
+      <details class="adv">
+        <summary>Advanced</summary>
+        <div class="field row">
+          <div><label for="frames">Frames</label><input id="frames" type="number" value="250" min="50" max="1000" step="10"></div>
+          <div><label for="start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
+          <div><label for="end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="reextract"> <span>Extract frames again (otherwise reused)</span></label>
+        <div class="field"><label for="brushArgs">Extra Brush options</label>
+          <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000"></div>
+      </details>
+      <button id="startBtn" class="primary" style="width:100%;margin-top:16px;justify-content:center" disabled>Start run</button>
+      <div class="help" id="startHelp">Choose a video first.</div>
+    </div>
+  </section>
+
+  <div class="right">
+    <section class="card">
+      <h2>Runs <span class="meta" id="queueInfo"></span></h2>
+      <div class="runs" id="runs"><div class="empty">No runs yet. Upload a video to start.</div></div>
+    </section>
+    <section class="card">
+      <h2>Splat library
+        <span><button class="small" id="importBtn">Import .ply</button>
+        <input id="importInput" type="file" accept=".ply,.spz,.splat,.ksplat" hidden></span></h2>
+      <div class="pad"><div class="lib" id="lib"><div class="empty" style="grid-column:1/-1">Trained splats and imported files appear here.</div></div></div>
+    </section>
+  </div>
+</main>
+
+<!-- ---------------------------------------------------------------- recording guide -->
+<dialog id="guide" class="guide" data-testid="guide">
+  <div class="guide-head">
+    <div><h3>How to record a video that works the first time</h3>
+      <p>The software can only rebuild what the camera saw clearly, from many angles, in one continuous take.</p></div>
+    <form method="dialog"><button class="small">Close</button></form>
+  </div>
+  <div class="guide-body">
+    <div>
+      <figure class="diagram" style="margin:0">
+        <svg viewBox="0 0 320 260" role="img" aria-label="Three loops around the object at low, middle and high height">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8622c"/></marker>
+          </defs>
+          <ellipse cx="190" cy="210" rx="118" ry="24" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="3 4"/>
+          <rect x="168" y="120" width="44" height="88" rx="14" fill="#e8622c" fill-opacity=".18" stroke="#e8622c" stroke-width="1.5"/>
+          <text x="190" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">object</text>
+          <g fill="none" stroke="#e8622c" stroke-width="2">
+            <ellipse cx="190" cy="196" rx="104" ry="22" stroke-opacity=".55"/>
+            <ellipse cx="190" cy="150" rx="112" ry="26"/>
+            <ellipse cx="190" cy="96" rx="92" ry="20" stroke-opacity=".75"/>
+            <path d="M298,150 C304,130 290,110 280,100" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+            <path d="M292,190 C302,176 304,165 302,155" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+          </g>
+          <g fill="currentColor"><circle cx="86" cy="196" r="4"/><circle cx="78" cy="150" r="4"/><circle cx="98" cy="96" r="4"/></g>
+          <g font-size="11" fill="currentColor" text-anchor="end">
+            <text x="78" y="200">① low</text><text x="70" y="154">② eye level</text><text x="90" y="100">③ high</text>
+          </g>
+          <text x="190" y="250" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">one continuous take · ~60-90 s per loop</text>
+        </svg>
+        <figcaption>Walk three full circles without stopping the recording: knee height looking slightly up, eye level, then arms raised looking down. Rise gently between loops.</figcaption>
+      </figure>
+      <div class="avoid" style="margin-top:14px">
+        <b>Avoid</b>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li>Glass, mirrors, chrome, very shiny paint</li>
+          <li>Plain white tables and blank walls</li>
+          <li>Turntables (the background must not move)</li>
+          <li>People, pets or curtains moving in view</li>
+          <li>Cuts, pauses with fast pans, zooming</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="guide-sec"><h4><span>1</span>Pick the spot</h4><ul>
+        <li>Room to walk all the way around the object, at a steady 1-2 m distance.</li>
+        <li>Put it on a <b>textured surface</b> - a rug, newspaper, patterned cloth. COLMAP tracks texture, not plain surfaces.</li>
+        <li>Matte objects work best. Cover or skip reflective and transparent parts.</li></ul></div>
+      <div class="guide-sec"><h4><span>2</span>Get the light right</h4><ul>
+        <li><b>Soft, even light</b>: overcast daylight or a bright room with several lamps.</li>
+        <li>No harsh sun or a single spotlight - hard shadows and highlights move as you walk.</li>
+        <li>Don't change the lights during the take, and keep your own shadow off the object.</li></ul></div>
+      <div class="guide-sec"><h4><span>3</span>Set up the phone</h4><ul>
+        <li>4K at 30 fps, landscape. Stay on the <b>1× lens</b> and never zoom (the phone would switch cameras).</li>
+        <li><b>Lock focus and exposure</b>: press and hold on the object until "AE/AF Lock" appears.</li>
+        <li>Turn off Cinematic and Action mode. HDR is converted automatically, but off is best.</li></ul></div>
+      <div class="guide-sec"><h4><span>4</span>Record</h4><ul>
+        <li><b>One continuous take</b>, three loops as in the diagram, ending each loop where it started.</li>
+        <li>Walk slowly - about 2-3 seconds per step. Turn your body at corners, don't swing the phone.</li>
+        <li>Keep the whole object in frame, filling about half to two-thirds of it.</li>
+        <li>Total length: <b>1½-4 minutes</b>.</li></ul></div>
+      <div class="guide-sec"><h4><span>5</span>Check before you leave</h4><ul>
+        <li>Scrub through the video: is every moment sharp, with no jumps, flicker or people walking through?</li>
+        <li>After a run, Splat Studio tells you <em>at which seconds</em> the tracking broke, so you know what to redo.</li></ul></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- ---------------------------------------------------------------- setup -->
+<dialog id="setupDlg" data-testid="setup-dialog">
+  <h3>Tools</h3>
+  <div class="meta" id="dataDir"></div>
+  <ul class="setup-list" id="setupList"></ul>
+  <div class="meta" id="setupNote">Setup installs what's missing with Homebrew, rustup and pip, then downloads and builds Brush (15-30 min, once).
+    If Homebrew itself is missing, run <code>./splat-studio setup</code> in Terminal instead - it needs your password.</div>
+  <form method="dialog" class="row" style="margin-top:16px;justify-content:flex-end;flex:none">
+    <button value="cancel" style="flex:none">Close</button>
+    <button value="run" class="primary" style="flex:none" id="runSetup">Run setup</button>
+  </form>
+</dialog>
+
+<dialog id="retrainDlg">
+  <form method="dialog">
+    <h3>Train again</h3>
+    <div class="meta">Reuses this run's camera poses and trains a new splat with different settings. The existing splat is kept.</div>
+    <div class="field"><label>Quality</label>
+      <div class="seg" data-name="rq"><button type="button" data-v="preview">Preview</button><button type="button" data-v="standard">Standard</button><button type="button" data-v="high" class="on">High</button></div></div>
+    <div class="field"><label>Detail</label>
+      <div class="seg" data-name="rd"><button type="button" data-v="auto" class="on">Auto</button><button type="button" data-v="low">Low</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="high">High</button></div></div>
+    <label class="check"><input type="checkbox" id="rEval"> <span>Measure quality (PSNR/SSIM)</span></label>
+    <div class="field"><label for="rArgs">Extra Brush options</label><input id="rArgs" type="text"></div>
+    <div class="row" style="margin-top:16px;justify-content:flex-end;flex:none">
+      <button value="cancel" style="flex:none">Cancel</button>
+      <button value="ok" class="primary" style="flex:none">Queue training</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const viewerUrl = (file, title) => "/viewer?" + new URLSearchParams({ file, title: title || file.split("/").pop() });
+const fileUrl = (p) => "/files/" + p.split("/").map(encodeURIComponent).join("/");
+const mb = (b) => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB";
+const ago = (t) => { if (!t) return ""; const s = Date.now() / 1000 - t;
+  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago"; return new Date(t * 1000).toLocaleDateString(); };
+const dur = (a, b) => { if (!a) return ""; const s = Math.max(0, (b || Date.now() / 1000) - a);
+  const m = Math.floor(s / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : m ? `${m}m ${Math.floor(s % 60)}s` : `${Math.floor(s)}s`; };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2800); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(a.text)}</li>`).join("");
+
+// ---------------------------------------------------------------- guide + setup
+$("guideBtn").onclick = $("guideLink").onclick = () => $("guide").showModal();
+if (!store.get("guide:seen")) { store.set("guide:seen", true); setTimeout(() => $("guide").showModal(), 300); }
+
+async function loadSetup() {
+  let d; try { d = await api("/api/setup"); } catch { return; }
+  const missing = d.items.filter((i) => i.required && !i.ok);
+  $("setupPill").textContent = missing.length ? `${missing.length} tool${missing.length > 1 ? "s" : ""} missing` : "✓ Tools ready";
+  $("setupPill").className = "status-pill " + (missing.length ? "bad" : "ok");
+  $("dataDir").textContent = "Data folder: " + d.data_dir;
+  $("setupList").innerHTML = d.items.map((i) => `<li><span class="${i.ok ? "y" : i.required ? "n" : "o"}">${i.ok ? "✓" : i.required ? "✗" : "·"}</span>
+    <b>${esc(i.name)}</b><span class="meta">${esc(i.why)}</span></li>`).join("");
+  $("runSetup").textContent = missing.length ? "Run setup" : "Check again";
+}
+$("setupPill").onclick = () => { loadSetup(); $("setupDlg").showModal(); };
+$("setupDlg").addEventListener("close", async () => {
+  if ($("setupDlg").returnValue !== "run") return;
+  try { await postJSON("/api/jobs", { type: "setup" }); toast("Setup queued - see Runs"); refresh(); } catch (e) { toast(e.message); }
+});
+
+// ---------------------------------------------------------------- segmented controls
+const HELP = {
+  quality: { preview: "Quick look, ~4× faster. Lower resolution.", standard: "Good default. ~120 training steps per frame.",
+             high: "Best result, slowest. More steps and splats." },
+  detail: { auto: "Judged from how much texture COLMAP found.", low: "Smoother, smaller file. Good for plain objects.",
+            normal: "Balanced.", high: "Grows more splats for fine detail. Bigger file." },
+};
+function seg(name) { return document.querySelector(`.seg[data-name="${name}"] button.on`)?.dataset.v; }
+document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  s.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  const name = s.dataset.name; if (HELP[name]) $(name + "Help").textContent = HELP[name][b.dataset.v];
+}));
+$("qualityHelp").textContent = HELP.quality.standard; $("detailHelp").textContent = HELP.detail.auto;
+
+// ---------------------------------------------------------------- choosing / uploading a video
+let chosenVideo = null, videos = [];
+function setChosen(path, name, advice) {
+  chosenVideo = path;
+  $("chosen").hidden = !path; $("dropZone").hidden = !!path; $("pickField").hidden = !!path;
+  $("chosenName").textContent = name || "";
+  $("videoAdvice").hidden = !(path && advice && advice.length);
+  $("videoAdvice").innerHTML = adviceHTML(advice);
+  $("startBtn").disabled = !path; $("startHelp").textContent = path ? "" : "Choose a video first.";
+}
+$("clearVideo").onclick = () => { setChosen(null); $("prevVideo").value = ""; };
+$("dropZone").onclick = () => $("fileInput").click();
+$("fileInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0], "/api/upload", (d) => setChosen(d.video, d.name, d.advice));
+["dragenter", "dragover"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.remove("over"); }));
+$("dropZone").addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) upload(f, "/api/upload", (d) => setChosen(d.video, d.name, d.advice)); });
+$("prevVideo").onchange = (e) => { const v = videos.find((x) => x.path === e.target.value); if (v) setChosen(v.path, v.name, v.advice); };
+
+function upload(file, url, done) {
+  const xhr = new XMLHttpRequest();
+  $("uploading").hidden = false; $("upLabel").textContent = `Uploading ${file.name}…`; $("upBar").style.width = "0";
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) {
+    $("upBar").style.width = (100 * e.loaded / e.total) + "%";
+    $("upLabel").textContent = e.loaded >= e.total ? "Checking the video…" : `Uploading ${file.name} · ${mb(e.loaded)} / ${mb(e.total)}`; } };
+  xhr.onload = () => {
+    $("uploading").hidden = true;
+    let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status >= 300) return toast("Upload failed: " + (d.error || xhr.statusText));
+    done(d); loadVideos(); loadLibrary();
+  };
+  xhr.onerror = () => { $("uploading").hidden = true; toast("Upload failed"); };
+  xhr.open("POST", url);
+  xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  xhr.send(file);
+}
+async function loadVideos() {
+  videos = await api("/api/videos").catch(() => []);
+  $("prevVideo").innerHTML = `<option value="">${videos.length ? "Choose…" : "No uploads yet"}</option>` +
+    videos.map((v) => `<option value="${esc(v.path)}">${esc(v.name)} (${mb(v.size)})</option>`).join("");
+}
+
+// ---------------------------------------------------------------- starting jobs
+$("startBtn").onclick = async () => {
+  const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
+    eval: $("eval").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim() };
+  try { await postJSON("/api/jobs", body); toast("Run queued"); setChosen(null); $("prevVideo").value = ""; refresh(); }
+  catch (e) { toast(e.message); }
+};
+let retrainDir = null;
+function retrain(runDir) { retrainDir = runDir; $("retrainDlg").showModal(); }
+$("retrainDlg").addEventListener("close", async () => {
+  if ($("retrainDlg").returnValue !== "ok") return;
+  try { await postJSON("/api/jobs", { type: "retrain", run_dir: retrainDir, quality: seg("rq"), detail: seg("rd"),
+                                      eval: $("rEval").checked, brush_args: $("rArgs").value.trim() });
+    toast("Training queued"); refresh(); } catch (e) { toast(e.message); }
+});
+async function cancelJob(id) { if (!confirm("Stop this run?")) return; await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }); refresh(); }
+
+// ---------------------------------------------------------------- runs list
+const STAGES = ["Setup", "Frames", "Camera poses", "Training"];
+const open = new Set();
+function stepper(j) {
+  if (j.type === "setup") return "";
+  const st = j.stage ?? -1, first = j.type === "retrain" ? 3 : 0;
+  return `<div class="steps">${STAGES.map((s, i) => {
+    if (i < first) return `<span class="done" style="opacity:.45">${s}</span>`;
+    let c = "";
+    if (j.status === "done" || i < st) c = "done";
+    else if (i === st) c = j.status === "running" ? "now" : ["failed", "interrupted", "cancelled"].includes(j.status) ? "fail" : "";
+    return `<span class="${c}">${s}</span>`; }).join("")}</div>`;
+}
+function runTitle(j) {
+  if (j.type === "setup") return "Setup";
+  const base = (j.video || j.run_dir || "").split("/").pop();
+  return j.type === "retrain" ? `Re-train · ${(j.run_dir || "").split("/")[1] || ""}` : base;
+}
+function runHTML(j) {
+  const running = j.status === "running", qd = j.status === "queued";
+  const o = j.options || {};
+  const tags = [j.source === "cli" ? "command line" : null, o.quality, o.detail && o.detail !== "auto" ? o.detail + " detail" : null,
+                o.eval ? "eval" : null].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join("");
+  const timing = running ? `running ${dur(j.started)}` : qd ? `queued ${ago(j.created)}`
+    : !j.started ? `stopped before starting · ${ago(j.finished || j.created)}`
+    : j.finished ? `took ${dur(j.started, j.finished)} · ${ago(j.finished)}` : ago(j.created);
+  const facts = [j.frames ? `${j.frames} frames` : null, j.registered ? `registered ${j.registered}` : null].filter(Boolean).join(" · ");
+  let now = "";
+  if (running) {
+    const pct = j.step_pct ?? null;
+    now = `<div class="bar ${pct == null ? "indet" : ""}" style="margin-top:4px"><i style="width:${pct ?? 0}%"></i></div>
+      <div class="now-line"><span>${esc(j.stage_label || "Starting")}${j.step_label ? " · " + esc(j.step_label) : ""}${pct != null ? " · " + pct + "%" : ""}
+      ${j.stage === 2 && j.attempt ? `<br>Attempt ${esc(j.attempt)}` : ""}</span>
+      <span>${j.eta ? "left " + esc(j.eta) : ""}${j.eta_worst ? `<br>worst case ${esc(j.eta_worst)}` : ""}</span></div>`;
+  }
+  const splat = j.splat, title = splat ? splatTitle(splat) : "";
+  const canRetrain = !running && !qd && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
+  const actions = [
+    splat ? `<a class="btn small primary" href="${viewerUrl(splat, title)}">View splat</a>` : "",
+    `<div class="row">` +
+      (running || qd ? `<button class="small" onclick="cancelJob('${esc(j.id)}')">Stop</button>` : "") +
+      (canRetrain ? `<button class="small" onclick="retrain('${esc(j.run_dir)}')">Train again</button>` : "") +
+      (j.source === "ui" ? `<button class="small ghost" onclick="toggle('${esc(j.id)}')">Details</button>` : "") +
+    `</div>`].join("");
+  const s = j.summary || {};
+  const breaks = (j.track_breaks || []).map((b) => `${b.when ? b.when + " (" : ""}${b.count} frames${b.when ? ")" : ""}`).join(", ")
+                 || (s.track_breaks || []).join("; ");
+  const kv = [["Run folder", j.run_dir], ["Best model", s.best], ...(s.attempts || []).map((a, i) => [`Attempt ${i + 1}`, a]),
+              ["Track breaks", breaks], ["Brush", s["brush settings"]], ["Splats", (j.splats || []).map((x) => x.split("/").pop()).join(", ")]]
+    .filter(([, v]) => v).map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("");
+  return `<div class="run ${open.has(j.id) ? "open" : ""}" data-id="${esc(j.id)}">
+    <div class="thumb" style="${j.thumb ? `background-image:url('${fileUrl(j.thumb)}')` : ""}"></div>
+    <div style="min-width:0">
+      <div class="head"><span class="name" title="${esc(runTitle(j))}">${esc(runTitle(j))}</span>
+        <span class="pill ${esc(j.status)}">${esc(j.status)}</span>${tags}</div>
+      <div class="meta">${esc(timing)}${facts ? " · " + esc(facts) : ""}</div>
+      ${stepper(j)}${now}
+      ${j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : ""}
+      ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}
+      ${(j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><button class="link" onclick="$('guide').showModal()">Recording guide →</button></div>` : ""}
+    </div>
+    <div class="actions">${actions}</div>
+    <div class="more">${kv ? `<div class="kv">${kv}</div>` : ""}<pre class="log" id="log-${esc(j.id)}">Loading log…</pre></div>
+  </div>`;
+}
+function splatTitle(p) {
+  const parts = p.split("/");
+  if (parts[0] !== "workspace") return parts.pop();
+  return `${parts[1]} · ${parts.pop().replace(/\.ply$/, "").replace(/_\d+$/, "")}`;
+}
+async function toggle(id) { open.has(id) ? open.delete(id) : open.add(id); renderRuns(); if (open.has(id)) loadLog(id); }
+async function loadLog(id) {
+  const el = document.getElementById("log-" + id); if (!el) return;
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  const d = await api(`/api/jobs/${encodeURIComponent(id)}/log`).catch(() => ({ log: "" }));
+  el.textContent = d.log || "(no output yet)";
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+let jobs = [], lastSig = "";
+function renderRuns() {
+  const logs = {}; document.querySelectorAll("pre.log").forEach((p) => logs[p.id] = [p.textContent, p.scrollTop]);
+  $("runs").innerHTML = jobs.length ? jobs.map(runHTML).join("") : `<div class="empty">No runs yet. Upload a video to start.</div>`;
+  for (const [id, [t, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = t; p.scrollTop = s; } }
+  const running = jobs.filter((j) => j.status === "running" && j.source === "ui").length, queued = jobs.filter((j) => j.status === "queued").length;
+  $("queueInfo").textContent = running || queued ? `${running} running · ${queued} queued` : "";
+}
+async function refresh() {
+  try { jobs = await api("/api/jobs"); } catch { return; }
+  const sig = JSON.stringify(jobs.map((j) => [j.id, j.status, j.splat]));
+  renderRuns();
+  open.forEach((id) => loadLog(id));
+  if (sig !== lastSig) { if (lastSig && jobs.some((j) => j.type === "setup" && j.status === "done")) loadSetup(); lastSig = sig; loadLibrary(); }
+}
+
+// ---------------------------------------------------------------- library
+async function loadLibrary() {
+  const items = await api("/api/splats").catch(() => []);
+  $("lib").innerHTML = items.length ? items.map((s) => `<div class="tile" data-path="${esc(s.path)}">
+      <a class="img" href="${viewerUrl(s.path, s.title)}" style="${s.thumb ? `background-image:url('${fileUrl(s.thumb)}')` : ""}">${s.thumb ? "" : "3D splat"}</a>
+      <div class="body"><b title="${esc(s.path)}">${esc(s.title)}</b>
+        <span class="meta">${mb(s.size)} · ${ago(s.mtime)}${s.source === "imported" ? " · imported" : ""}</span></div>
+      <div class="acts"><a class="btn small primary" href="${viewerUrl(s.path, s.title)}">View</a>
+        <a class="btn small" href="${fileUrl(s.path)}?download=1">Download</a>
+        <a class="btn small" href="/api/export?${new URLSearchParams({ file: s.path, title: s.title })}" title="Self-contained viewer website (zip)">Website</a></div>
+    </div>`).join("") : `<div class="empty" style="grid-column:1/-1">Trained splats and imported files appear here.</div>`;
+}
+$("importBtn").onclick = () => $("importInput").click();
+$("importInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0], "/api/import", (d) => toast(`Imported ${d.name}`));
+
+loadSetup(); loadVideos(); refresh(); loadLibrary();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

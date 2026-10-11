@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat Viewer</title>
+<style>
+  :root {
+    --bg: #0d0f12; --panel: rgba(20, 23, 28, .82); --line: rgba(255,255,255,.09);
+    --text: #e9ecef; --muted: #98a0aa; --accent: #ff7a3d; --accent-ink: #1a0d05;
+  }
+  :root[data-bg="light"] { --bg: #eef0f2; --panel: rgba(255,255,255,.86); --line: rgba(0,0,0,.08);
+    --text: #15181c; --muted: #5d6570; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; touch-action: none; }
+  .bar { position: fixed; left: 16px; right: 16px; display: flex; gap: 8px; align-items: center;
+    pointer-events: none; z-index: 2; }
+  .bar > * { pointer-events: auto; }
+  .top { top: 16px; justify-content: space-between; }
+  .bottom { bottom: 16px; justify-content: center; flex-wrap: wrap; }
+  .chip { background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .title { display: flex; flex-direction: column; min-width: 0; max-width: 60vw; }
+  .title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .title span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .group { display: flex; gap: 2px; padding: 4px; }
+  button { appearance: none; border: 0; background: transparent; color: var(--text); font: inherit;
+    padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  button:hover { background: var(--line); }
+  button.on { background: var(--accent); color: var(--accent-ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  a.back { color: var(--text); text-decoration: none; }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: center; z-index: 3; pointer-events: none; }
+  #overlay .box { text-align: center; min-width: 240px; }
+  .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .err { color: #ff8a80; max-width: 520px; white-space: pre-wrap; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .app-only { display: none; }
+  body.app .app-only { display: flex; }
+  @media (max-width: 640px) { .hide-sm { display: none; } .bottom { left: 8px; right: 8px; bottom: 8px; } }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/",
+    "@sparkjsdev/spark": "./vendor/spark/spark.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<div class="bar top">
+  <div class="chip title"><b id="title">Loading…</b><span id="stats">&nbsp;</span></div>
+  <div class="chip group app-only">
+    <a class="back" href="/"><button>← Studio</button></a>
+  </div>
+</div>
+
+<div class="bar bottom">
+  <div class="chip group">
+    <button id="reset" title="Reset view (R)">Reset view</button>
+    <button id="spin" title="Auto-rotate (A)">Auto-rotate</button>
+  </div>
+  <div class="chip group" title="Fix the orientation if the model is sideways or upside down">
+    <button id="flip">Flip</button>
+    <button id="rotx">Tilt 90°</button>
+    <button id="rotz" class="hide-sm">Roll 90°</button>
+  </div>
+  <div class="chip group">
+    <button id="bg">Light</button>
+    <button id="full" class="hide-sm">Fullscreen</button>
+  </div>
+  <div class="chip group app-only">
+    <button id="save" title="Remember this orientation for this file">Save orientation</button>
+    <button id="download">Download</button>
+    <button id="export" class="primary" title="Download a self-contained viewer website for this splat">Export website</button>
+  </div>
+</div>
+
+<div id="overlay"><div class="box chip"><div id="msg">Loading splat…</div>
+  <div class="progress"><i id="prog"></i></div><div class="hint" id="sub">&nbsp;</div></div></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const appMode = params.has("file");
+if (appMode) document.body.classList.add("app");
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------------------------------------------------------------- config
+async function loadConfig() {
+  if (appMode) {
+    const file = params.get("file");
+    return { url: "/files/" + file.split("/").map(encodeURIComponent).join("/"), file,
+             title: params.get("title") || file.split("/").pop(),
+             rotation: store.get("rot:" + file) };
+  }
+  const r = await fetch("viewer-config.json");
+  if (!r.ok) throw new Error("viewer-config.json not found next to this page");
+  const c = await r.json();
+  return { url: c.file, file: c.file, title: c.title || c.file, rotation: c.rotation };
+}
+
+// ---------------------------------------------------------------- scene
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 1000);
+const spark = new SparkRenderer({ renderer });
+scene.add(spark);
+const holder = new THREE.Group();          // orientation lives here, so the splat itself stays untouched
+scene.add(holder);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotateSpeed = 1.2;
+
+function applyBackground() {
+  const light = document.documentElement.dataset.bg === "light";
+  renderer.setClearColor(light ? 0xeef0f2 : 0x0d0f12, 1);
+  $("bg").textContent = light ? "Dark" : "Light";
+}
+document.documentElement.dataset.bg = store.get("viewer:bg") || "dark";
+applyBackground();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+// ---------------------------------------------------------------- loading
+async function fetchWithProgress(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
+  const total = +res.headers.get("Content-Length") || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total) { $("prog").style.width = (100 * got / total).toFixed(1) + "%"; }
+    $("sub").textContent = `${(got / 1e6).toFixed(1)}${total ? " / " + (total / 1e6).toFixed(1) : ""} MB`;
+  }
+  const out = new Uint8Array(got); let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+// Brush writes the scene's estimated up direction into the PLY header:
+//   comment Vertical axis: x y z
+function upAxisFromPly(bytes) {
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(bytes.length, 65536)));
+  const end = head.indexOf("end_header");
+  if (!head.startsWith("ply") || end < 0) return null;
+  const m = head.slice(0, end).match(/comment\s+Vertical axis:\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/);
+  if (!m) return null;
+  const v = new THREE.Vector3(+m[1], +m[2], +m[3]);
+  return v.lengthSq() > 1e-8 ? v.normalize() : null;
+}
+
+let mesh, cfg, defaultQuat = new THREE.Quaternion(), fit = null;
+
+// Frame the camera on the bulk of the splats (ignoring stray floaters) after rotation.
+function computeFit() {
+  holder.updateMatrixWorld(true);
+  const m = holder.matrixWorld, n = mesh.numSplats || 0;
+  const stride = Math.max(1, Math.floor(n / 150000));
+  const xs = [], ys = [], zs = [], p = new THREE.Vector3();
+  mesh.forEachSplat((i, center, _s, _q, opacity) => {
+    if (i % stride || opacity < 0.15) return;
+    p.copy(center).applyMatrix4(m);
+    xs.push(p.x); ys.push(p.y); zs.push(p.z);
+  });
+  if (xs.length < 10) {
+    const box = mesh.getBoundingBox(true).applyMatrix4(m);
+    return { center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()).length() || 1 };
+  }
+  const pct = (a, q) => { a.sort((x, y) => x - y); return a[Math.floor(q * (a.length - 1))]; };
+  const lo = new THREE.Vector3(pct(xs, .03), pct(ys, .03), pct(zs, .03));
+  const hi = new THREE.Vector3(pct(xs, .97), pct(ys, .97), pct(zs, .97));
+  return { center: lo.clone().add(hi).multiplyScalar(.5), size: hi.clone().sub(lo).length() || 1 };
+}
+
+function resetView() {
+  fit = computeFit();
+  const { center, size } = fit;
+  camera.near = size / 500; camera.far = size * 50; camera.updateProjectionMatrix();
+  const dist = size * 0.95 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.55;
+  camera.position.copy(center).add(new THREE.Vector3(0.0, 0.32, 1).normalize().multiplyScalar(dist));
+  controls.target.copy(center);
+  controls.minDistance = size * 0.05; controls.maxDistance = size * 8;
+  controls.update();
+}
+
+function rotateBy(axis, deg) {
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(deg));
+  holder.quaternion.premultiply(q);
+  resetView();
+}
+
+async function main() {
+  cfg = await loadConfig();
+  document.title = cfg.title + " – Splat Viewer";
+  $("title").textContent = cfg.title;
+  const bytes = await fetchWithProgress(cfg.url);
+  $("msg").textContent = "Decoding…"; $("sub").textContent = "";
+  const up = upAxisFromPly(bytes);
+  if (up) defaultQuat.setFromUnitVectors(up, new THREE.Vector3(0, 1, 0));
+  else defaultQuat.set(1, 0, 0, 0);       // COLMAP-style data is usually y-down: flip by default
+  mesh = new SplatMesh({ fileBytes: bytes, fileName: cfg.file });
+  holder.add(mesh);
+  await mesh.initialized;
+  if (Array.isArray(cfg.rotation) && cfg.rotation.length === 4) holder.quaternion.fromArray(cfg.rotation);
+  else holder.quaternion.copy(defaultQuat);
+  resetView();
+  // read-only status, used by the automated tests
+  window.splatViewer = {
+    numSplats: () => mesh.numSplats || 0,
+    worldUp: () => (up || new THREE.Vector3(0, -1, 0)).clone().applyQuaternion(holder.quaternion).toArray(),
+    fitSize: () => fit.size,
+    orbit: (deg) => {                       // turn the camera around the object (used to film demos)
+      const off = camera.position.clone().sub(controls.target);
+      off.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(deg));
+      camera.position.copy(controls.target).add(off); controls.update();
+    },
+  };
+  const n = mesh.numSplats || 0;
+  $("stats").textContent = `${n.toLocaleString()} splats · ${(bytes.length / 1e6).toFixed(1)} MB`
+    + (up ? "" : " · no up-axis info, flipped by default");
+  $("overlay").style.display = "none";
+}
+
+// ---------------------------------------------------------------- controls
+$("reset").onclick = () => mesh && resetView();
+$("spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("spin").classList.toggle("on", controls.autoRotate); };
+$("flip").onclick = () => mesh && rotateBy(new THREE.Vector3(1, 0, 0), 180);
+$("rotx").onclick = () => mesh && rotateBy(new THREE.Vector3(1, 0, 0), 90);
+$("rotz").onclick = () => mesh && rotateBy(new THREE.Vector3(0, 0, 1), 90);
+$("bg").onclick = () => {
+  const d = document.documentElement;
+  d.dataset.bg = d.dataset.bg === "light" ? "dark" : "light";
+  store.set("viewer:bg", d.dataset.bg); applyBackground();
+};
+$("full").onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
+$("save").onclick = () => {
+  store.set("rot:" + cfg.file, holder.quaternion.toArray());
+  $("save").textContent = "Saved ✓"; setTimeout(() => ($("save").textContent = "Save orientation"), 1500);
+};
+$("download").onclick = () => { location.href = cfg.url + "?download=1"; };
+$("export").onclick = () => {
+  const q = new URLSearchParams({ file: cfg.file, title: cfg.title, rotation: JSON.stringify(holder.quaternion.toArray()) });
+  location.href = "/api/export?" + q;
+};
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "r" || e.key === "R") $("reset").click();
+  if (e.key === "a" || e.key === "A") $("spin").click();
+});
+
+main().catch((e) => {
+  console.error(e);
+  $("msg").innerHTML = `<div class="err">${String(e.message || e)}</div>`;
+  $("prog").parentElement.style.display = "none";
+});
+</script>
+</body>
+</html>

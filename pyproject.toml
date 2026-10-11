@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "splat-studio"
+dynamic = ["version"]
+description = "Turn a phone video into a 3D Gaussian splat on your own computer: ffmpeg + COLMAP + Brush, with a local web UI and viewer."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["gaussian-splatting", "3dgs", "colmap", "photogrammetry", "brush", "nerf", "3d-scanning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Environment :: Web Environment",
+]
+# No runtime Python dependencies: the app uses only the standard library.
+dependencies = []
+
+[project.optional-dependencies]
+blur = ["opencv-python-headless"]           # drops blurry frames during extraction
+browser-tests = ["playwright"]              # tests/integration/test_web_ui.py
+
+[project.scripts]
+splat-studio = "splat_studio.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "splat_studio.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+splat_studio = ["static/*.html", "static/vendor/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

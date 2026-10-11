@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest,  python: "3.12" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install ffmpeg
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install ffmpeg; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+      - name: Unit tests
+        run: python -m unittest discover -s tests/unit -t . -v
+      - name: Integration tests (real ffmpeg, stand-in COLMAP and Brush)
+        run: python -m unittest discover -s tests/integration -t . -v
+
+  browser:
+    name: web UI in a real browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - run: python -m unittest tests.integration.test_web_ui -v
