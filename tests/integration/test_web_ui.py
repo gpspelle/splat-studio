@@ -412,6 +412,58 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
         self.assertTrue(dl.value.suggested_filename.endswith("_compare.zip"))
         self.assertEqual(self.errors, [])
 
+    def test_turn_each_model_on_its_own(self):
+        self.page.set_viewport_size({"width": 1000, "height": 560})
+        self.open_studio()
+        self.import_two()
+        self.open_compare()
+        cv = "window.compareViewer"
+        q = lambda i: self.page.evaluate(f"{cv}.modelQuat({i})")
+        view = lambda i: self.page.evaluate(f"{cv}.view({i})")
+        close = lambda a, b: max(abs(x - y) for x, y in zip(a, b)) < 1e-3
+        a0, b0, cam0 = q(0), q(1), view(0)
+        bar = self.page.get_by_test_id("model-bar-a")
+        bar.locator(".right").click()
+        bar.locator(".right").click()
+        self.assertFalse(close(q(0), a0))                                  # A turned...
+        self.assertTrue(close(q(1), b0))                                   # ...B didn't
+        self.assertTrue(close(view(0), cam0))                              # and the camera stayed put
+        self.assertTrue(self.page.evaluate(f"{cv}.linked()"))              # cameras still linked
+        # "Turn model" is on for both at first: dragging turns the model, not the camera
+        for L, i in (("a", 0), ("b", 1)):
+            self.assertEqual(self.page.get_attribute(f"[data-testid=turn-{L}]", "aria-checked"), "true")
+            self.assertEqual(self.page.get_attribute(f"[data-testid=turn-{L}]", "role"), "switch")
+        box = self.page.get_by_test_id("pane-b").bounding_box()
+        cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+        def drag():
+            self.page.mouse.move(cx, cy)
+            self.page.mouse.down()
+            self.page.mouse.move(cx + 120, cy + 20, steps=6)
+            self.page.mouse.up()
+            self.page.wait_for_timeout(300)
+
+        cam_b = view(1)
+        drag()
+        self.assertFalse(close(q(1), b0))
+        self.assertTrue(close(view(1), cam_b))
+        # switched off, the model is locked: a drag turns neither the model nor the camera
+        self.page.get_by_test_id("turn-b").click()
+        self.assertEqual(self.page.get_attribute("[data-testid=turn-b]", "aria-checked"), "false")
+        locked_q, locked_cam = q(1), view(1)
+        drag()
+        self.assertTrue(close(q(1), locked_q))
+        self.assertTrue(close(view(1), locked_cam))
+        # Reset puts a model back; Save view remembers both for the viewer
+        self.page.get_by_test_id("orig-b").click()
+        self.assertTrue(close(q(1), b0))
+        self.page.get_by_test_id("compare-save").click()
+        saved = self.page.evaluate("JSON.parse(localStorage.getItem('rot:imports/vase.ply'))")
+        self.assertTrue(close(saved, q(0)))
+        self.page.wait_for_timeout(600)
+        self.shot("compare-turn")
+        self.assertEqual(self.errors, [])
+
     def test_compare_stacks_on_phones(self):
         self.page.set_viewport_size({"width": 390, "height": 760})
         self.open_studio()
@@ -420,6 +472,10 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
         a, b = (self.page.get_by_test_id(t).bounding_box() for t in ("pane-a", "pane-b"))
         self.assertLess(a["y"] + a["height"], b["y"] + 5)                # one above the other
         self.assertGreater(a["width"], 380)
+        bar = self.page.get_by_test_id("model-bar-b").bounding_box()      # turn controls fit in their pane
+        self.assertLessEqual(bar["x"] + bar["width"], b["x"] + b["width"])
+        self.assertGreaterEqual(bar["y"], b["y"])
+        self.shot("compare-phone")
         self.assertEqual(self.errors, [])
 
     def test_exported_comparison_site_works_standalone(self):

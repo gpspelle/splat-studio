@@ -241,6 +241,16 @@ seen alike. **Linked cameras** toggles this (key `L`). **Export website** downlo
 comparison website that works like the single-splat one (`index.html`, `compare-config.json`,
 `model_a.ply`, `model_b.ply`, `vendor/`). Orientation and crop saved in the viewer are used.
 
+Each model can also be turned on its own, for example to face both objects the same way.
+The bar under each model's name turns only that model: **↺ 15°** and **↻ 15°** turn it left
+or right, **Flip** and **Tilt 90°** fix a model that opened upside down or on its side, and
+**Reset** puts it back. **Turn model** is a switch, on for both models when the comparison
+opens: while it's on, dragging in that view turns that model; switch it off to lock the model
+so dragging can't turn it. The mouse wheel still zooms and right-drag pans, and the cameras
+stay linked while you do this.
+**Save view** remembers how both models are turned, and the viewer opens them that way too;
+**Export website** keeps it in the exported comparison.
+
 ## Putting a splat on your website
 
 **Export website** (in the viewer or the library) downloads a zip:
@@ -312,7 +322,10 @@ Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca 
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
 sem mesa nem ambiente, use **Remover fundo**. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
-exportada como site.
+exportada como site. A barra embaixo do nome de cada modelo gira só aquele modelo (**↺ 15°**,
+**↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,
+ligado nos dois ao abrir: ligado, arrastar na vista gira o modelo; desligado, o modelo fica
+travado e arrastar não o gira. **Salvar vista** lembra como os dois estão girados.
 
 Execuções terminadas viram uma linha só no Estúdio (com o erro, se houver) e as mais antigas
 vão para a página **Histórico**, agrupadas por dia, com busca e filtro. **Tirar da lista** apaga
