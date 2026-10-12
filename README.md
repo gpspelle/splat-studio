@@ -111,6 +111,12 @@ The app has two main pages. The **Studio** (`/`) shows your runs and your splat 
 **New run** (`/new`) is where you choose a video and its settings: quality, detail, what to
 keep, and the options. Starting a run takes you back to the Studio to follow it.
 
+To process several videos, drop or pick them all on **New run**. Each one is listed with its
+checks (remove any with **Remove**). **Start N runs** queues one run per video with the same
+settings, run one after another. With several videos, everything the camera saw is trained;
+to choose what to keep, start them one at a time. **Save these settings as defaults** makes
+New run start from the current settings next time.
+
 ![New run: the video on the left, the settings on the right](docs/images/new-run.png)
 
 ### Runs
@@ -398,7 +404,9 @@ NVIDIA GPU: on a Mac, Docker can't use the Apple GPU.
 O Splat Studio transforma um vídeo de celular em um splat gaussiano 3D no seu próprio Mac e
 gera um site para mostrá-lo. A interface está em inglês e português: escolha o idioma no menu
 no canto superior direito. O **Estúdio** mostra suas execuções e a biblioteca de splats; em
-**Nova execução** você escolhe o vídeo e as configurações e inicia a execução.
+**Nova execução** você escolhe o vídeo e as configurações e inicia a execução. Para vários vídeos,
+solte todos de uma vez: **Iniciar N execuções** coloca uma execução por vídeo na fila, com as mesmas
+configurações, e **Salvar estas configurações como padrão** as guarda para a próxima vez.
 
 ```bash
 git clone https://github.com/gpspelle/splat-studio.git

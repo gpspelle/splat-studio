@@ -9,6 +9,11 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Batch queue for many videos** ([#14](https://github.com/gpspelle/splat-studio/issues/14)). New run
+  accepts several videos at once (drop, choose or add earlier uploads), each listed with its checks
+  and a **Remove** button. **Start N runs** queues one run per video with the same settings. With
+  several videos, *What to keep* is Everything. **Save these settings as defaults** remembers
+  quality, detail, options and advanced settings for new visits.
 - **Turntable video** ([#13](https://github.com/gpspelle/splat-studio/issues/13)). The viewer records
   the model turning a full circle from the current view and downloads it as MP4 or GIF (6 or 10 s,
   square or wide). Frames are rendered at a fixed step and sent as JPEGs; ffmpeg encodes them
