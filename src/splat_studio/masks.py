@@ -211,38 +211,115 @@ def disc_mask(w: int, h: int, points: list[list]) -> list[bytes]:
     return rows
 
 
-def run_disc(frames: list[Path], objects: dict[int, dict], out: Path, progress=print) -> None:
+def run_disc(frames: list[Path], objects: dict[int, dict], out: Path, progress=print,
+             segments: dict[int, list] | None = None) -> None:
     """Disc backend, one object at a time: the latest prompted frame's clicks apply to every
-    frame after it. With several objects, each goes to objects/<id>/ and the union to out/."""
+    frame after it. With several objects, each goes to objects/<id>/ and the union to out/.
+    With `segments` ({object: [(first, last), ...]} frame indexes), only those frames are redone."""
     multi = len(objects) > 1
-    total, step = len(frames) * len(objects), 0
-    union: dict[str, bytearray] = {}
+    todo = {oid: (sorted({i for lo, hi in segments.get(oid, []) for i in range(lo, hi + 1)}) if segments is not None
+                  else list(range(len(frames)))) for oid in objects}
+    total, step = sum(len(v) for v in todo.values()), 0
+    names = [f.name for f in frames]
     for oid, prompts in objects.items():
         dest = out / "objects" / str(oid) if multi else out
-        order = sorted(prompts, key=lambda n: [f.name for f in frames].index(n))
-        for f in frames:
+        order = sorted(prompts, key=names.index)
+        for i in todo[oid]:
+            f = frames[i]
             before = [n for n in order if n <= f.name] or order[:1]
             w, h = jpeg_size(f)
             rows = disc_mask(w, h, prompts[before[-1]]) if before else [bytes(w)] * h
             write_png_gray(dest / (f.stem + ".png"), w, h, rows)
-            if multi:
-                u = union.setdefault(f.name, bytearray(w * h))
-                for y, r in enumerate(rows):
-                    if any(r):
-                        u[y * w:(y + 1) * w] = bytes(a | b for a, b in zip(u[y * w:(y + 1) * w], r))
             step += 1
             progress(f"    Masking frames [{step}/{total}]")
-    for f in frames if multi else []:
-        w, h = jpeg_size(f)
-        u = union[f.name]
+    if multi:
+        write_union([frames[i] for i in sorted({i for v in todo.values() for i in v})],
+                    [out / "objects" / str(oid) for oid in objects], out)
+
+
+def write_union(frames: list[Path], dirs: list[Path], out: Path) -> None:
+    """masks/<frame>.png = every object's mask together (what training keeps)."""
+    for f in frames:
+        u, w, h = None, 0, 0
+        for d in dirs:
+            w, h, rows = read_png_gray(d / (f.stem + ".png"))
+            flat = b"".join(rows)
+            u = bytearray(flat) if u is None else bytearray(a | b for a, b in zip(u, flat))
         write_png_gray(out / (f.stem + ".png"), w, h, [bytes(u[y * w:(y + 1) * w]) for y in range(h)])
 
 
-def run_sam2(frames: list[Path], objects: dict[int, dict], out: Path, python: Path) -> int:
+def read_png_gray(path: Path) -> tuple[int, int, list[bytes]]:
+    """(width, height, rows) of an 8-bit greyscale PNG (any row filter)."""
+    data = Path(path).read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"not a PNG: {path}")
+    w, h, depth, ctype = struct.unpack(">IIBB", data[16:26])
+    if depth != 8 or ctype != 0:
+        raise ValueError(f"{path.name}: only 8-bit greyscale masks are supported")
+    i, idat = 8, b""
+    while i < len(data):
+        n = struct.unpack(">I", data[i:i + 4])[0]
+        if data[i + 4:i + 8] == b"IDAT":
+            idat += data[i + 8:i + 8 + n]
+        i += 12 + n
+    raw, rows, prev = zlib.decompress(idat), [], bytearray(w)
+    for y in range(h):
+        f, line = raw[y * (w + 1)], bytearray(raw[y * (w + 1) + 1:(y + 1) * (w + 1)])
+        for x in range(w):
+            a = line[x - 1] if x else 0
+            b, c = prev[x], (prev[x - 1] if x else 0)
+            if f == 1:
+                line[x] = (line[x] + a) & 255
+            elif f == 2:
+                line[x] = (line[x] + b) & 255
+            elif f == 3:
+                line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(bytes(line))
+        prev = line
+    return w, h, rows
+
+
+def update_segments(names: list[str], prompts: dict, changed: list[str], ids: list[int]) -> dict[int, list[tuple[int, int]]]:
+    """Which frames to redo after clicks changed on some frames: for each object clicked on a
+    changed frame (every object, for a frame with only "leave out" clicks or none left), from
+    the previous frame that object was clicked on to the next one. {object: [(first, last)]}."""
+    idx = {n: i for i, n in enumerate(names)}
+    segs: dict[int, list[tuple[int, int]]] = {}
+    for c in changed:
+        if c not in idx:
+            continue
+        ci = idx[c]
+        hit = sorted({p[2] for p in prompts.get(c, []) if p[2] >= 1}) or list(ids)
+        for oid in hit:
+            anchors = sorted(idx[n] for n, ps in prompts.items() if n in idx and any(p[2] == oid for p in ps))
+            if not anchors:
+                continue
+            lo = max([a for a in anchors if a < ci], default=0)
+            hi = min([a for a in anchors if a > ci], default=len(names) - 1)
+            segs.setdefault(oid, []).append((lo, hi))
+    for oid, lst in segs.items():                      # merge overlapping ranges
+        merged: list[tuple[int, int]] = []
+        for lo, hi in sorted(lst):
+            if merged and lo <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        segs[oid] = merged
+    return segs
+
+
+def run_sam2(frames: list[Path], objects: dict[int, dict], out: Path, python: Path,
+             segments: dict[int, list] | None = None) -> int:
     """SAM 2 in its own environment; its progress lines go straight to our output."""
     job = out / "job.json"
-    job.write_text(json.dumps({"frames": [str(f) for f in frames], "objects": {str(k): v for k, v in objects.items()},
-                               "out": str(out), "checkpoint": str(SAM2_DIR / SAM2_CHECKPOINT), "config": SAM2_CONFIG}))
+    data = {"frames": [str(f) for f in frames], "objects": {str(k): v for k, v in objects.items()},
+            "out": str(out), "checkpoint": str(SAM2_DIR / SAM2_CHECKPOINT), "config": SAM2_CONFIG}
+    if segments is not None:
+        data["segments"] = {str(k): [list(r) for r in v] for k, v in segments.items()}
+    job.write_text(json.dumps(data))
     env = child_env({"PYTORCH_ENABLE_MPS_FALLBACK": "1"})
     return subprocess.run([str(python), "-u", "-m", "splat_studio.maskwork", "propagate", str(job)], env=env).returncode
 
@@ -359,6 +436,53 @@ def make_masks(frames_dir: Path, prompts: dict, which: str | None = None, object
     return out
 
 
+def can_update(frames_dir: Path, prompts: dict) -> bool:
+    """A finished selection with the same objects: changed frames can be redone on their own."""
+    names = [f.name for f in frame_list(frames_dir)]
+    ids = object_ids(normalise_prompts(prompts, names))
+    return bool(ids) and has_masks(frames_dir) and ([o["id"] for o in load_objects(frames_dir)] or [1]) == ids
+
+
+def update_masks(frames_dir: Path, prompts: dict, changed: list[str], which: str | None = None,
+                 objects: list | None = None) -> Path:
+    """After clicks changed on a few frames, redo only the frames around them (see
+    update_segments); every other frame keeps its mask. Needs a finished selection with the
+    same objects; otherwise use make_masks."""
+    frames_dir = Path(frames_dir)
+    frames = frame_list(frames_dir)
+    names = [f.name for f in frames]
+    prompts = normalise_prompts(prompts, names)
+    ids = object_ids(prompts)
+    if not ids:
+        raise ValueError("click the object at least once (a keep point)")
+    if not can_update(frames_dir, prompts):
+        raise ValueError("the objects changed since the last Apply: apply to all frames")
+    objects = normalise_objects(objects, ids)
+    which = which or backend()
+    if which is None:
+        raise RuntimeError("the selection tool isn't installed. Run: splat-studio setup --masking")
+    changed = [c for c in dict.fromkeys(changed) if c in names]
+    segs = update_segments(names, prompts, changed, ids)
+    out = masks_dir(frames_dir)
+    (out / "done.json").unlink(missing_ok=True)
+    (out / "prompts.json").write_text(json.dumps(prompts, indent=1))
+    (out / "objects.json").write_text(json.dumps(objects, indent=1))
+    per_object = {oid: points_for(prompts, oid) for oid in ids}
+    n = len({i for v in segs.values() for lo, hi in v for i in range(lo, hi + 1)})
+    say(f"==> Updating the selection: {len(changed)} changed frame(s), {n} of {len(frames)} frames to redo, {which}")
+    if segs:
+        if which == "disc":
+            run_disc(frames, per_object, out, segments=segs)
+        else:
+            py = sam2_python()
+            if py is None or run_sam2(frames, per_object, out, py, segments=segs) != 0:
+                raise RuntimeError("SAM 2 failed - see its output above")
+    (out / "done.json").write_text(json.dumps({"frames": len(frames), "backend": which, "objects": len(ids),
+                                               "updated": n}))
+    say(f"Masks: {out}")                                  # parsed by the web UI
+    return out
+
+
 # ---------------------------------------------------------------- masks for training
 
 def prepare_for_dense(frames_dir: Path, ws: Path, mode: str = "transparent") -> int:
@@ -434,8 +558,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--backend", choices=["sam2", "disc"], help="default: SAM 2 if installed")
     a = ap.parse_args(argv)
     try:
-        points, objects = split_prompt_file(json.loads(a.prompts.read_text()))
-        make_masks(a.frames, points, a.backend, objects)
+        data = json.loads(a.prompts.read_text())
+        points, objects = split_prompt_file(data)
+        changed = (data.get("changed") if isinstance(data, dict) else None) or []
+        if changed and can_update(a.frames, points):     # only the frames around changed clicks
+            update_masks(a.frames, points, changed, a.backend, objects)
+        else:
+            make_masks(a.frames, points, a.backend, objects)
     except (OSError, ValueError, RuntimeError) as e:
         sys.exit(f"Couldn't make the masks: {e}")
 

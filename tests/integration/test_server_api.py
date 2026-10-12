@@ -296,6 +296,17 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertTrue(info["masks_done"])
         self.assertEqual(info["prompts"], {first: [[0.5, 0.5, 1], [0.9, 0.1, 0]]})
 
+        # a slipped frame: one more click there redoes only the frames around it (#11)
+        later, last = info["frames"][10], info["frames"][15]
+        _, job = self.json("POST", "/api/jobs", {"type": "mask", "video": up["video"], "changed": [later, "nope.jpg"],
+                                                 "prompts": {first: [[0.5, 0.5, 1], [0.9, 0.1, 0]], later: [[0.4, 0.5, 1]],
+                                                             last: [[0.5, 0.5, 1]]}})
+        self.assertEqual(self.wait_done(job["id"])["status"], "done")
+        _, log = self.json("GET", f"/api/jobs/{job['id']}/log")
+        self.assertIn(f"1 changed frame(s), 16 of {len(info['frames'])} frames to redo", log["log"])   # frames 0-15
+        _, info = self.json("GET", f"/api/frames?{q}")
+        self.assertTrue(info["masks_done"])
+
         _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
                                                  "frames": 24, "masks": True})
         done = self.wait_done(job["id"])

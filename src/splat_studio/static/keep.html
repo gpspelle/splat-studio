@@ -126,8 +126,9 @@
       </div>
       <div class="step" id="step3">
         <h3><span class="n">3</span><span data-i18n="keep.s3">Follow through the video</span></h3>
-        <p data-i18n="keep.s3.text">Applies your clicks to every frame. Scrub through afterwards and fix any frame where it slipped.</p>
-        <button class="primary wide-btn" id="applyBtn" data-testid="keep-apply" disabled data-i18n="keep.s3.button">Apply to all frames</button>
+        <p data-i18n="keep.s3.text">Applies your clicks to every frame. If a frame slipped, add a click there: Update redoes only the frames around it.</p>
+        <button class="primary wide-btn" id="updateBtn" data-testid="keep-update" hidden style="margin-bottom:var(--s-2)"></button>
+        <button class="primary wide-btn" id="applyBtn" data-testid="keep-apply" disabled>Apply to all frames</button>
         <div class="bar" id="applyBar" hidden><i></i></div>
         <div class="meta status" id="applyStatus"></div>
       </div>
@@ -176,7 +177,10 @@ function frameName(i = idx) { return info?.frames?.[i]; }
 function pointsOn(name = frameName()) { return prompts[name] || []; }
 function totalClicks() { return Object.values(prompts).reduce((n, p) => n + p.length, 0); }
 function hasKeep() { return Object.values(prompts).some((p) => p.some((q) => q[2] >= 1)); }
-function save() { store.set(storeKey, { prompts, objects }); }
+let changed = new Set(), appliedIds = [], applying = false;  // after an Apply: frames whose clicks changed since, and the objects it had
+function save() { store.set(storeKey, { prompts, objects, changed: [...changed] }); }
+function sameIds(a, b) { return a.length === b.length && [...a].sort().every((v, i) => v === [...b].sort()[i]); }
+function canUpdate() { return appliedIds.length > 0 && changed.size > 0 && sameIds(appliedIds, clickedIds()); }
 function objName(o) { return o.name || t("keep.objs.default", { n: o.id }); }
 function objColor(id) { return getCss("--obj-" + (((id - 1) % 6) + 1)); }
 function clickedIds() { return [...new Set(Object.values(prompts).flat().filter((p) => p[2] >= 1).map((p) => p[2]))]; }
@@ -249,7 +253,8 @@ function showFrame(i) {
   $("frameInfo").textContent = t("keep.frameOf", { n: idx + 1, total: info.frames.length });
   img.onload = draw;
   img.src = fileUrl(info.frames_dir + "/" + name);
-  if (showFinal && !maskCache.has(name)) loadMasks(name, finalMasks(name));
+  if (changed.has(name) && !maskCache.has(name)) { clearTimeout(previewTimer); previewTimer = setTimeout(previewNow, 50); }
+  else if (showFinal && !maskCache.has(name)) loadMasks(name, finalMasks(name));
   draw();
   renderStatus();
 }
@@ -270,6 +275,13 @@ function renderStatus() {
   $("clickStatus").textContent = totalClicks() ? t("keep.s2.count", { clicks: totalClicks(), frames: nFrames }) : "";
   $("step2").classList.toggle("done", hasKeep());
   $("applyBtn").disabled = !hasKeep() || !info?.backend || !frames;
+  const upd = canUpdate();
+  $("updateBtn").hidden = !upd;
+  $("updateBtn").disabled = !info?.backend;
+  $("updateBtn").textContent = t("keep.s3.update", { n: changed.size });
+  $("applyBtn").classList.toggle("primary", !upd);
+  $("applyBtn").textContent = appliedIds.length ? t("keep.s3.again") : t("keep.s3.button");
+  if (appliedIds.length && changed.size && !upd && !applying) $("applyStatus").textContent = t("keep.s3.objectsChanged");
   $("step3").classList.toggle("done", masksDone);
   if (masksDone) { $("useBtn").href = backUrl(true); $("useBtn").removeAttribute("aria-disabled"); }
   else { $("useBtn").removeAttribute("href"); $("useBtn").setAttribute("aria-disabled", "true"); }
@@ -289,7 +301,9 @@ canvas.addEventListener("pointerdown", (e) => {
   edited();
 });
 function edited() {
-  save(); masksDone = false; showFinal = false;
+  if (appliedIds.length) changed.add(frameName());   // the other frames keep their masks
+  else showFinal = false;
+  save(); masksDone = false;
   if (multi) renderObjects();
   maskCache.delete(frameName());
   draw(); renderStatus();
@@ -408,12 +422,27 @@ $("applyBtn").onclick = async () => {
     const used = clickedIds();
     const job = await postJSON("/api/jobs", { type: "mask", video, prompts,
       objects: objects.filter((o) => used.includes(o.id)).map((o) => ({ id: o.id, name: objName(o) })) });
-    $("applyBtn").disabled = true;
+    $("applyBtn").disabled = true; applying = true;
     watch(job, $("applyStatus"), $("applyBar"), () => {
       masksDone = true; showFinal = true; maskCache.clear();
+      changed.clear(); appliedIds = used; save();
       $("applyStatus").textContent = t("keep.s3.done");
       showFrame(idx);
-    });
+    }).finally(() => { applying = false; renderStatus(); });
+  } catch (err) { toast(err.message); }
+};
+// N4: only the frames around the changed clicks are redone; the rest keep their masks
+$("updateBtn").onclick = async () => {
+  const used = clickedIds(), n = changed.size;
+  try {
+    const job = await postJSON("/api/jobs", { type: "mask", video, prompts, changed: [...changed],
+      objects: objects.filter((o) => used.includes(o.id)).map((o) => ({ id: o.id, name: objName(o) })) });
+    $("updateBtn").disabled = true; $("applyBtn").disabled = true; applying = true;
+    watch(job, $("applyStatus"), $("applyBar"), () => {
+      masksDone = true; showFinal = true; maskCache.clear(); changed.clear(); save();
+      $("applyStatus").textContent = t("keep.s3.updated", { n });
+      showFrame(idx);
+    }).finally(() => { applying = false; renderStatus(); });
   } catch (err) { toast(err.message); }
 };
 const backUrl = (keep) => "/new?" + new URLSearchParams(keep ? { video, keep: clickedIds().length > 1 ? "several" : "one" } : { video });
@@ -433,13 +462,15 @@ async function load() {
   if (objects.length > 1) multi = true;
   current = objects[0].id;
   renderObjects();
-  masksDone = !!info.masks_done;
-  showFinal = masksDone;
+  changed = new Set(info.masks_done ? (saved?.changed || []).filter((n) => info.frames.includes(n)) : []);
+  appliedIds = info.masks_done ? ((info.objects || []).map((o) => o.id).length ? info.objects.map((o) => o.id) : [1]) : [];
+  masksDone = !!info.masks_done && !changed.size;
+  showFinal = !!info.masks_done;
   const has = info.frames.length > 0;
   $("emptyStage").hidden = has; img.hidden = !has; canvas.hidden = !has;
   if (!has) prepareFrames();
   $("scrub").max = Math.max(0, info.frames.length - 1);
-  if (masksDone) $("applyStatus").textContent = t("keep.s3.done");
+  if (info.masks_done) $("applyStatus").textContent = t("keep.s3.done");
   if (has) {
     const first = Object.keys(prompts).find((k) => info.frames.includes(k));
     showFrame(first ? info.frames.indexOf(first) : 0);
@@ -449,7 +480,7 @@ async function load() {
 addEventListener("langchange", () => { renderStatus(); renderObjects(); if (info) showFrame(idx); });
 load();
 // read-only helpers for the automated tests
-window.keepPage = { prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
+window.keepPage = { changed: () => [...changed], prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
                     maskShown: () => maskCache.has(frameName()),
                     masksShown: () => Object.keys(maskCache.get(frameName()) || {}).length };
 </script>
