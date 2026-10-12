@@ -276,6 +276,8 @@ show Splat Studio what to keep on a frame or two, and only that is trained.
 3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
    hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
    where the selection is wrong, for example where the holder appears from another side.
+   **Undo click** takes back your latest click on any frame, **Clear this frame** removes the
+   clicks on the frame shown, and **Start over** removes every click and object.
 4. **Apply to all frames** follows your selection through the whole video. Scrub through it.
    Where the selection slipped, add a click on that frame. **Update N changed frame(s)** then
    redoes only the frames around it, from the previous frame you clicked to the next one, and

@@ -121,6 +121,7 @@
         <div class="row" style="margin-top:var(--s-3)">
           <button class="small" id="undoBtn" data-i18n="keep.undo">Undo click</button>
           <button class="small ghost" id="clearBtn" data-i18n="keep.clear">Clear this frame</button>
+          <button class="small ghost" id="resetBtn" data-testid="keep-reset" data-i18n="keep.reset">Start over</button>
           <button class="small" id="suggestBtn" data-testid="keep-suggest">Suggest objects</button>
         </div>
         <div class="meta status" id="suggestStatus" data-testid="suggest-status"></div>
@@ -179,7 +180,8 @@ function frameName(i = idx) { return info?.frames?.[i]; }
 function pointsOn(name = frameName()) { return prompts[name] || []; }
 function totalClicks() { return Object.values(prompts).reduce((n, p) => n + p.length, 0); }
 function hasKeep() { return Object.values(prompts).some((p) => p.some((q) => q[2] >= 1)); }
-let changed = new Set(), appliedIds = [], applying = false;  // after an Apply: frames whose clicks changed since, and the objects it had
+let changed = new Set(), appliedIds = [], applying = false;
+const clickHistory = [];                  // frames of this visit's clicks, latest last (for Undo)  // after an Apply: frames whose clicks changed since, and the objects it had
 function save() { store.set(storeKey, { prompts, objects, changed: [...changed] }); }
 function sameIds(a, b) { return a.length === b.length && [...a].sort().every((v, i) => v === [...b].sort()[i]); }
 function canUpdate() { return appliedIds.length > 0 && changed.size > 0 && sameIds(appliedIds, clickedIds()); }
@@ -312,6 +314,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const name = frameName();
   if (tool === "keep" && acceptSuggestion(name, x, y)) return;
   (prompts[name] = prompts[name] || []).push([+x.toFixed(5), +y.toFixed(5), tool === "keep" ? current : 0]);
+  clickHistory.push(name);
   edited();
 });
 
@@ -362,6 +365,7 @@ function acceptSuggestion(name, x, y) {
     objects.push({ id, name: "" }); current = id;
   }
   (prompts[name] = prompts[name] || []).push([sg.x, sg.y, current]);
+  clickHistory.push(name);
   list.splice(list.indexOf(sg), 1);
   edited(); renderObjects(); renderSuggest();
   return true;
@@ -395,8 +399,27 @@ async function previewNow() {
   } catch (err) { toast(err.message); }
   renderStatus();
 }
-$("undoBtn").onclick = () => { const p = pointsOn(); if (p.length) { p.pop(); edited(); } };
-$("clearBtn").onclick = () => { delete prompts[frameName()]; edited(); };
+// Undo takes back the latest click wherever it was (going to its frame), not only on this frame
+$("undoBtn").onclick = () => {
+  let name = null;
+  while (clickHistory.length && !name) { const n = clickHistory.pop(); if ((prompts[n] || []).length) name = n; }
+  if (!name) name = pointsOn().length ? frameName() : Object.keys(prompts).filter((k) => prompts[k].length).at(-1);
+  if (!name) return;
+  if (name !== frameName()) showFrame(info.frames.indexOf(name));
+  prompts[name].pop();
+  if (!prompts[name].length) delete prompts[name];
+  edited(); renderObjects();
+};
+$("clearBtn").onclick = () => { delete prompts[frameName()]; edited(); renderObjects(); };
+// every click on every frame, and the objects, go back to an empty start
+$("resetBtn").onclick = () => {
+  if (!totalClicks() && objects.length <= 1) return;
+  if (!confirm(t("keep.reset.confirm"))) return;
+  for (const k of Object.keys(prompts)) if (appliedIds.length) changed.add(k);
+  prompts = {}; clickHistory.length = 0;
+  objects = [{ id: 1, name: "" }]; current = 1;
+  maskCache.clear(); edited(); renderObjects();
+};
 document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   s.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
@@ -421,7 +444,7 @@ function renderObjects() {
       <span class="sw" style="background:${objColor(o.id)}"></span>
       <input value="${(o.name || "").replace(/"/g, "&quot;")}" placeholder="${t("keep.objs.default", { n: o.id })}" maxlength="40" aria-label="${t("keep.objs.name")}">
       <span class="meta">${t("keep.objs.clicks", { n: countOn(o.id) })}</span>
-      ${objects.length > 1 ? `<button class="ghost small" data-remove title="${t("keep.objs.remove")}" aria-label="${t("keep.objs.remove")}">×</button>` : ""}
+      ${objects.length > 1 || countOn(o.id) || o.name ? `<button class="ghost small" data-remove title="${t("keep.objs.remove")}" aria-label="${t("keep.objs.remove")}">×</button>` : ""}
     </div>`).join("");
   $("addObj").disabled = objects.length >= MAX_OBJECTS;
 }
@@ -431,7 +454,8 @@ $("objList").addEventListener("click", (e) => {
   if (e.target.closest("[data-remove]")) {
     for (const k of Object.keys(prompts)) { prompts[k] = prompts[k].filter((p) => p[2] !== id); if (!prompts[k].length) delete prompts[k]; }
     objects = objects.filter((o) => o.id !== id);
-    if (current === id) current = objects[0].id;
+    if (!objects.length) objects = [{ id: 1, name: "" }];           // the last one: an empty object to start again
+    if (!objects.some((o) => o.id === current)) current = objects[0].id;
     maskCache.clear(); edited(); renderObjects(); return;
   }
   current = id;
