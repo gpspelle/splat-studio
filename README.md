@@ -172,6 +172,11 @@ sphere around the object (drag the slider to resize it). **Save view** remembers
 and crop, and both are included when you export a website. You can also import any `.ply`, `.spz`,
 `.splat` or `.ksplat` file into the library.
 
+**Turntable video** records the model turning a full circle from the current view, for posts,
+chats or product listings. Choose MP4 or GIF, 6 or 10 seconds, and square or wide. Every frame
+is rendered at a fixed step, so the video is exactly that long on any computer. ffmpeg makes the
+file (`NAME_turntable.mp4` or `.gif`, saved next to the splat), and it downloads automatically.
+
 ## Command line
 
 Everything in the app is also available in the terminal:
@@ -411,7 +416,8 @@ câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se 
 de uma altura só.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
-visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
+visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. No visualizador, **Vídeo girando** grava o modelo dando
+uma volta completa, em MP4 ou GIF, para redes sociais ou lojas. Para mostrar só o objeto,
 sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um apoio aparece no
 vídeo, em **Nova execução** mude **O que manter** para **Um objeto** (beta): instale a
 ferramenta de seleção uma vez com `./splat-studio setup --masking` (SAM 2, cerca de 1 GB),

@@ -506,6 +506,37 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.assertIn("too few viewpoints", advice.inner_text())
         self.assertEqual(self.errors, [])
 
+    def test_turntable_video(self):
+        import json as _json
+        import subprocess
+        self.page.set_viewport_size({"width": 640, "height": 480})   # software rendering in CI is slow
+        self.open_studio()
+        self.page.set_input_files("#importInput", str(write_ply(self.tmp / "vase.ply", n=8000)))
+        self.page.wait_for_selector(".tile >> text=vase.ply")
+        self.page.click(".tile >> text=View")
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        self.page.get_by_test_id("tt-open").click()
+        panel = self.page.get_by_test_id("tt-panel")
+        panel.wait_for(state="visible")
+        self.page.click('[data-tt="format"] button[data-v="gif"]')
+        self.assertEqual(self.page.get_attribute('[data-tt="format"] button.on', "data-v"), "gif")
+        self.page.click("#ttCancel")
+        self.assertTrue(panel.is_hidden())
+        before = self.page.evaluate("window.splatViewer.fitCenter()")
+        for fmt in ("mp4", "gif"):
+            d = self.page.evaluate(f"window.splatViewer.turntable({{format: '{fmt}', seconds: 0.4, width: 160, height: 120}})")
+            out = self.data.root / d["file"]
+            self.assertEqual(out.name, f"vase_turntable.{fmt}")
+            s = _json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,width",
+                                             "-of", "json", str(out)], capture_output=True, text=True).stdout)["streams"][0]
+            self.assertEqual(s["width"], 160)
+            self.assertIn(s["codec_name"], ("h264", "mpeg4", "gif"))
+        self.assertEqual(self.page.evaluate("window.splatViewer.fitCenter()"), before)
+        self.assertEqual(self.page.evaluate("document.getElementById('overlay').style.display"), "none")
+        _, lib = self.json("GET", "/api/splats")
+        self.assertEqual([x["name"] for x in lib], ["vase.ply"])          # videos aren't splats
+        self.assertEqual(self.errors, [])
+
     def test_viewer_frames_the_object_and_crops_the_fog(self):
         ply = write_foggy_scene(self.tmp / "room.ply", n_object=4000, n_fog=3000)
         self.page.set_viewport_size({"width": 640, "height": 480})   # software rendering in CI is slow
