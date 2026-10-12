@@ -397,8 +397,16 @@ class Runner:
         info = self.data.extraction_info(j.video, j.run_dir)
         d["track_breaks"] = guidance.track_break_times(j.track_breaks or [], info.get("fps"), info.get("start", 0.0))
         d["thumb"] = self.data.thumbnail(j.video, j.run_dir)
+        # a newer measurement saved with the run (per object, made when the viewer first asked) wins
+        if j.run_dir and j.status not in ("running", "queued"):
+            try:
+                saved = json.loads((self.data.root / j.run_dir / "coverage.json").read_text())
+                if "basis" in saved and (saved.get("objects") or not d.get("coverage")):
+                    d["coverage"] = saved
+            except (OSError, ValueError):
+                pass
         # coverage warnings matter most while the run is still going: before training ends
-        d["coverage_advice"] = guidance.coverage_advice(j.coverage, info.get("fps"), info.get("start", 0.0))
+        d["coverage_advice"] = guidance.coverage_advice(d.get("coverage"), info.get("fps"), info.get("start", 0.0))
         d["advice"] = guidance.run_advice(d) if j.status in ("done", "failed") else []
         return d
 
