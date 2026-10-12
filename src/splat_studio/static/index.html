@@ -247,7 +247,10 @@ const retrainParam = new URLSearchParams(location.search).get("retrain");
 if (retrainParam) { history.replaceState(null, "", "/"); retrain(retrainParam); }
 // back from New run (?queued=1), or sent here to install the tools (?setup=1)
 const pageParams = new URLSearchParams(location.search);
-if (pageParams.has("queued")) { history.replaceState(null, "", "/"); toast(t("toast.queued")); }
+if (pageParams.has("queued")) {
+  const n = +pageParams.get("queued") || 1;
+  history.replaceState(null, "", "/"); toast(n > 1 ? t("toast.queuedMany", { n }) : t("toast.queued"));
+}
 if (pageParams.has("setup")) { history.replaceState(null, "", "/"); loadSetup().then(() => $("setupDlg").showModal()); }
 
 // ---------------------------------------------------------------- library

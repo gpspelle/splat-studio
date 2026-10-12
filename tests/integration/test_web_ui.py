@@ -283,6 +283,45 @@ class WebUiTest(BrowserTestCase):
         self.shot("coverage", page=None)
         self.assertEqual(self.errors, [])
 
+    def test_batch_of_videos_and_saved_defaults(self):
+        self.open_new()
+        # defaults first: they're what the next visit starts from
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click('.seg[data-name="detail"] button[data-v="low"]')
+        self.page.check("#removeBg")
+        self.page.get_by_test_id("save-defaults").click()
+        self.assertIn("Saved", self.page.text_content("#defaultsStatus"))
+        self.page.evaluate("sessionStorage.clear()")
+        self.open_new()
+        self.assertEqual(self.page.get_attribute('.seg[data-name="quality"] button.on', "data-v"), "preview")
+        self.assertEqual(self.page.get_attribute('.seg[data-name="detail"] button.on', "data-v"), "low")
+        self.assertTrue(self.page.is_checked("#removeBg"))
+        # three videos at once; one removed again
+        self.page.click('.seg[data-name="keep"] button[data-v="one"]')
+        vids = [str(make_video(self.tmp / f"{n}.mov", seconds=4)) for n in ("mug", "lamp", "cup")]
+        self.page.set_input_files("#fileInput", vids)
+        self.page.wait_for_function("window.newRun.videos().length === 3", timeout=60000)
+        self.assertEqual(self.page.get_by_test_id("chosen-video").all_text_contents(), ["mug.mov", "lamp.mov", "cup.mov"])
+        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "all")   # one video only
+        self.assertTrue(self.page.is_disabled('.seg[data-name="keep"] button[data-v="one"]'))
+        self.assertIn("one at a time", self.page.text_content("#keepHelp"))
+        self.assertEqual(self.page.text_content("#startBtn"), "Start 3 runs")
+        self.page.click('[data-testid=picked] [data-remove="1"]')
+        self.assertEqual(self.page.get_by_test_id("chosen-video").all_text_contents(), ["mug.mov", "cup.mov"])
+        self.assertEqual(self.page.text_content("#startBtn"), "Start 2 runs")
+        self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        self.page.wait_for_selector("text=2 runs queued", timeout=5000)
+        _, jobs = self.json("GET", "/api/jobs")
+        runs = [j for j in jobs if j["type"] == "video"]
+        self.assertEqual(sorted(j["video"] for j in runs), ["videos/cup.mov", "videos/mug.mov"])
+        for j in runs:
+            self.assertEqual((j["options"]["quality"], j["options"]["detail"], j["options"].get("remove_background")),
+                             ("preview", "low", True))
+            self.assertNotIn("masks", j["options"])
+        self.page.wait_for_function("document.querySelectorAll('[data-testid=run-done]').length === 2", timeout=240000)
+        self.assertEqual(self.errors, [])
+
     def test_studio_and_new_run_are_separate_pages(self):
         self.page.goto(self.url)
         self.page.get_by_test_id("setup-pill").wait_for()
