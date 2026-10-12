@@ -12,8 +12,10 @@ Standard library plus ffmpeg (which the app needs anyway).
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 
 WIDTH = 480
@@ -85,7 +87,15 @@ def crop_box(box, fw: int, fh: int, pad: float = 0.18) -> tuple[int, int, int, i
 
 
 def make(frames_dir: Path, mask_dir: Path, out: Path) -> Path | None:
-    """Picture of the selection in mask_dir (masks named like the frames). None if there's nothing to show."""
+    """Picture of the selection in mask_dir (masks named like the frames). None if there's
+    nothing to show or it couldn't be made: a picture is never worth failing a run for."""
+    try:
+        return _make(frames_dir, mask_dir, out)
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
+def _make(frames_dir: Path, mask_dir: Path, out: Path) -> Path | None:
     from .masks import jpeg_size
     found = best_frame(mask_dir)
     if not found:
@@ -98,7 +108,7 @@ def make(frames_dir: Path, mask_dir: Path, out: Path) -> Path | None:
     x, y, w, h = crop_box(box, fw, fh)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(out.stem + ".part.jpg")
+    tmp = out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.part.jpg")   # never shared
     graph = (f"[1]scale={fw}:{fh}:flags=bilinear,format=gray,boxblur=2:1,format=gbrp[m];"
              f"[0]format=gbrp,split[f][g];[g]boxblur=20:2,eq=brightness=-0.32:saturation=0.3[bg];"
              f"[bg][f][m]maskedmerge,crop={w}:{h}:{x}:{y},scale={WIDTH}:-2,format=yuvj420p")
@@ -107,7 +117,7 @@ def make(frames_dir: Path, mask_dir: Path, out: Path) -> Path | None:
     if r.returncode != 0 or not tmp.exists():
         tmp.unlink(missing_ok=True)
         return None
-    tmp.replace(out)
+    os.replace(tmp, out)
     return out
 
 

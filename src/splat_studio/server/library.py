@@ -105,7 +105,8 @@ class DataDir:
         """Runs trained on a selection before pictures were made at run time: make them once,
         in the background (the first frame is shown meanwhile)."""
         rd = self.root / run_dir
-        if not (rd / "dense" / "masks.json").exists() or (rd / ".lock").exists():
+        # only finished runs: one still running makes its own pictures
+        if not (rd / "dense" / "masks.json").exists() or (rd / ".lock").exists() or not any((rd / "splat").glob("*.ply")):
             return
         with self._thumbs_lock:
             if run_dir in self._thumbs_tried:
