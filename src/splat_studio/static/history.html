@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run history · Splat Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/i18n.js"></script>
+<link rel="stylesheet" href="/design.css">
+<script src="/theme.js"></script>
+<script src="/site.js"></script>
+<script src="/runs.js"></script>
+<style>
+  /* Run history page. Colors, type and components come from design.css; run rows from runs.js. */
+  main { max-width: 1240px; margin: 0 auto; padding: var(--s-8) var(--s-5) 0; }
+  .page-head { max-width: 68ch; margin-bottom: var(--s-5); }
+  .page-head h1 { font: var(--text-display); letter-spacing: var(--track-tight); margin: 0; }
+  .page-head p { margin: var(--s-3) 0 0; color: var(--ink-2); font-size: 15px; }
+  .active-note { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap;
+    border: var(--hairline) solid var(--rule); border-left: 4px solid var(--signal); background: var(--surface);
+    padding: var(--s-3) var(--s-4); margin-bottom: var(--s-5); font: var(--text-sm); }
+  .tools { display: flex; gap: var(--s-3); flex-wrap: wrap; align-items: center; margin-bottom: var(--s-5); }
+  .tools input { flex: 1 1 260px; max-width: 420px; }
+  .tools .seg { flex: 0 1 440px; }
+  @media (max-width: 640px) { .tools .seg { flex: 1 1 100%; } .tools .count { margin-left: 0; } }
+  .tools .count { margin-left: auto; }
+  .day { margin-bottom: var(--s-5); }
+  .day > h2 .meta { text-transform: none; letter-spacing: 0; }
+  #moreBtn { display: block; margin: 0 auto; }
+</style>
+</head>
+<body data-page="history">
+<main>
+  <div class="page-head">
+    <h1 data-i18n="hist.title">Run history</h1>
+    <p data-i18n="hist.lead">Every finished run, newest first. The Studio only keeps runs in progress and the latest few.</p>
+  </div>
+  <div class="active-note" id="activeNote" data-testid="hist-active" hidden>
+    <span id="activeText"></span><a class="link" href="/" data-i18n="hist.active.link">Open the Studio</a>
+  </div>
+  <div class="tools">
+    <input id="q" type="search" data-testid="hist-search" placeholder="Search by video name" data-i18n-placeholder="hist.search" aria-label="Search by video name" data-i18n-aria-label="hist.search">
+    <div class="seg" data-name="status" data-testid="hist-filter">
+      <button data-v="all" class="on" data-i18n="hist.filter.all">All</button><button data-v="done" data-i18n="hist.filter.done">Finished</button><button data-v="failed" data-i18n="hist.filter.failed">Failed</button><button data-v="stopped" data-i18n="hist.filter.stopped">Stopped</button>
+    </div>
+    <span class="meta count" id="count"></span>
+  </div>
+  <div id="days" data-testid="hist-list"></div>
+  <div class="empty" id="empty" hidden></div>
+  <button id="moreBtn" hidden data-testid="hist-more" data-i18n="hist.more">Show more</button>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const t = window.t;
+const { esc } = window.runs;
+const PAGE = 30;
+let jobs = [], shown = PAGE, loaded = false;
+
+window.site.mount();
+window.i18n.mountSwitcher();
+window.theme.mount();
+window.i18n.apply();
+window.addEventListener("langchange", render);
+
+const STATUS = { done: ["done"], failed: ["failed", "interrupted"], stopped: ["cancelled"] };
+const filterOn = () => document.querySelector('.seg[data-name="status"] button.on').dataset.v;
+document.querySelector('.seg[data-name="status"]').addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  b.parentNode.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  shown = PAGE; render();
+});
+$("q").addEventListener("input", () => { shown = PAGE; render(); });
+$("moreBtn").onclick = () => { shown += PAGE; render(); };
+
+// Today, Yesterday, Last 7 days, then one group per month
+function dayGroup(ts) {
+  const d = new Date(ts * 1000), today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.floor((today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (days <= 0) return t("hist.today");
+  if (days === 1) return t("hist.yesterday");
+  if (days < 7) return t("hist.week");
+  const m = d.toLocaleDateString(window.i18n.getLang() === "pt" ? "pt-BR" : "en", { month: "long", year: "numeric" });
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+
+function render() {
+  const active = jobs.filter(window.runs.isActive);
+  $("activeNote").hidden = !active.length;
+  $("activeText").textContent = t("hist.active", { n: active.length });
+  const q = $("q").value.trim().toLowerCase(), f = filterOn();
+  const done = jobs.filter((j) => !window.runs.isActive(j)).sort((a, b) => window.runs.endedAt(b) - window.runs.endedAt(a));
+  const match = done.filter((j) => (f === "all" || STATUS[f].includes(j.status)) &&
+                                   (!q || [window.runs.runTitle(j), j.video, j.run_dir].join(" ").toLowerCase().includes(q)));
+  const page = match.slice(0, shown);
+  const groups = new Map();
+  for (const j of page) { const g = dayGroup(window.runs.endedAt(j)); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(j); }
+  // keep open logs while redrawing
+  const logs = {}; document.querySelectorAll("pre.log").forEach((p) => logs[p.id] = [p.textContent, p.scrollTop]);
+  $("days").innerHTML = [...groups].map(([g, list], i) => `<section class="card day" data-testid="hist-day">
+    <h2><span>${esc(g)}</span><span class="meta">${esc(t("hist.count", { n: list.length }))}</span></h2>
+    <div class="runs" id="day-${i}"></div></section>`).join("");
+  [...groups].forEach(([, list], i) => window.runs.render($("day-" + i), list, { remove: true }));
+  for (const [id, [txt, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = txt; p.scrollTop = s; } }
+  $("count").textContent = done.length ? t("hist.total", { shown: page.length, n: match.length }) : "";
+  $("empty").hidden = !loaded || !!match.length;
+  $("empty").textContent = done.length ? t("hist.noMatch") : t("hist.empty");
+  $("moreBtn").hidden = match.length <= shown;
+}
+
+window.runs.hooks.changed = (removed) => removed ? refresh() : render();
+async function refresh() {
+  try { jobs = await fetch("/api/jobs").then((r) => r.json()); } catch { return; }
+  loaded = true;
+  render();
+  window.runs.open.forEach((id) => window.runs.loadLog(id));
+}
+fetch("/api/setup").then((r) => r.json()).then((s) => window.site.setVersion(s.version)).catch(() => {});
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

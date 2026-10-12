@@ -2,7 +2,7 @@
 
 Routes
   GET  /                         Studio page             GET  /viewer?file=...    splat viewer
-  GET  /guide                    recording guide
+  GET  /guide                    recording guide         GET  /history            finished runs
   GET  /files/<path>             files in the data folder (Range supported, ?download=1)
   GET  /api/jobs                 runs (UI jobs + command-line runs), newest first
   GET  /api/jobs/<id>/log        terminal log of a job
@@ -160,6 +160,8 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 return self.send_file(static_dir / "compare.html")
             if p == "/guide":
                 return self.send_file(static_dir / "guide.html")
+            if p == "/history":
+                return self.send_file(static_dir / "history.html")
             if p.startswith("/files/"):
                 f = data.safe_path(p[len("/files/"):])
                 return self.send_file(f, download_name=f.name if f and q.get("download") else None)

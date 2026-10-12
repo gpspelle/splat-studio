@@ -8,6 +8,7 @@ import time
 import unittest
 from pathlib import Path
 
+from splat_studio.server.jobs import Job
 from tests.helpers import make_video, needs_ffmpeg, write_ply
 from plyfile import write_foggy_scene  # tests/fakes
 from tests.integration.test_server_api import ServerTestCase
@@ -141,11 +142,11 @@ class WebUiTest(BrowserTestCase):
         # the stand-in tools are fast: the run may already be done at the next 2-second refresh
         self.page.wait_for_selector(".pill.running, .pill.done", timeout=30000)
         self.shot("run-progress")
-        self.page.wait_for_selector("text=View splat", timeout=180000)
-        advice = self.page.get_by_test_id("run-advice")          # shown once the run is marked done
+        self.page.wait_for_selector("[data-testid=run-done] >> text=View splat", timeout=180000)
+        self.page.click("[data-testid=run-done] [data-testid=run-details]")    # details: advice, other views, log
+        advice = self.page.get_by_test_id("run-advice")
         advice.wait_for(timeout=30000)
         self.assertIn("Every frame was placed", advice.inner_text())
-        self.page.click(".run button.ghost")                      # details + log
         self.page.wait_for_function("(document.querySelector('pre.log') || {}).textContent?.includes('3/3 Training')",
                                     timeout=30000)
         self.shot("studio", full_page=True)
@@ -219,6 +220,51 @@ class WebUiTest(BrowserTestCase):
         self.assertFalse((self.data.imports / "vase.ply").exists())
         self.assertTrue((self.data.imports / "jar.ply").exists())
         self.assertEqual(self.errors, [])
+    def add_finished_run(self, name, hours_ago, status="done", error=None):
+        end = time.time() - hours_ago * 3600
+        job = Job(self.data.jobs, id=f"{name}_{hours_ago}", type="video", status=status, video=f"videos/{name}.mov",
+                  created=end - 600, started=end - 500, finished=end, options={"quality": "standard"}, error=error)
+        job.save(force=True)
+        self.runner.jobs[job.id] = job
+        return job
+
+    def test_older_runs_move_to_history(self):
+        self.add_finished_run("Chair", 1)
+        self.add_finished_run("Lamp", 2, "failed", "COLMAP could not reconstruct the scene")
+        for i, h in enumerate((30, 50, 100, 200, 400, 900)):
+            self.add_finished_run(f"Mug{i}", h, "cancelled" if i == 2 else "done")
+        self.page.goto(self.url)
+        # the Studio keeps the latest few finished runs as one line each, and links to the rest
+        self.page.wait_for_selector("[data-testid=run-done]")
+        rows = self.page.locator("#runs [data-testid=run-done]")
+        self.assertEqual(rows.count(), 3)                               # 2 from today, topped up to 3
+        self.assertIn("Chair", rows.first.inner_text())
+        self.assertIn("could not reconstruct", rows.nth(1).inner_text())  # errors stay on the short line
+        self.assertEqual(self.page.locator("#runs .steps:visible").count(), 0)  # steps only when opened
+        self.assertEqual(self.page.inner_text("[data-testid=runs-history]"), "All runs (5 older)")
+        self.shot("runs-recent")
+        self.page.click("[data-testid=runs-history]")
+        self.page.get_by_test_id("hist-day").first.wait_for()
+        self.assertEqual(self.page.evaluate("location.pathname"), "/history")
+        self.assertEqual(self.page.get_attribute("[data-testid=nav-history]", "aria-current"), "page")
+        days = self.page.get_by_test_id("hist-day").evaluate_all("els => els.map((e) => e.querySelector('h2 span').textContent)")
+        self.assertEqual(days[0], "Today")
+        self.assertIn("Last 7 days", days)
+        self.assertEqual(self.page.locator("[data-testid=run-done]").count(), 8)
+        self.shot("history", full_page=True)
+        self.page.click("[data-testid=hist-filter] button[data-v=failed]")
+        self.assertEqual(self.page.locator("[data-testid=run-done]").count(), 1)
+        self.page.click("[data-testid=hist-filter] button[data-v=all]")
+        self.page.fill("[data-testid=hist-search]", "mug")
+        self.assertEqual(self.page.locator("[data-testid=run-done]").count(), 6)
+        # removing a run drops its record, never its files
+        row = self.page.locator("[data-testid=run-done]").first
+        row.get_by_test_id("run-details").click()
+        row.get_by_test_id("run-remove").click()
+        self.page.wait_for_function("document.querySelectorAll('[data-testid=run-done]').length === 5")
+        self.assertNotIn("Mug0_30", self.runner.jobs)
+        self.assertEqual(self.errors, [])
+
 
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg

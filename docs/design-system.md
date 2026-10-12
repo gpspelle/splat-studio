@@ -56,6 +56,8 @@ used only to explain a change; all of it switches off with *Reduce motion*.
 - **Advice list**, **toast** (ink with a signal edge), **dialog** (hard offset shadow).
 - **Site header and footer** (`.site-head`, `.site-nav`, `.site-foot`), built by `site.js`: wordmark with the
   logo, navigation with the current page underlined in signal, and a ruled footer with link columns.
+- **Run rows** (`.run`, `.run.compact`, `.runs-sub`), built by `runs.js`: a full row with steps and progress
+  while a run is going, then one compact line that opens with **Details**.
 - **HUD** (`.hud`, `.hud-chip`, `.hud-bar`): viewer chrome over the 3D canvas, mono capitals,
   joined by hairlines; `.marks` draws the viewfinder corners.
 

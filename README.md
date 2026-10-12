@@ -109,8 +109,23 @@ the first run on your Mac, because measured speeds are remembered. Runs are queu
 processed one at a time. **Details** shows each COLMAP attempt, where tracking broke, the Brush
 settings used, and the full log.
 
+Once a run finishes it shrinks to one line: its name, the result and **View splat**. Problems
+stay on that line (the error, and any advice about what to film again); **Details** opens the
+steps, the other versions, **Train again** and the log. The Studio keeps runs in progress plus
+the finished runs from the last day (at least the latest 3, at most 5). Everything older is on
+the **History** page.
+
 **Train again** re-trains a finished run with other settings, reusing its camera poses (no
 COLMAP). Every splat is kept, so you can compare.
+
+### History
+
+![Finished runs grouped by day](docs/images/history.png)
+
+**History** (in the header, or **All runs** under the run list) lists every finished run,
+newest first, grouped into Today, Yesterday, Last 7 days and then by month. Search by video
+name, or show only finished, failed or stopped runs. **Remove from list** (under **Details**)
+deletes the run's record and log only: its splats and run folder stay in the library.
 
 ### Look and feel
 
@@ -311,6 +326,10 @@ exportada como site. A barra embaixo do nome de cada modelo gira só aquele mode
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,
 ligado nos dois ao abrir: ligado, arrastar na vista gira o modelo; desligado, o modelo fica
 travado e arrastar não o gira. **Salvar vista** lembra como os dois estão girados.
+
+Execuções terminadas viram uma linha só no Estúdio (com o erro, se houver) e as mais antigas
+vão para a página **Histórico**, agrupadas por dia, com busca e filtro. **Tirar da lista** apaga
+só o registro da execução: os splats continuam na biblioteca.
 
 ## Credits
 
