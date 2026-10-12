@@ -256,6 +256,46 @@ class WebUiTest(BrowserTestCase):
         self.assertIn("one splat per object", self.page.evaluate("document.querySelector('[data-testid=run-done]').textContent"))
         self.assertEqual(self.errors, [])
 
+    def test_every_click_and_object_can_be_removed(self):
+        os.environ["SPLAT_STUDIO_MASK_BACKEND"] = "disc"
+        self.addCleanup(os.environ.pop, "SPLAT_STUDIO_MASK_BACKEND", None)
+        up = self.upload(make_video(self.tmp / "desk.mov", seconds=4))[1]
+        import json as _json
+        video = _json.loads(up)["video"]
+        self.page.goto(f"{self.url}/keep?video={video}&objects=several")
+        canvas = self.page.get_by_test_id("keep-canvas")
+        canvas.wait_for(state="visible", timeout=60000)
+        self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
+        box = canvas.bounding_box()
+        click = lambda x, y: self.page.mouse.click(box["x"] + box["width"] * x, box["y"] + box["height"] * y)
+        go = lambda i: self.page.evaluate(f"document.getElementById('scrub').value = {i}; document.getElementById('scrub').dispatchEvent(new Event('input'))")
+        clicks = lambda: self.page.evaluate("Object.values(window.keepPage.prompts()).flat().length")
+        click(0.3, 0.5)                                    # object 1 on frame 0
+        self.page.get_by_test_id("keep-add-object").click()
+        go(10)
+        click(0.7, 0.5)                                    # object 2 on frame 10
+        self.assertEqual(clicks(), 2)
+        # Undo works across frames: back on frame 0 it still takes back the latest click, on frame 10
+        go(0)
+        self.page.click("#undoBtn")
+        self.assertEqual((clicks(), self.page.evaluate("window.keepPage.index()")), (1, 10))
+        click(0.7, 0.5)
+        # both objects can be removed, the last one too; then there's one empty object to start again
+        go(0)
+        for _ in range(2):
+            self.page.locator("[data-testid=keep-object] button[data-remove]").first.click()
+        self.assertEqual(clicks(), 0)
+        self.assertEqual(self.page.evaluate("window.keepPage.objects()"), [{"id": 1, "name": ""}])
+        self.assertEqual(self.page.locator("[data-testid=keep-object] button[data-remove]").count(), 0)
+        # Start over clears every frame (after a confirmation)
+        click(0.3, 0.5); go(5); self.page.get_by_test_id("tool-drop").click(); click(0.5, 0.9)
+        self.page.get_by_test_id("keep-reset").click()
+        self.assertEqual(clicks(), 0)
+        self.page.reload()                                 # and it stays cleared
+        self.page.wait_for_function("window.keepPage && document.getElementById('frameImg').naturalWidth > 0")
+        self.assertEqual(clicks(), 0)
+        self.assertEqual(self.errors, [])
+
     def test_finished_run_offers_each_object(self):
         from plyfile import write_three_objects
         splat = self.data.root / "workspace" / "table" / "run_1" / "splat"

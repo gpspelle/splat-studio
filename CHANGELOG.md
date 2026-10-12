@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- **Choose what to keep: the last object and its clicks couldn't be removed**
+  ([#22](https://github.com/gpspelle/splat-studio/issues/22)). The last object now has a remove
+  button too (leaving one empty object to start again). **Undo click** takes back the latest click
+  wherever it was, going to its frame, and **Start over** removes every click and object.
+
 ## 0.4.0 — 2026-10-12
 
 The first published release. It includes the design system that was numbered 0.4.0 but never released.
