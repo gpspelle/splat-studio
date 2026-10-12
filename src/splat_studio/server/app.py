@@ -174,6 +174,8 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 return self.send_file(static_dir / "viewer.html")
             if p == "/compare":
                 return self.send_file(static_dir / "compare.html")
+            if p == "/new":
+                return self.send_file(static_dir / "new.html")
             if p == "/keep":
                 return self.send_file(static_dir / "keep.html")
             if p == "/api/frames":

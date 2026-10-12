@@ -160,7 +160,8 @@ Server-side advice and errors carry codes and parameters, so they're translated 
   time left, registered frames, track breaks, and the resulting splat.
 - `library.py`: the data folder (videos, runs, splats), and the website export.
 - `../guidance.py`: checks on uploaded videos and advice after runs.
-- `static/`: the Studio page and the viewer, with three.js and Spark bundled, so nothing is
+- `static/`: the Studio page (`index.html`: runs and library), New run (`new.html`: the video
+  and its settings, kept in `sessionStorage` while you visit Choose what to keep), and the viewer, with three.js and Spark bundled, so nothing is
   loaded from the internet.
 
 ## Testing (`tests/`)

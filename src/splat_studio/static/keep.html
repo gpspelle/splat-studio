@@ -46,17 +46,21 @@
   .status::before { margin-top: 0.5em; }
   .bar { margin-top: var(--s-2); }
   .wide-btn { width: 100%; }
+  .head-side { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
   .notice { border: var(--hairline) solid var(--rule); border-left: 4px solid var(--signal); padding: var(--s-3) var(--s-4); background: var(--paper); font: var(--text-sm); }
 </style>
 </head>
-<body data-page="studio">
+<body data-page="new">
 <main>
   <div class="page-head">
     <div>
       <h1><span data-i18n="keep.title">Choose what to keep</span> <span class="tag" data-i18n="keep.beta">beta</span></h1>
       <p data-i18n="keep.lead">Click the object to keep it, and anything holding it up to leave it out. Splat Studio follows your choice through the whole video.</p>
     </div>
-    <div class="meta" id="videoName"></div>
+    <div class="head-side">
+      <div class="meta" id="videoName"></div>
+      <a class="btn small ghost" id="backLink" href="/new" data-testid="keep-back" data-i18n="keep.back">← Back to New run</a>
+    </div>
   </div>
 
   <div class="layout">
@@ -113,13 +117,9 @@
         <div class="meta status" id="applyStatus"></div>
       </div>
       <div class="step" id="step4">
-        <h3><span class="n">4</span><span data-i18n="keep.s4">Make the splat</span></h3>
-        <p data-i18n="keep.s4.text">Starts a run that keeps only what you chose. Everything else is left out of the splat.</p>
-        <div class="seg" data-name="quality" style="margin-bottom:var(--s-3)">
-          <button data-v="preview" data-i18n="quality.preview">Preview</button><button data-v="standard" class="on" data-i18n="quality.standard">Standard</button><button data-v="high" data-i18n="quality.high">High</button>
-        </div>
-        <button class="primary wide-btn" id="runBtn" data-testid="keep-run" disabled data-i18n="keep.s4.button">Start run with this selection</button>
-        <div class="meta status" id="runStatus"></div>
+        <h3><span class="n">4</span><span data-i18n="keep.s4">Back to the run</span></h3>
+        <p data-i18n="keep.s4.text">Your selection is saved with the video. Set the quality and the other options on New run, then start it there.</p>
+        <a class="btn primary wide-btn" id="useBtn" data-testid="keep-use" aria-disabled="true" data-i18n="keep.s4.button">Use this selection</a>
       </div>
     </section>
   </div>
@@ -229,7 +229,8 @@ function renderStatus() {
   $("step2").classList.toggle("done", hasKeep());
   $("applyBtn").disabled = !hasKeep() || !info?.backend || !frames;
   $("step3").classList.toggle("done", masksDone);
-  $("runBtn").disabled = !masksDone;
+  if (masksDone) { $("useBtn").href = backUrl(true); $("useBtn").removeAttribute("aria-disabled"); }
+  else { $("useBtn").removeAttribute("href"); $("useBtn").setAttribute("aria-disabled", "true"); }
   $("installNotice").hidden = !info || !!info.backend;
   renderTicks();
 }
@@ -322,14 +323,8 @@ $("applyBtn").onclick = async () => {
     });
   } catch (err) { toast(err.message); }
 };
-$("runBtn").onclick = async () => {
-  const quality = document.querySelector('.seg[data-name="quality"] button.on')?.dataset.v || "standard";
-  try {
-    await postJSON("/api/jobs", { type: "video", video, quality, masks: true, frames: info.frames.length });
-    toast(t("toast.queued"));
-    setTimeout(() => (location.href = "/"), 600);
-  } catch (err) { toast(err.message); }
-};
+const backUrl = (keep) => "/new?" + new URLSearchParams(keep ? { video, keep: "chosen" } : { video });
+$("backLink").href = backUrl(false);
 
 // ---------------------------------------------------------------- load
 async function load() {

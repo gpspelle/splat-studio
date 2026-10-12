@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New run · Splat Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/i18n.js"></script>
+<link rel="stylesheet" href="/design.css">
+<script src="/theme.js"></script>
+<script src="/site.js"></script>
+<script src="/runs.js"></script>
+<style>
+  /* New run: the video on the left, the settings on the right. Colors, type and components come from design.css. */
+  main { max-width: 1040px; margin: 0 auto; padding: var(--s-6) var(--s-5) 0; }
+  .page-head { margin-bottom: var(--s-5); max-width: 68ch; }
+  .page-head h1 { font: var(--text-display); letter-spacing: var(--track-tight); margin: 0; }
+  .page-head p { margin: var(--s-3) 0 0; color: var(--ink-2); font-size: 15px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-5); align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .notice { border: var(--hairline) solid var(--rule); border-left: 4px solid var(--bad); padding: var(--s-3) var(--s-4); background: var(--paper);
+    font: var(--text-sm); margin-bottom: var(--s-5); }
+
+  .tips-strip { border: var(--hairline) solid var(--rule); border-left: 4px solid var(--signal); background: var(--paper);
+    padding: var(--s-3) var(--s-4); margin-bottom: var(--s-4); font: var(--text-sm); }
+  .tips-strip > b { display: block; margin-bottom: 4px; font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
+  .tips-strip ul { margin: 0; padding-left: 18px; }
+  .tips-strip li { margin: 3px 0; }
+  .tips-strip li::marker { color: var(--signal-ink); }
+  .tips-strip a { color: inherit; }
+  .drop { position: relative; border: var(--hairline) dashed var(--ink); background: var(--paper); padding: var(--s-8) var(--s-4);
+    text-align: center; cursor: pointer; transition: background var(--fast) var(--ease); }
+  .drop::before, .drop::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--signal); }
+  .drop::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  .drop::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+  .drop:hover, .drop.over, .drop:focus-visible { background: var(--signal-wash); }
+  .drop b { display: block; font: var(--text-title); margin-bottom: 4px; }
+  .drop small { font: var(--text-meta); color: var(--ink-3); }
+  .chosen { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
+    border: var(--hairline) solid var(--rule); background: var(--paper); }
+  .chosen .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px var(--font-mono); }
+  .row { display: flex; gap: var(--s-3); }
+  .row > * { flex: 1; min-width: 0; }
+  details.adv { margin-top: var(--s-4); padding-top: var(--s-3); border-top: var(--hairline) solid var(--rule-soft); }
+  #startBtn { width: 100%; margin-top: var(--s-5); height: 44px; font-size: 14px; }
+  .check .meta { font: var(--text-sm); font-size: 12.5px; color: var(--ink-3); }
+  .field > label .tag { margin-left: var(--s-2); vertical-align: 1px; }
+
+  /* what to keep: the selection's state, and the way to the page where it's made */
+  .keep-sel { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap;
+    margin-top: var(--s-2); padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3); border: var(--hairline) solid var(--rule); background: var(--paper); }
+  .keep-sel .status { white-space: normal; }
+</style>
+</head>
+<body data-page="new">
+
+<main>
+  <div class="page-head">
+    <h1 data-i18n="new.title">New run</h1>
+    <p data-i18n="new.lead">Choose a video and how to train it. The run starts in the Studio, where you can follow it.</p>
+  </div>
+  <div class="notice" id="toolsNotice" hidden data-testid="tools-notice">
+    <span data-i18n="new.tools">Some required tools are missing, so a run would fail.</span>
+    <a href="/?setup=1" data-i18n="new.tools.link">Install them in the Studio</a>
+  </div>
+
+  <div class="layout">
+    <!-- ---------------------------------------------------------------- the video -->
+    <section class="card">
+      <h2><span data-i18n="new.video">Video</span></h2>
+      <div class="pad">
+        <div class="tips-strip" data-testid="tips-strip">
+          <b data-i18n="tips.title">Before you record</b>
+          <ul data-i18n-html="tips.html">
+            <li>Film <b>3 loops</b> around the object in one take: low, eye level, then high.</li>
+            <li>Use soft, even light. Lock focus and exposure, and stay on the 1× lens.</li>
+            <li>Choose a matte object on a patterned surface, with nothing moving behind it.</li>
+          </ul>
+        </div>
+        <div id="dropZone" class="drop" role="button" tabindex="0">
+          <b data-i18n="drop.title">Drop a video here</b>
+          <small data-i18n="drop.sub">or click to browse. MOV and MP4 files straight from your phone are fine.</small>
+          <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" hidden>
+        </div>
+        <div id="uploading" hidden style="margin-top:12px">
+          <div class="meta" id="upLabel">Uploading…</div>
+          <div class="bar" style="margin-top:6px"><i id="upBar"></i></div>
+        </div>
+        <div id="chosen" class="chosen" hidden style="margin-top:12px">
+          <div class="name" id="chosenName" data-testid="chosen-video"></div>
+          <button class="ghost small" id="clearVideo" data-i18n="chosen.change">Change</button>
+        </div>
+        <ul class="advice" id="videoAdvice" data-testid="video-advice" hidden></ul>
+        <div class="field" id="pickField">
+          <label for="prevVideo" data-i18n="reuse.label">Or pick a video you uploaded before</label>
+          <select id="prevVideo"><option value="">Choose…</option></select>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------------- the settings -->
+    <section class="card">
+      <h2><span data-i18n="new.settings">Settings</span></h2>
+      <div class="pad">
+        <div class="field" style="margin-top:0">
+          <label data-i18n="quality.label">Quality</label>
+          <div class="seg" data-name="quality">
+            <button data-v="preview" data-i18n="quality.preview">Preview</button><button data-v="standard" class="on" data-i18n="quality.standard">Standard</button><button data-v="high" data-i18n="quality.high">High</button>
+          </div>
+          <div class="help" id="qualityHelp"></div>
+        </div>
+        <div class="field">
+          <label data-i18n="detail.label">Detail</label>
+          <div class="seg" data-name="detail">
+            <button data-v="auto" class="on" data-i18n="detail.auto">Auto</button><button data-v="low" data-i18n="detail.low">Low</button><button data-v="normal" data-i18n="detail.normal">Normal</button><button data-v="high" data-i18n="detail.high">High</button>
+          </div>
+          <div class="help" id="detailHelp"></div>
+        </div>
+        <div class="field">
+          <label><span data-i18n="keep.label">What to keep</span><span class="tag" data-i18n="keep.beta">beta</span></label>
+          <div class="seg" data-name="keep" data-testid="keep-mode">
+            <button data-v="all" class="on" data-i18n="keep.all">Everything</button><button data-v="chosen" data-i18n="keep.chosen">Only what I choose</button>
+          </div>
+          <div class="help" id="keepHelp"></div>
+          <div class="keep-sel" id="keepSel" hidden>
+            <span class="status" id="keepStatus" data-testid="keep-status"></span>
+            <a class="btn small" id="keepLink" data-testid="keep-link"></a>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object, without the table, floor or room.</span></span></label>
+        <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Sets aside every 10th frame for testing and reports PSNR and SSIM, so you can compare runs.</span></span></label>
+        <details class="adv" id="adv">
+          <summary data-i18n="adv.title">Advanced</summary>
+          <div class="field row">
+            <div><label for="frames" data-i18n="adv.frames">Frames</label><input id="frames" type="number" value="250" min="50" max="1000" step="10"></div>
+            <div><label for="start" data-i18n="adv.start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
+            <div><label for="end" data-i18n="adv.end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="reextract"> <span data-i18n="adv.reextract">Extract frames again instead of reusing the last set</span></label>
+          <div class="field"><label for="brushArgs" data-i18n="adv.brush">Extra Brush options</label>
+            <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000" data-i18n-placeholder="adv.brush.placeholder"></div>
+        </details>
+        <button id="startBtn" class="primary" disabled data-i18n="start.button">Start run</button>
+        <div class="help" id="startHelp" data-i18n="start.need">Choose a video first.</div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const t = window.t;
+const { esc, adviceHTML } = window.runs;
+const mb = (b) => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB";
+function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("show"), 2800); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(data.code && window.i18n.has("err." + data.code) ? t("err." + data.code) : (data.error || r.statusText)); e.code = data.code; throw e; }
+  return data;
+}
+const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+window.site.mount();
+window.i18n.mountSwitcher();
+window.theme.mount();
+window.i18n.apply();
+window.addEventListener("langchange", () => { refreshHelp(); renderVideoAdvice(); renderVideoOptions(); renderKeep(); renderStart(); });
+
+// ---------------------------------------------------------------- the draft: kept while you go to "Choose what to keep" and back
+const DRAFT = "splat:newrun";
+const draft = {
+  get() { try { return JSON.parse(sessionStorage.getItem(DRAFT)) || {}; } catch { return {}; } },
+  set(v) { try { sessionStorage.setItem(DRAFT, JSON.stringify(v)); } catch {} },
+  clear() { try { sessionStorage.removeItem(DRAFT); } catch {} },
+};
+const CHECKS = ["removeBg", "eval", "reextract"], FIELDS = ["frames", "start", "end", "brushArgs"];
+function saveDraft() {
+  const d = { video: chosenVideo, quality: seg("quality"), detail: seg("detail"), keep: seg("keep"), adv: $("adv").open };
+  CHECKS.forEach((k) => (d[k] = $(k).checked));
+  FIELDS.forEach((k) => (d[k] = $(k).value));
+  draft.set(d);
+}
+function setSeg(name, v) {
+  const b = document.querySelector(`.seg[data-name="${name}"] button[data-v="${v}"]`);
+  if (b) b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+}
+
+// ---------------------------------------------------------------- segmented controls
+function seg(name) { return document.querySelector(`.seg[data-name="${name}"] button.on`)?.dataset.v; }
+function refreshHelp() {
+  $("qualityHelp").textContent = t("quality.help." + seg("quality"));
+  $("detailHelp").textContent = t("detail.help." + seg("detail"));
+  $("keepHelp").textContent = t("keep.help." + seg("keep"));
+}
+document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  s.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  refreshHelp();
+  if (s.dataset.name === "keep") { renderKeep(); renderStart(); }
+  saveDraft();
+}));
+[...CHECKS, ...FIELDS].forEach((k) => $(k).addEventListener("change", saveDraft));
+$("adv").addEventListener("toggle", saveDraft);
+
+// ---------------------------------------------------------------- choosing / uploading a video
+let chosenVideo = null, chosenAdvice = null, videos = [];
+function setChosen(path, name, advice) {
+  chosenVideo = path; chosenAdvice = advice || null;
+  $("chosen").hidden = !path; $("dropZone").hidden = !!path; $("pickField").hidden = !!path;
+  $("chosenName").textContent = name || "";
+  renderVideoAdvice();
+  loadSelection();
+  saveDraft();
+}
+function renderVideoAdvice() {
+  const show = chosenVideo && chosenAdvice && chosenAdvice.length;
+  $("videoAdvice").hidden = !show;
+  $("videoAdvice").innerHTML = show ? adviceHTML(chosenAdvice) : "";
+}
+$("clearVideo").onclick = () => { setChosen(null); $("prevVideo").value = ""; };
+$("dropZone").onclick = () => $("fileInput").click();
+$("dropZone").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileInput").click(); } });
+$("fileInput").onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
+["dragenter", "dragover"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.remove("over"); }));
+$("dropZone").addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) upload(f); });
+$("prevVideo").onchange = (e) => { const v = videos.find((x) => x.path === e.target.value); if (v) setChosen(v.path, v.name, v.advice); };
+
+function upload(file) {
+  const xhr = new XMLHttpRequest();
+  $("uploading").hidden = false; $("upLabel").textContent = t("upload.start", { name: file.name }); $("upBar").style.width = "0";
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) {
+    $("upBar").style.width = (100 * e.loaded / e.total) + "%";
+    $("upLabel").textContent = e.loaded >= e.total ? t("upload.checking") : t("upload.progress", { name: file.name, done: mb(e.loaded), total: mb(e.total) }); } };
+  xhr.onload = () => {
+    $("uploading").hidden = true;
+    let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status >= 300) return toast(t("upload.failed") + ": " + (d.code && window.i18n.has("err." + d.code) ? t("err." + d.code) : (d.error || xhr.statusText)));
+    setChosen(d.video, d.name, d.advice); loadVideos();
+  };
+  xhr.onerror = () => { $("uploading").hidden = true; toast(t("upload.failed")); };
+  xhr.open("POST", "/api/upload");
+  xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  xhr.send(file);
+}
+async function loadVideos() { videos = await api("/api/videos").catch(() => []); renderVideoOptions(); }
+function renderVideoOptions() {
+  const keep = $("prevVideo").value;
+  $("prevVideo").innerHTML = `<option value="">${videos.length ? t("reuse.choose") : t("reuse.none")}</option>` +
+    videos.map((v) => `<option value="${esc(v.path)}">${esc(v.name)} (${mb(v.size)})</option>`).join("");
+  $("prevVideo").value = keep;
+}
+
+// ---------------------------------------------------------------- what to keep
+let selection = null;          // /api/frames for the chosen video: has a finished selection?
+async function loadSelection() {
+  selection = null; renderKeep(); renderStart();
+  if (!chosenVideo) return;
+  const v = chosenVideo;
+  const f = await api("/api/frames?" + new URLSearchParams({ video: v })).catch(() => null);
+  if (v !== chosenVideo) return;
+  selection = f || { masks_done: false };
+  renderKeep(); renderStart();
+}
+const selectionReady = () => !!(selection && selection.masks_done);
+function renderKeep() {
+  const on = seg("keep") === "chosen";
+  $("keepSel").hidden = !on;
+  if (!on) return;
+  const st = $("keepStatus"), link = $("keepLink");
+  link.hidden = !chosenVideo;
+  if (!chosenVideo) { st.className = "status"; st.textContent = t("keep.state.noVideo"); return; }
+  link.href = "/keep?" + new URLSearchParams({ video: chosenVideo });
+  if (!selection) { st.className = "status"; st.textContent = t("keep.state.checking"); link.textContent = t("keep.open"); return; }
+  const ready = selectionReady();
+  st.className = "status " + (ready ? "ok" : "bad");
+  st.textContent = ready ? t("keep.state.ready", { n: selection.frames.length }) : t("keep.state.none");
+  link.textContent = ready ? t("keep.edit") : t("keep.open");
+  link.classList.toggle("primary", !ready);
+}
+
+// ---------------------------------------------------------------- starting the run
+function renderStart() {
+  const needSel = seg("keep") === "chosen" && !selectionReady();
+  $("startBtn").disabled = !chosenVideo || needSel;
+  $("startHelp").textContent = !chosenVideo ? t("start.need") : needSel ? t("start.needSelection") : "";
+}
+$("startBtn").onclick = async () => {
+  const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
+    eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim(),
+    masks: seg("keep") === "chosen" && selectionReady() };
+  $("startBtn").disabled = true;
+  try { await postJSON("/api/jobs", body); draft.clear(); location.href = "/?queued=1"; }
+  catch (e) { toast(e.message); renderStart(); }
+};
+
+// ---------------------------------------------------------------- tools
+api("/api/setup").then((s) => { $("toolsNotice").hidden = !s.items.some((i) => i.required && !i.ok); window.site.setVersion(s.version); }).catch(() => {});
+
+// ---------------------------------------------------------------- restore: ?video=…&keep=chosen (from Choose what to keep), else the draft
+(async function restore() {
+  const q = new URLSearchParams(location.search), d = draft.get();
+  if (d.quality) setSeg("quality", d.quality);
+  if (d.detail) setSeg("detail", d.detail);
+  if (d.keep) setSeg("keep", d.keep);
+  CHECKS.forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
+  FIELDS.forEach((k) => { if (d[k] != null) $(k).value = d[k]; });
+  if (d.adv) $("adv").open = true;
+  if (q.get("keep")) setSeg("keep", q.get("keep") === "chosen" ? "chosen" : "all");
+  refreshHelp(); renderKeep(); renderStart();
+  await loadVideos();
+  const want = q.get("video") || d.video;
+  const v = want && videos.find((x) => x.path === want);
+  if (v) setChosen(v.path, v.name, v.advice);
+  if (q.toString()) history.replaceState(null, "", "/new");
+})();
+// read-only helpers for the automated tests
+window.newRun = { video: () => chosenVideo, selectionReady };
+</script>
+</body>
+</html>

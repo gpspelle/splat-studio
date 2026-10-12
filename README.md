@@ -68,8 +68,9 @@ see what's installed.
 Your browser opens Splat Studio at <http://localhost:8765>. Then:
 
 1. Read the **Recording guide** (in the menu at the top) and film your object.
-2. Drop the video onto **New run**. Splat Studio checks it and warns you about anything likely to fail.
-3. Click **Start run** and watch the progress: frames → camera poses → training.
+2. Click **New run** and drop the video there. Splat Studio checks it and warns you about anything likely to fail.
+3. Pick the settings and click **Start run**. You're taken back to the **Studio**, where you
+   watch the progress: frames → camera poses → training.
 4. Click **View splat** to look at the result, and **Export website** to publish it.
 
 Your videos and results are kept in `~/SplatStudio` (change it with `--data-dir`).
@@ -100,6 +101,12 @@ Splat Studio helps you get it right with fewer attempts:
 <br clear="right">
 
 ## Using the app
+
+The app has two main pages. The **Studio** (`/`) shows your runs and your splat library.
+**New run** (`/new`) is where you choose a video and its settings: quality, detail, what to
+keep, and the options. Starting a run takes you back to the Studio to follow it.
+
+![New run: the video on the left, the settings on the right](docs/images/new-run.png)
 
 ### Runs
 
@@ -244,14 +251,15 @@ show Splat Studio what to keep on a frame or two, and only that is trained.
    selection tool** on the page). It installs Meta's [SAM 2](https://github.com/facebookresearch/sam2)
    in its own folder (`~/.splat-studio/sam2`, about 1 GB with PyTorch). It needs Python 3.10
    or newer, which setup installs with Homebrew if needed. It uses the Mac's GPU.
-2. Choose a video in the Studio, then **Choose what to keep**. **Prepare frames** extracts the
-   frames.
+2. On **New run**, choose a video and set **What to keep** to **Only what I choose**, then click
+   **Choose what to keep**. On that page, **Prepare frames** extracts the frames.
 3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
    hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
    where the selection is wrong, for example where the holder appears from another side.
 4. **Apply to all frames** follows your selection through the whole video.
-5. **Start run with this selection**. Back in the Studio, the same video also shows **Train
-   only what I chose**.
+5. **Use this selection** takes you back to **New run**, with the video and your settings as
+   you left them and the selection marked as ready. Set the rest and **Start run** there. The
+   page where you choose what to keep doesn't start runs itself.
 
 Each training image gets a mask (`dense/masks/`), and Brush trains what's outside it to be
 transparent (`--alpha-mode transparent`), so the stand or hand disappears instead of leaving
@@ -343,7 +351,8 @@ NVIDIA GPU: on a Mac, Docker can't use the Apple GPU.
 
 O Splat Studio transforma um vídeo de celular em um splat gaussiano 3D no seu próprio Mac e
 gera um site para mostrá-lo. A interface está em inglês e português: escolha o idioma no menu
-no canto superior direito.
+no canto superior direito. O **Estúdio** mostra suas execuções e a biblioteca de splats; em
+**Nova execução** você escolhe o vídeo e as configurações e inicia a execução.
 
 ```bash
 git clone https://github.com/gpspelle/splat-studio.git
@@ -359,10 +368,11 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
 sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um apoio aparece no
-vídeo, use **Escolher o que manter** (beta): instale a ferramenta de seleção uma vez com
-`./splat-studio setup --masking` (SAM 2, cerca de 1 GB), clique no objeto (**Manter**) e no
-que deve sair (**Deixar de fora**) em um ou dois quadros, clique em **Aplicar a todos os quadros** e
-inicie a execução. Só o que você escolheu é treinado; o resto fica transparente. Para ver dois splats lado a lado, clique em
+vídeo, em **Nova execução** mude **O que manter** para **Só o que eu escolher** (beta): instale a
+ferramenta de seleção uma vez com `./splat-studio setup --masking` (SAM 2, cerca de 1 GB),
+clique no objeto (**Manter**) e no que deve sair (**Deixar de fora**) em um ou dois quadros,
+clique em **Aplicar a todos os quadros** e depois em **Usar esta seleção**, que volta para
+Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
 exportada como site. A barra embaixo do nome de cada modelo gira só aquele modelo (**↺ 15°**,
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,

@@ -66,7 +66,7 @@ class ContrastTest(unittest.TestCase):
 
 class UsageTest(unittest.TestCase):
     def test_every_page_uses_the_design_system(self):
-        for page in ("index.html", "viewer.html", "compare.html", "keep.html"):
+        for page in ("index.html", "new.html", "viewer.html", "compare.html", "keep.html"):
             html = (STATIC / page).read_text()
             self.assertRegex(html, r'href="\.?/design\.css"', page)
             # pages define no colours of their own: everything comes from tokens

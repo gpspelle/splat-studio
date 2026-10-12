@@ -1,6 +1,6 @@
 // Site header and footer, shared by the Studio, History and recording guide pages.
 //
-//   <body data-page="studio">        which nav item is current (studio | history | guide)
+//   <body data-page="studio">        which nav item is current (studio | new | history | guide)
 //   window.site.mount({ tools })     tools: true adds the "Tools ready" button (Studio only)
 //
 // Load after i18n.js and theme.js, and call before i18n.apply() so the labels get translated.
@@ -19,7 +19,8 @@
   const ext = (href, key, text) => `<a href="${href}" target="_blank" rel="noopener" data-i18n="${key}">${text}</a>`;
 
   function header(page, tools) {
-    const nav = [["studio", "/", "nav.studio", "Studio"], ["library", "/#library", "nav.library", "Library"],
+    const nav = [["studio", "/", "nav.studio", "Studio"], ["new", "/new", "nav.new", "New run"],
+                 ["library", "/#library", "nav.library", "Library"],
                  ["history", "/history", "nav.history", "History"],
                  ["guide", "/guide", "nav.guide", "Recording guide"]]
       .map(([id, href, key, text]) => `<a href="${href}" data-testid="nav-${id}" data-i18n="${key}"${id === page ? ' aria-current="page"' : ""}>${text}</a>`)
@@ -44,6 +45,7 @@
       </div>
       <div class="foot-col"><b data-i18n="foot.app">App</b>
         <a href="/" data-i18n="nav.studio">Studio</a>
+        <a href="/new" data-i18n="nav.new">New run</a>
         <a href="/#library" data-i18n="nav.library">Library</a>
         <a href="/history" data-i18n="nav.history">History</a>
         <a href="/guide" data-i18n="nav.guide">Recording guide</a></div>
