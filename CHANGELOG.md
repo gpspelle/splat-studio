@@ -44,6 +44,11 @@
   with error code `splat_busy`.
 
 ### Changed
+- **Library pictures show the object.** Runs trained on a selection use a frame where the
+  selection is large and fully in view, cropped around it with the rest blurred and darkened
+  (`run/thumbs/run.jpg`), instead of the video's first frame. With several objects, each
+  object's splat gets its own picture from its masks. Older runs get theirs the first time the
+  library lists them.
 - **Choose what to keep prepares the frames by itself** when it opens (using the frame count
   from New run), instead of waiting for a **Prepare frames** click. Opening the page twice
   reuses the frames job that's already running.

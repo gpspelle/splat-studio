@@ -168,6 +168,8 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(f"Couldn't prepare the masks: {e}")
         say(f"    {n} masks ({args.mask_mode})")
         append_summary(ws, [("masks", f"{n} frames, {args.mask_mode}")])
+        from .thumbs import make as make_thumb
+        make_thumb(frames, masksmod.masks_dir(frames), ws / "thumbs" / "run.jpg")   # the library shows the object
 
     # ------------------------------------------------ 3: Brush
     if args.no_train:
@@ -226,7 +228,11 @@ def main(argv: list[str] | None = None) -> None:
             from .objects import split
             from .splats import PlyError
             try:
+                from .masks import masks_dir
+                from .thumbs import make as make_thumb
                 for s in split(plys[-1], ws, frames, log=say):
+                    make_thumb(frames, masks_dir(frames) / "objects" / str(s["id"]),
+                               ws / "thumbs" / (Path(s["output"]).stem + ".jpg"))   # its own library picture
                     say(f"Part copy ({s['name']}): {s['output']}")      # parsed by the web UI
                     append_summary(ws, [(f"object {s['name']}", f"{s['output']}  ({s['kept']} splats)")])
             except (PlyError, OSError, ValueError, RuntimeError) as e:

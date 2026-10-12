@@ -305,6 +305,11 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertEqual(len(list((dense / "masks").glob("*.png"))), len(list((dense / "images").glob("*.jpg"))))
         summary = (run / "summary.txt").read_text()
         self.assertIn("--alpha-mode transparent", summary)
+        # the library shows the chosen object, not the first frame
+        self.assertTrue((run / "thumbs" / "run.jpg").exists())
+        self.assertTrue(done["thumb"].endswith("/thumbs/run.jpg"), done["thumb"])
+        _, lib = self.json("GET", "/api/splats")
+        self.assertTrue(all(x["thumb"].endswith("/thumbs/run.jpg") for x in lib if x["video"] == "vase"))
         self.assertIn("masks:", summary)
 
     def test_runs_without_masks_are_unchanged(self):

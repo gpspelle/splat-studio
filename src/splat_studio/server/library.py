@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -78,7 +79,17 @@ class DataDir:
             return parts[1] if len(parts) >= 2 and parts[0] == "workspace" else None
         return None
 
-    def thumbnail(self, video: str | None = None, run_dir: str | None = None) -> str | None:
+    def thumbnail(self, video: str | None = None, run_dir: str | None = None, splat: Path | None = None) -> str | None:
+        """A picture for a run or one of its splats: the chosen object(s) when the run was
+        trained on a selection, else the video's first frame."""
+        if run_dir:
+            rd = self.root / run_dir
+            own = rd / "thumbs" / (Path(splat).stem + ".jpg") if splat else None
+            if own and own.exists():
+                return self.rel(own)
+            if (rd / "thumbs" / "run.jpg").exists():
+                return self.rel(rd / "thumbs" / "run.jpg")
+            self._make_thumbs_later(run_dir)
         name = self.frames_name(video, run_dir)
         d = self.frames / name if name else None
         if d and d.is_dir():
@@ -86,6 +97,37 @@ class DataDir:
             if first:
                 return self.rel(first)
         return None
+
+    _thumbs_lock = threading.Lock()
+    _thumbs_tried: set = set()
+
+    def _make_thumbs_later(self, run_dir: str) -> None:
+        """Runs trained on a selection before pictures were made at run time: make them once,
+        in the background (the first frame is shown meanwhile)."""
+        rd = self.root / run_dir
+        if not (rd / "dense" / "masks.json").exists() or (rd / ".lock").exists():
+            return
+        with self._thumbs_lock:
+            if run_dir in self._thumbs_tried:
+                return
+            self._thumbs_tried.add(run_dir)
+        name = self.frames_name(run_dir=run_dir)
+        frames = self.frames / name if name else None
+        if not frames:
+            return
+
+        def work():
+            from .. import thumbs
+            from ..masks import masks_dir
+            try:
+                thumbs.make(frames, masks_dir(frames), rd / "thumbs" / "run.jpg")
+                for p in (rd / "splat").glob("*_part-*.ply"):
+                    d = thumbs.part_mask_dir(frames, p)
+                    if d:
+                        thumbs.make(frames, d, rd / "thumbs" / (p.stem + ".jpg"))
+            except (OSError, ValueError, RuntimeError):
+                pass
+        threading.Thread(target=work, daemon=True).start()
 
     def extraction_info(self, video: str | None = None, run_dir: str | None = None) -> dict:
         name = self.frames_name(video, run_dir)
@@ -145,7 +187,7 @@ class DataDir:
                               "cleaned": p.stem.endswith("_clean"),
                               "isolated": p.stem.endswith("_object"),
                               "part": "_part-" in p.stem,
-                              "thumb": None if imported else self.thumbnail(run_dir=src)})
+                              "thumb": None if imported else self.thumbnail(run_dir=src, splat=p)})
         return sorted(items, key=lambda i: -i["mtime"])
 
     def library_splat(self, relpath: str) -> Path | None:

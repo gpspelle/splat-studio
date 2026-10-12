@@ -289,6 +289,10 @@ named after it (`<splat>_part-<name>.ply`, shown as *table · standard · mug*),
 with all of them. The finished run has a button for each object, and each one is in the
 library, ready for the viewer, a comparison or a website.
 
+In the library, runs trained on a selection show the object rather than the video's first
+frame: a frame where it's large and fully in view, cropped around it, with the rest blurred and
+darkened. With several objects, each object's splat has its own picture.
+
 To split the trained splat, every splat is projected into 48 frames spread over the video,
 using COLMAP's cameras. It goes to the object whose mask it lands in most often. A part of
 one object hidden behind another in some frames is still seen in most of them, so it stays
@@ -404,7 +408,8 @@ clique em **Aplicar a todos os quadros** e depois em **Usar esta seleção**, qu
 Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente.
 Com várias coisas no vídeo (três objetos numa mesa), escolha **Vários objetos**: na página, dê
 nome a cada objeto, use **+ Adicionar objeto** e clique em cada um. A execução treina uma vez e
-salva um splat de cada objeto, com o nome dele, além do splat com todos. Para ver dois splats lado a lado, clique em
+salva um splat de cada objeto, com o nome dele, além do splat com todos. Na biblioteca, cada um aparece com
+uma imagem do próprio objeto, e não com o primeiro quadro do vídeo. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
 exportada como site. A barra embaixo do nome de cada modelo gira só aquele modelo (**↺ 15°**,
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,

@@ -147,6 +147,12 @@ standard camera models), and the voxel goes to the object whose mask holds it in
 of the frames where it's in view (at least 3). Masks are read at 320 px wide through ffmpeg,
 so the split stays standard-library Python; 500,000 splats take about 15 seconds.
 
+**Library pictures** (`thumbs.py`). From ~24 masks spread over the video, the one with the
+largest selection that doesn't touch the frame's edge wins; its frame is cropped around the
+selection at the tiles' 16:10 shape, and ffmpeg's `maskedmerge` keeps the selection sharp over a
+blurred, darkened copy of the frame. Made during the run (`run/thumbs/run.jpg`, and
+`<splat>.jpg` per object), or once in the background for runs made before.
+
 Tests use a stand-in backend (`SPLAT_STUDIO_MASK_BACKEND=disc`: a disc around the keep clicks)
 and a stubbed SAM 2 for the chunking logic.
 
