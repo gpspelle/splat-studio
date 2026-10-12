@@ -88,7 +88,8 @@ class LibraryPictureTest(TempDirTestCase):
         first = {s["name"]: s["thumb"] for s in data.list_splats()}
         self.assertTrue(all(t.endswith("frame_00000.jpg") for t in first.values()))   # meanwhile: the first frame
         end = time.time() + 30
-        while time.time() < end and not (rd / "thumbs" / "standard_3000_part-vase.jpg").exists():
+        want = [rd / "thumbs" / n for n in ("run.jpg", "standard_3000_part-mug.jpg", "standard_3000_part-vase.jpg")]
+        while time.time() < end and not all(p.exists() for p in want):      # made in any order
             time.sleep(0.2)
         got = {s["name"]: s["thumb"] for s in data.list_splats()}
         self.assertEqual(got["standard_3000.ply"], "workspace/table/run_1/thumbs/run.jpg")
