@@ -34,7 +34,7 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts"]
+              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts", "coverage"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -82,6 +82,7 @@ RE_TRACK = re.compile(r"^\s+(\S+\.jpg) -> (\S+\.jpg)\s+\((\d+) frames\)")
 RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
 RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
+RE_COVERAGE = re.compile(r"^Coverage: (\{.*\})\s*$")
 RE_PART_COPY = re.compile(r"Part copy \((.*)\): (.+\.ply)")
 RE_STAGE_SPLIT = re.compile(r"==> Splitting the objects")
 RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
@@ -187,6 +188,12 @@ def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -
             job.isolated = counts                                  # background removal, not fog
         else:
             job.cleaned = counts
+    m = RE_COVERAGE.search(line.strip())
+    if m:
+        try:
+            job.coverage = json.loads(m.group(1))
+        except ValueError:
+            pass
     if RE_STAGE_SPLIT.search(line):
         clock.start_phase("split", t)
     m = RE_PART_COPY.search(line)
@@ -390,6 +397,8 @@ class Runner:
         info = self.data.extraction_info(j.video, j.run_dir)
         d["track_breaks"] = guidance.track_break_times(j.track_breaks or [], info.get("fps"), info.get("start", 0.0))
         d["thumb"] = self.data.thumbnail(j.video, j.run_dir)
+        # coverage warnings matter most while the run is still going: before training ends
+        d["coverage_advice"] = guidance.coverage_advice(j.coverage, info.get("fps"), info.get("start", 0.0))
         d["advice"] = guidance.run_advice(d) if j.status in ("done", "failed") else []
         return d
 

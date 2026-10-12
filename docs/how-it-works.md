@@ -51,6 +51,15 @@ Below 60% the run stops, with advice, instead of training on a bad model.
 **Safety.** Every run has its own folder `workspace/<video>/run_<date_time>/` with a
 `summary.txt`, and a lock file stops two runs from ever writing to the same folder.
 
+### Coverage check (`splat_studio/coverage.py`)
+
+Right after COLMAP, before training: "up" is the average of the cameras' own up directions, and
+the object is the point the cameras' viewing rays pass closest to (least squares). Each camera
+gets an angle around the object and a height angle seen from it. The largest empty arc between
+neighbouring cameras over 60°, or a spread under 15° between the 10th and 90th percentile
+heights, is a warning; the frames on either side of the gap give the moment in the video. The
+run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`.
+
 ## Stage 3: training (`splat_studio/brush.py`, `pipeline.py`)
 
 [Brush](https://github.com/ArthurBrussee/brush) trains the splat on the GPU (Metal on Apple

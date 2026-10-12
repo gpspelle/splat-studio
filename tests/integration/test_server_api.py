@@ -368,3 +368,31 @@ class SeveralObjectsTest(ServerTestCase):
         _, log = self.json("GET", f"/api/jobs/{job['id']}/log")
         self.assertIn("==> Splitting the objects", log["log"])
         self.assertIn("couldn't split the objects", log["log"])      # stand-in COLMAP: no camera poses
+
+
+@needs_ffmpeg
+class CoverageTest(ServerTestCase):
+    """Right after camera poses, the run says where the cameras were (#12)."""
+
+    def run_with(self, poses):
+        with mock_env({"FAKE_COLMAP_POSES": poses}):
+            up = json.loads(self.upload(make_video(self.tmp / f"{poses}.mov", seconds=4))[1])
+            _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
+                                                     "frames": 24})
+            return self.wait_done(job["id"])
+
+    def test_a_missing_side_is_flagged_with_its_moment_in_the_video(self):
+        done = self.run_with("gap")
+        self.assertEqual(done["status"], "done", done.get("error"))
+        self.assertEqual(done["coverage"]["cameras"], done["frames"])
+        self.assertGreater(done["coverage"]["gap"]["degrees"], 120)
+        gap = next(a for a in done["coverage_advice"] if a["code"] == "run.coverage_gap_at")
+        self.assertRegex(gap["params"]["when"], r"^\d:\d\d and \d:\d\d$")
+        self.assertIn("run.coverage_gap_at", [a["code"] for a in done["advice"]])     # and on the finished run
+        self.assertTrue((self.data.root / done["run_dir"] / "coverage.json").exists())
+        self.assertIn("coverage", (self.data.root / done["run_dir"] / "summary.txt").read_text())
+
+    def test_all_the_way_round_is_fine(self):
+        done = self.run_with("full")
+        self.assertEqual([a["code"] for a in done["coverage_advice"]], ["run.coverage_ok"])
+        self.assertNotIn("run.coverage_gap_at", [a["code"] for a in done["advice"]])

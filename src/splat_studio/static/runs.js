@@ -78,6 +78,30 @@
   const adviceText = (a) => (a.code && window.i18n.has("advice." + a.code) ? t("advice." + a.code, a.params || {}) : a.text);
   const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(adviceText(a))}</li>`).join("");
 
+  // where the cameras were around the object, seen from above: dots by angle (higher cameras
+  // nearer the middle), the largest empty arc in red when it's wide enough to leave a thin side
+  function coverageHTML(c, advice, withOk) {
+    if (!c || !c.azimuths) return "";
+    const R = 25, cx = 32, cy = 32, els = c.elevations || [];
+    const lo = Math.min(...els), hi = Math.max(...els), span = Math.max(1, hi - lo);
+    const pt = (az, r) => [cx + r * Math.cos(az * Math.PI / 180), cy - r * Math.sin(az * Math.PI / 180)];
+    const dots = c.azimuths.map((az, i) => { const [x, y] = pt(az, R - 9 * ((els[i] ?? lo) - lo) / span);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.8" style="fill:var(--ink-2)"/>`; }).join("");
+    const g = c.gap || {}, wide = (g.degrees || 0) > 60;
+    let arc = "";
+    if (wide) {
+      const [x1, y1] = pt(g.from, R + 4), [x2, y2] = pt(g.to, R + 4);
+      arc = `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${g.degrees > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round"/>`;
+    }
+    const tips = (advice || []).filter((a) => withOk || a.level !== "ok");
+    return `<div class="coverage" data-testid="coverage">
+      <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="${esc(t("coverage.title"))}">
+        <circle cx="${cx}" cy="${cy}" r="${R}" style="fill:none;stroke:var(--rule)"/><circle cx="${cx}" cy="${cy}" r="2.5" style="fill:var(--signal)"/>${arc}${dots}</svg>
+      <div><div class="label">${esc(t("coverage.title"))}</div>
+        <div class="meta">${esc(t("coverage.facts", { n: c.cameras, gap: Math.round(g.degrees || 0), h: Math.round((c.height || {}).spread || 0) }))}</div>
+        ${tips.length ? `<ul class="advice">${adviceHTML(tips)}</ul>` : ""}</div></div>`;
+  }
+
   const open = new Set();
   const hooks = { stop: null, retrain: null, changed: null };
 
@@ -130,7 +154,7 @@
       <div style="min-width:0">
         ${p.head}${p.tags}</div>
         <div class="meta">${esc(p.timing)}${p.facts ? " · " + esc(p.facts) : ""}</div>
-        ${stepper(j)}${now}${p.err}
+        ${stepper(j)}${now}${coverageHTML(j.coverage, j.coverage_advice, false)}${p.err}
       </div>
       <div class="actions">${p.view}<div class="row">
         <button class="small" onclick="runs.stop('${esc(j.id)}')">${esc(t("btn.stop"))}</button>
@@ -157,7 +181,7 @@
         <button class="small ghost" data-testid="run-details" aria-expanded="${isOpen}" onclick="runs.toggle('${esc(j.id)}')">${esc(t(isOpen ? "btn.less" : "btn.details"))}</button></div></div>
       <div class="more">
         ${p.tags ? `<div class="head">${p.tags}</div>` : ""}
-        ${stepper(j)}
+        ${stepper(j)}${coverageHTML(j.coverage, (j.coverage_advice || []).filter((a) => a.level === "ok"), true)}
         ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}${p.guide}${p.noSplat}
         ${p.extra || p.canRetrain || removable ? `<div class="more-actions">${p.extra}
           ${p.canRetrain ? `<button class="small" onclick="runs.retrain('${esc(j.run_dir)}')">${esc(t("btn.trainAgain"))}</button>` : ""}

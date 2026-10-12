@@ -9,6 +9,11 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Coverage check after camera poses** ([#12](https://github.com/gpspelle/splat-studio/issues/12)).
+  Before training, the run measures where the cameras were around the object and shows a
+  coverage ring on its card (one dot per camera, the largest gap in red). A gap over 60° or a
+  single height gives a warning that names the moment in the video. Also
+  `./splat-studio coverage RUN`, and `coverage.json` plus a summary line in each run.
 - **Fix one slipped frame without redoing every frame** ([#11](https://github.com/gpspelle/splat-studio/issues/11)).
   After *Apply to all frames*, clicks added on a frame mark it as changed, and **Update N
   changed frame(s)** redoes only the frames around it: for each object clicked there, from the

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 import shlex
 import shutil
@@ -153,6 +154,19 @@ def main(argv: list[str] | None = None) -> None:
                 latest.symlink_to(ws.name)
             except OSError:
                 pass
+
+    # ------------------------------------------------ 2a: coverage (where the cameras were, before training)
+    if not args.train_only and not args.dry_run:
+        from . import coverage
+        cov = coverage.for_run(ws)
+        if cov:
+            (ws / "coverage.json").write_text(json.dumps(cov))
+            say(f"    coverage: {coverage.summary_line(cov)}")
+            say("Coverage: " + json.dumps(cov, separators=(",", ":")))          # parsed by the web UI
+            append_summary(ws, [("coverage", coverage.summary_line(cov))])
+            for p in coverage.problems(cov):
+                say("    warning: " + {"gap": "one side of the object was barely filmed (see the coverage ring)",
+                                       "height": "the cameras were all at about the same height"}[p])
 
     # ------------------------------------------------ 2b: masks (Choose what to keep)
     dense = ws / "dense"

@@ -114,6 +114,31 @@ def track_break_times(breaks: list[dict], fps: float | None, start: float = 0.0)
     return out
 
 
+def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0.0) -> list[dict]:
+    """Advice from where the cameras were around the object (coverage.measure)."""
+    from .coverage import problems
+    if not cov:
+        return []
+    tips = []
+    found = problems(cov)
+    if "gap" in found:
+        g = cov["gap"]
+        a, z = frame_time(g["first"], fps, start), frame_time(g["last"], fps, start)
+        when = f"{fmt_timestamp(min(a, z))} and {fmt_timestamp(max(a, z))}" if a is not None and z is not None else ""
+        where = f" (the video passes it between {when})" if when else ""
+        deg = f"{g['degrees']:.0f}"
+        text = (f"One side of the object was barely filmed: no camera in a {deg}° arc around it{where}. "
+                "Walk all the way around at the same distance, or that side will look thin or blurry.")
+        tips.append(tip("warn", "run.coverage_gap_at", text, deg=deg, when=when) if when
+                    else tip("warn", "run.coverage_gap", text, deg=deg))
+    if "height" in found:
+        tips.append(tip("warn", "run.coverage_height", "The cameras were all at about the same height, so the top and "
+                        "bottom of the object will be soft. Film three loops: low, eye level, then high."))
+    if not found:
+        tips.append(tip("ok", "run.coverage_ok", "The cameras went all the way around the object, at several heights."))
+    return tips
+
+
 def registered_ratio(text: str | None) -> float | None:
     """'230/250 frames (92%)' or '230/250 (92%)' -> 0.92."""
     m = re.search(r"(\d+)/(\d+)", text or "")
@@ -131,6 +156,7 @@ def run_advice(job: dict) -> list[dict]:
         c = job["isolated"]
         tips.append(tip("ok", "run.isolated", f"Background removed: kept {c['kept']:,} of {c['total']:,} splats. "
                         "The original is kept next to it.", kept=f"{c['kept']:,}", total=f"{c['total']:,}"))
+    tips += [t for t in job.get("coverage_advice") or [] if t["level"] != "ok"]
     status, error = job.get("status"), (job.get("error") or "")
     ratio = registered_ratio(job.get("registered"))
     breaks = job.get("track_breaks") or []

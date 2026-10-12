@@ -5,6 +5,8 @@ Prints the same kinds of progress lines as real COLMAP and writes the minimal ou
 the pipeline reads. Behaviour knobs (environment variables):
   FAKE_COLMAP_REGISTER  fraction of frames the mapper registers (default 1.0)
   FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
+  FAKE_COLMAP_POSES     "full" or "gap": write real camera poses walking around the object
+                        (all the way round, or skipping a 130-degree side); default: none
 """
 import glob
 import math
@@ -30,6 +32,29 @@ REGISTER = float(os.environ.get("FAKE_COLMAP_REGISTER", "1.0"))
 def images():
     p = opt("--image_path") or os.path.join(os.path.dirname(opt("--database_path")), "images")
     return sorted(os.path.basename(x) for x in glob.glob(os.path.join(p, "*.jpg")))
+
+
+def write_poses(path, names, kind):
+    """images.bin with cameras circling the origin at three heights, looking at it (y down)."""
+    import struct
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from plyfile import _rot_to_quat
+    span = 230.0 if kind == "gap" else 360.0
+    out = bytearray(struct.pack("<Q", len(names)))
+    for i, name in enumerate(names):
+        a = math.radians(span * i / max(1, len(names)) if kind == "gap" else 360.0 * i / max(1, len(names)))
+        h = (-0.4, 0.0, 0.5)[i % 3]
+        c = (3 * math.cos(a), -h, 3 * math.sin(a))
+        z = [-v for v in c]
+        nz = math.sqrt(sum(v * v for v in z)); z = [v / nz for v in z]
+        down = (0.0, 1.0, 0.0)
+        x = [down[1] * z[2] - down[2] * z[1], down[2] * z[0] - down[0] * z[2], down[0] * z[1] - down[1] * z[0]]
+        nx = math.sqrt(sum(v * v for v in x)); x = [v / nx for v in x]
+        y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]]
+        R = [x, y, z]
+        t = [-sum(R[r][k] * c[k] for k in range(3)) for r in range(3)]
+        out += struct.pack("<I7dI", i + 1, *_rot_to_quat(R), *t, 1) + name.encode() + b"\0" + struct.pack("<Q", 0)
+    open(path, "wb").write(bytes(out))
 
 
 if cmd == "feature_extractor":
@@ -95,6 +120,8 @@ elif cmd == "image_undistorter":
         time.sleep(DELAY)
     for b in ("cameras", "images", "points3D"):
         open(os.path.join(out, "sparse", f"{b}.bin"), "w").close()
+    if os.environ.get("FAKE_COLMAP_POSES"):
+        write_poses(os.path.join(out, "sparse", "images.bin"), reg, os.environ["FAKE_COLMAP_POSES"])
     open(os.path.join(out, "sparse", "registered.txt"), "w").write("\n".join(reg))
 else:
     sys.exit(f"fake colmap: unknown command {cmd}")
