@@ -257,7 +257,10 @@ show Splat Studio what to keep on a frame or two, and only that is trained.
 3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
    hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
    where the selection is wrong, for example where the holder appears from another side.
-4. **Apply to all frames** follows your selection through the whole video.
+4. **Apply to all frames** follows your selection through the whole video. Scrub through it.
+   Where the selection slipped, add a click on that frame. **Update N changed frame(s)** then
+   redoes only the frames around it, from the previous frame you clicked to the next one, and
+   every other frame keeps its mask.
 5. **Use this selection** takes you back to **New run**, with the video and your settings as
    you left them and the selection marked as ready. Set the rest and **Start run** there. The
    page where you choose what to keep doesn't start runs itself.
@@ -404,7 +407,8 @@ sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um ap
 vídeo, em **Nova execução** mude **O que manter** para **Um objeto** (beta): instale a
 ferramenta de seleção uma vez com `./splat-studio setup --masking` (SAM 2, cerca de 1 GB),
 clique no objeto (**Manter**) e no que deve sair (**Deixar de fora**) em um ou dois quadros,
-clique em **Aplicar a todos os quadros** e depois em **Usar esta seleção**, que volta para
+clique em **Aplicar a todos os quadros** (se um quadro escapar, clique nele de novo e use
+**Atualizar quadros alterados**, que refaz só os quadros em volta) e depois em **Usar esta seleção**, que volta para
 Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente.
 Com várias coisas no vídeo (três objetos numa mesa), escolha **Vários objetos**: na página, dê
 nome a cada objeto, use **+ Adicionar objeto** e clique em cada um. A execução treina uma vez e

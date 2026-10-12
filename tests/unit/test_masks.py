@@ -160,6 +160,65 @@ class MakeMasksTest(TempDirTestCase):
         masks.make_masks(self.frames, {"frame_00001.jpg": [[0.5, 0.5, 1]]}, "disc")
         self.assertFalse((out / "objects").exists())
 
+    def test_update_segments(self):
+        names = [f"f{i}" for i in range(10)]
+        prompts = {"f2": [[0.5, 0.5, 1]], "f6": [[0.5, 0.5, 1], [0.2, 0.2, 2]], "f8": [[0.1, 0.1, 0]]}
+        # f6 changed: object 1 from its previous click (f2) to the end; object 2 only has f6
+        self.assertEqual(masks.update_segments(names, prompts, ["f6"], [1, 2]), {1: [(2, 9)], 2: [(0, 9)]})
+        # f4 gets a new click for object 1: between f2 and f6
+        p2 = {**prompts, "f4": [[0.4, 0.4, 1]]}
+        self.assertEqual(masks.update_segments(names, p2, ["f4"], [1, 2]), {1: [(2, 6)]})
+        # a leave-out-only frame touches every object
+        self.assertEqual(masks.update_segments(names, prompts, ["f8"], [1, 2]), {1: [(6, 9)], 2: [(6, 9)]})
+        # overlapping ranges merge; unknown frames are ignored
+        self.assertEqual(masks.update_segments(names, p2, ["f4", "f2", "nope"], [1, 2]), {1: [(0, 6)]})
+
+    def test_update_redoes_only_the_frames_around_a_change(self):
+        import time
+        prompts = {"frame_00001.jpg": [[0.3, 0.5, 1]], "frame_00002.jpg": [[0.3, 0.5, 1]], "frame_00004.jpg": [[0.3, 0.5, 1]]}
+        out = masks.make_masks(self.frames, prompts, "disc")
+        written = {p.name: p.stat().st_mtime_ns for p in out.glob("*.png")}
+        time.sleep(0.05)
+        prompts["frame_00002.jpg"] = [[0.7, 0.5, 1]]                 # the selection slipped on frame 2
+        self.assertTrue(masks.can_update(self.frames, prompts))
+        masks.update_masks(self.frames, prompts, ["frame_00002.jpg"], "disc")
+        redone = sorted(p.name for p in out.glob("*.png") if p.stat().st_mtime_ns != written[p.name])
+        # from the previous clicked frame (1) to the next one (4); frame 5 keeps its mask
+        self.assertEqual(redone, ["frame_00001.png", "frame_00002.png", "frame_00003.png", "frame_00004.png"])
+        _, _, rows = masks.read_png_gray(out / "frame_00002.png")
+        self.assertEqual(rows[12][22], 255)                          # the new click is kept
+        self.assertTrue(masks.has_masks(self.frames))
+        self.assertEqual(json.loads((out / "done.json").read_text())["updated"], 4)
+
+    def test_update_with_several_objects_rebuilds_the_union_only_there(self):
+        prompts = {"frame_00001.jpg": [[0.25, 0.5, 1], [0.75, 0.5, 2]]}
+        out = masks.make_masks(self.frames, prompts, "disc")
+        prompts["frame_00003.jpg"] = [[0.6, 0.5, 2]]
+        masks.update_masks(self.frames, prompts, ["frame_00003.jpg"], "disc")
+        _, _, one = masks.read_png_gray(out / "objects" / "1" / "frame_00003.png")
+        _, _, two = masks.read_png_gray(out / "objects" / "2" / "frame_00003.png")
+        _, _, both = masks.read_png_gray(out / "frame_00003.png")
+        self.assertEqual(both, [bytes(a | b for a, b in zip(r1, r2)) for r1, r2 in zip(one, two)])
+        self.assertEqual(two[12][19], 255)                          # object 2 moved to where it was clicked
+        # a new object can't be updated in: it needs every frame
+        prompts["frame_00002.jpg"] = [[0.5, 0.2, 3]]
+        self.assertFalse(masks.can_update(self.frames, prompts))
+        with self.assertRaisesRegex(ValueError, "apply to all frames"):
+            masks.update_masks(self.frames, prompts, ["frame_00002.jpg"], "disc")
+
+    def test_png_reader_handles_every_filter(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        import random
+        rnd = random.Random(3)
+        im = Image.new("L", (37, 23))
+        im.putdata([rnd.choice((0, 255, rnd.randrange(256))) for _ in range(37 * 23)])
+        im.save(self.tmp / "p.png", optimize=True)                    # Pillow picks filters per row
+        w, h, rows = masks.read_png_gray(self.tmp / "p.png")
+        self.assertEqual((w, h, b"".join(rows)), (37, 23, im.tobytes()))
+
     def test_points_for_each_object(self):
         prompts = {"a": [[0.1, 0.1, 1], [0.9, 0.9, 2], [0.5, 0.5, 0]], "b": [[0.2, 0.2, 2]], "c": [[0.3, 0.3, 0]]}
         self.assertEqual(masks.points_for(prompts, 1), {"a": [[0.1, 0.1, 1], [0.9, 0.9, 0], [0.5, 0.5, 0]],
@@ -271,6 +330,12 @@ class MaskworkChunkingTest(TempDirTestCase):
         self.assertEqual([c[0] for c in calls if not c[2]][:2], [4, 3])
         self.assertEqual([c[1] for c in calls if not c[2] and c[0] == 4], [{0: "points"}] * 2)   # obj 1: 4-7, obj 2: 6-9
         self.assertIn({3: "points", 0: "points"}, [c[1] for c in calls if c[2]])   # the leave-out click, going back
+
+    def test_only_the_given_segments(self):
+        calls, out = self.run_stub({"objects": {"1": {"frame_00004.jpg": [[0.5, 0.5, 1]], "frame_00008.jpg": [[0.4, 0.5, 1]]}},
+                                    "segments": {"1": [[4, 8]]}})
+        self.assertEqual(sorted(p.name for p in out.glob("*.png")), [f"frame_{i:05d}.png" for i in range(4, 9)])
+        self.assertEqual([c[0] for c in calls], [4, 2])           # frames 4-7, then 7-8 (chunks of 4)
 
     def run_stub(self, job_fields):
         import contextlib

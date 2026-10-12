@@ -9,6 +9,11 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Fix one slipped frame without redoing every frame** ([#11](https://github.com/gpspelle/splat-studio/issues/11)).
+  After *Apply to all frames*, clicks added on a frame mark it as changed, and **Update N
+  changed frame(s)** redoes only the frames around it: for each object clicked there, from the
+  previous frame it was clicked on to the next one. Changes survive a reload. `mask --prompts`
+  accepts `"changed": [frames]` for the same thing on the command line.
 - **Several objects: one splat each (beta).** **What to keep** on New run has **Everything**, **One
   object** and **Several objects**. With several, the Choose what to keep page lists the objects
   (**+ Add object**, up to 8), each with a name and its own colour; clicks go to the selected

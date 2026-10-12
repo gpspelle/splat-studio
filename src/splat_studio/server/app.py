@@ -311,7 +311,9 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                         if not ids:
                             return self.send_json({"error": "click the object at least once", "code": "no_keep_point"}, 400)
                         pf = data.jobs / f"prompts_{int(time.time() * 1000)}.json"
-                        pf.write_text(json.dumps({"points": prompts,
+                        names = {f.name for f in masksmod.frame_list(frames_dir)}
+                        changed = [c for c in body.get("changed") or [] if isinstance(c, str) and c in names]
+                        pf.write_text(json.dumps({"points": prompts, "changed": changed,
                                                   "objects": masksmod.normalise_objects(body.get("objects"), ids)}))
                         o["prompts_file"] = data.rel(pf)
                     running = next((j for j in list(runner.jobs.values()) if j.type == "frames" and t == "frames"

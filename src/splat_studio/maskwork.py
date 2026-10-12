@@ -152,6 +152,20 @@ def propagate(job_file: str) -> None:
     objects = job.get("objects") or {"1": job["prompts"]}    # older jobs: one object
     pred = load_predictor(job["checkpoint"], job["config"])
     print(f"    SAM 2 on {device()}", flush=True)
+    segments = job.get("segments")                           # redo only these frames (after a few changed clicks)
+    if segments is not None:
+        progress = Progress(sum(hi - lo + 1 for v in segments.values() for lo, hi in v))
+        multi = len(objects) > 1
+        touched = set()
+        for oid, ranges in sorted(segments.items(), key=lambda kv: int(kv[0])):
+            d = out / "objects" / str(oid) if multi else out
+            for lo, hi in ranges:
+                propagate_object(pred, frames[lo:hi + 1], objects[str(oid)], d, progress)
+                touched.update(range(lo, hi + 1))
+        if multi:
+            write_union([frames[i] for i in sorted(touched)],
+                        [out / "objects" / str(k) for k in sorted(objects, key=int)], out)
+        return
     progress = Progress(len(frames) * len(objects))
     if len(objects) == 1:
         propagate_object(pred, frames, next(iter(objects.values())), out, progress)

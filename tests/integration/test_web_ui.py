@@ -149,6 +149,23 @@ class WebUiTest(BrowserTestCase):
         self.page.reload()                                            # the clicks and masks are kept
         self.page.wait_for_function("window.keepPage.masksDone() && window.keepPage.maskShown()", timeout=30000)
         self.assertEqual(len(self.page.evaluate("Object.values(window.keepPage.prompts())[0]")), 2)
+        # a slipped frame: click it again, then update only the frames around it (#11)
+        self.assertTrue(self.page.get_by_test_id("keep-update").is_hidden())
+        self.page.evaluate("document.getElementById('scrub').value = 30; document.getElementById('scrub').dispatchEvent(new Event('input'))")
+        self.page.wait_for_function("window.keepPage.index() === 30 && window.keepPage.maskShown()", timeout=30000)
+        self.page.get_by_test_id("tool-keep").click()
+        self.page.mouse.click(box["x"] + box["width"] * 0.45, box["y"] + box["height"] * 0.5)
+        upd = self.page.get_by_test_id("keep-update")
+        upd.wait_for(state="visible")
+        self.assertEqual(upd.text_content(), "Update 1 changed frame(s)")
+        self.assertEqual(self.page.text_content("[data-testid=keep-apply]"), "Apply to all frames again")
+        self.assertEqual(self.page.get_attribute("[data-testid=keep-use]", "aria-disabled"), "true")
+        self.page.reload()                                            # the change survives a reload
+        upd.wait_for(state="visible")
+        upd.click()
+        self.page.wait_for_function("window.keepPage.masksDone() && !window.keepPage.changed().length", timeout=60000)
+        self.assertIn("around 1 changed frame", self.page.text_content("#applyStatus"))
+        self.assertTrue(upd.is_hidden())
         self.page.get_by_test_id("keep-use").click()
         self.page.wait_for_url(self.url + "/new", timeout=10000)
         # back on New run: same video, same settings, selection ready
