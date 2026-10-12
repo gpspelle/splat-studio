@@ -39,22 +39,42 @@ def _cross(a, b):
     return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
-def measure(images: list[dict]) -> dict | None:
-    """Coverage from COLMAP images (R, t, name). None with fewer than 3 cameras."""
-    if len(images) < 3:
-        return None
+def _cams(images: list[dict]) -> list[dict]:
     cams = []
     for im in images:
         R, t = im["R"], im["t"]
         centre = tuple(-(R[0][i] * t[0] + R[1][i] * t[1] + R[2][i] * t[2]) for i in range(3))
-        cams.append({"name": im["name"], "center": centre, "dir": tuple(R[2]), "up": tuple(-c for c in R[1])})
+        cams.append({"name": im["name"], "center": centre, "dir": tuple(R[2]), "up": tuple(-c for c in R[1]),
+                     "R": R, "camera": im.get("camera")})
+    return cams
+
+
+def frame_basis(cams: list[dict]) -> tuple | None:
+    """(target, up, e1, e2): what the cameras look at, the average up, and two axes across it."""
     target = look_at_point(cams)
     if target is None:
         return None
     up = _norm(tuple(sum(c["up"][i] for c in cams) for i in range(3)))
     seed = (1.0, 0.0, 0.0) if abs(up[0]) < 0.9 else (0.0, 1.0, 0.0)
     e1 = _norm(_cross(up, seed))
-    e2 = _cross(up, e1)
+    return target, up, e1, _cross(up, e1)
+
+
+def measure(images: list[dict], target=None, basis=None, only: set | None = None) -> dict | None:
+    """Coverage from COLMAP images (R, t, name). `target`: measure around this point instead of
+    the point the cameras look at; `basis`: reuse (up, e1, e2) so several rings line up; `only`:
+    count just these frames (where an object is visible). None with fewer than 3 cameras."""
+    all_cams = _cams(images)
+    if len(all_cams) < 3:
+        return None
+    b = frame_basis(all_cams)
+    if b is None:
+        return None
+    up, e1, e2 = basis or b[1:]
+    target = tuple(target) if target is not None else b[0]
+    cams = [c for c in all_cams if only is None or c["name"] in only]
+    if len(cams) < 3:
+        return None
     rows = []
     for c in cams:
         v = tuple(c["center"][i] - target[i] for i in range(3))
@@ -73,11 +93,77 @@ def measure(images: list[dict]) -> dict | None:
             gap, start, end = d, (az, name), (nxt[0], nxt[2])
     els = sorted(r[1] for r in rows)
     q = lambda p: els[min(len(els) - 1, max(0, round(p * (len(els) - 1))))]
+    r6 = lambda v: [round(x, 6) for x in v]
     return {"cameras": len(rows),
             "azimuths": [round(r[0], 1) for r in rows], "elevations": [round(r[1], 1) for r in rows],
             "gap": {"degrees": round(gap, 1), "from": round(start[0], 1), "to": round(end[0], 1),
                     "first": start[1], "last": end[1]},
-            "height": {"low": round(q(0.1), 1), "high": round(q(0.9), 1), "spread": round(q(0.9) - q(0.1), 1)}}
+            "height": {"low": round(q(0.1), 1), "high": round(q(0.9), 1), "spread": round(q(0.9) - q(0.1), 1)},
+            "basis": {"target": r6(target), "up": r6(up), "e1": r6(e1), "e2": r6(e2)}}
+
+
+# ---------------------------------------------------------------- one ring per object
+
+def _mask_stats(path: Path):
+    """(share of the frame, centre x, centre y as fractions) of a mask, or None."""
+    from .objects import read_mask
+    try:
+        w, h, px = read_mask(path, 96)
+    except (RuntimeError, OSError):
+        return None
+    n = sx = sy = 0
+    for i, v in enumerate(px):
+        if v > 127:
+            n += 1
+            sx += i % w
+            sy += i // w
+    return (n / (w * h), (sx / n + 0.5) / w, (sy / n + 0.5) / h) if n else (0.0, 0.5, 0.5)
+
+
+def per_object(run_dir: Path, frames_dir: Path, basis: dict, samples: int = 90) -> list[dict]:
+    """Coverage of each chosen object: around its own centre (where the rays through its mask
+    centres meet), counting only the frames where it's visible (its mask covers at least 0.2%
+    of the frame). [] without several objects or without the distorted camera model."""
+    from .masks import load_objects, masks_dir
+    from .objects import read_cameras_bin, read_images_bin
+    objs = [o for o in load_objects(frames_dir) if (masks_dir(frames_dir) / "objects" / str(o["id"])).is_dir()]
+    if len(objs) < 2:
+        return []
+    try:
+        model = Path((Path(run_dir) / "dense" / "source_model.txt").read_text().strip())
+        cams_in = read_cameras_bin(model / "cameras.bin")
+        images = read_images_bin(model / "images.bin")
+    except (OSError, ValueError, IndexError):
+        return []
+    images = sorted((i for i in images if i["camera"] in cams_in), key=lambda i: i["name"])
+    step = max(1, len(images) // samples)
+    picked = images[::step]
+    cams = _cams(images)
+    up, e1, e2 = (tuple(basis[k]) for k in ("up", "e1", "e2"))
+    out = []
+    for o in objs:
+        d = masks_dir(frames_dir) / "objects" / str(o["id"])
+        seen, rays = set(), []
+        for im in picked:
+            st = _mask_stats(d / (Path(im["name"]).stem + ".png"))
+            if not st or st[0] < 0.002:
+                continue
+            seen.add(im["name"])
+            cam = cams_in[im["camera"]]
+            k = cam["params"]
+            one_f = cam["model"].startswith("SIMPLE") or cam["model"] in ("RADIAL", "RADIAL_FISHEYE", "FOV")
+            fx, fy, cx, cy = (k[0], k[0], k[1], k[2]) if one_f else k[:4]
+            x, y = (st[1] * cam["width"] - cx) / fx, (st[2] * cam["height"] - cy) / fy
+            R = im["R"]
+            ray = _norm(tuple(R[0][i] * x + R[1][i] * y + R[2][i] for i in range(3)))   # R^T (x, y, 1)
+            c = next(c for c in cams if c["name"] == im["name"])
+            rays.append({"center": c["center"], "dir": ray})
+        centre = look_at_point(rays) if len(rays) >= 3 else None
+        cov = measure(images, target=centre, basis=(up, e1, e2), only=seen) if centre else None
+        if cov:
+            cov["sampled"] = len(picked)
+            out.append({"id": o["id"], "name": o["name"], **cov})
+    return out
 
 
 def problems(cov: dict | None) -> list[str]:
@@ -92,14 +178,39 @@ def problems(cov: dict | None) -> list[str]:
     return out
 
 
-def for_run(run_dir: Path) -> dict | None:
+def for_run(run_dir: Path, frames_dir: Path | None = None) -> dict | None:
+    """Coverage of a run; with the frames folder of a several-objects selection, one ring per object too."""
     for p in (Path(run_dir) / "dense" / "sparse" / "0" / "images.bin", Path(run_dir) / "sparse" / "0" / "images.bin"):
         if p.exists() and p.stat().st_size > 8:
             try:
-                return measure(read_images_bin(p))
+                cov = measure(read_images_bin(p))
             except (ValueError, IndexError, OSError):
                 return None
+            if cov and frames_dir is not None:
+                objs = per_object(run_dir, frames_dir, cov["basis"])
+                if objs:
+                    cov["objects"] = objs
+            return cov
     return None
+
+
+def load(run_dir: Path, frames_dir: Path | None = None) -> dict | None:
+    """coverage.json of a run, measured now (and saved) for runs made before it existed or before
+    it had a basis."""
+    f = Path(run_dir) / "coverage.json"
+    try:
+        cov = json.loads(f.read_text())
+        if "basis" in cov:
+            return cov
+    except (OSError, ValueError):
+        pass
+    cov = for_run(run_dir, frames_dir)
+    if cov:
+        try:
+            f.write_text(json.dumps(cov))
+        except OSError:
+            pass
+    return cov
 
 
 def summary_line(cov: dict) -> str:

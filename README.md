@@ -101,7 +101,9 @@ Splat Studio helps you get it right with fewer attempts:
   the object. A **coverage ring** on the run (seen from above, one dot per camera) shows any side
   you skipped in red. A gap over 60°, or cameras all at one height, gives a warning that names
   the moment in the video, so you can stop the run and film that side.
-  `./splat-studio coverage workspace/<video>/latest` prints the same numbers.
+  `./splat-studio coverage workspace/<video>/latest` prints the same numbers. With several objects,
+  each object gets its own ring, measured around that object and counting only the frames where
+  it's visible, so a side hidden behind another object shows up too.
 - **After a run**, if tracking broke, it tells you **at which seconds of the video** it
   happened, so you know exactly which part to re-film.
 - It flags blurry footage, and runs that couldn't be reconstructed, with concrete advice.
@@ -180,6 +182,11 @@ it's still tilted, use **Flip**, **Tilt** or **Roll**. **Crop** hides everything
 sphere around the object (drag the slider to resize it). **Save view** remembers orientation
 and crop, and both are included when you export a website. You can also import any `.ply`, `.spz`,
 `.splat` or `.ksplat` file into the library.
+
+**Coverage** (for models made by a run) shows a small map of where the cameras were, with a
+marker for the direction you're looking from. When you look at a side the cameras barely saw, it
+says so: that's usually why that side looks thin or blurry. An object's splat shows that object's
+coverage. Click **Coverage** to hide or show the map; the choice is remembered.
 
 **Turntable video** records the model turning a full circle from the current view, for posts,
 chats or product listings. Choose MP4 or GIF, 6 or 10 seconds, and square or wide. Every frame
@@ -431,7 +438,9 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
-de uma altura só.
+de uma altura só. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
+um mapa pequeno das câmeras com uma marca de onde você está olhando, e avisa quando esse lado foi
+pouco filmado.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. No visualizador, **Vídeo girando** grava o modelo dando

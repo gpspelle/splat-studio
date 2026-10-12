@@ -115,26 +115,33 @@ def track_break_times(breaks: list[dict], fps: float | None, start: float = 0.0)
 
 
 def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0.0) -> list[dict]:
-    """Advice from where the cameras were around the object (coverage.measure)."""
+    """Advice from where the cameras were around the object (coverage.measure). With several
+    objects, each object's own coverage, named."""
     from .coverage import problems
     if not cov:
         return []
-    tips = []
-    found = problems(cov)
-    if "gap" in found:
-        g = cov["gap"]
-        a, z = frame_time(g["first"], fps, start), frame_time(g["last"], fps, start)
-        when = f"{fmt_timestamp(min(a, z))} and {fmt_timestamp(max(a, z))}" if a is not None and z is not None else ""
-        where = f" (the video passes it between {when})" if when else ""
-        deg = f"{g['degrees']:.0f}"
-        text = (f"One side of the object was barely filmed: no camera in a {deg}° arc around it{where}. "
-                "Walk all the way around at the same distance, or that side will look thin or blurry.")
-        tips.append(tip("warn", "run.coverage_gap_at", text, deg=deg, when=when) if when
-                    else tip("warn", "run.coverage_gap", text, deg=deg))
-    if "height" in found:
-        tips.append(tip("warn", "run.coverage_height", "The cameras were all at about the same height, so the top and "
-                        "bottom of the object will be soft. Film three loops: low, eye level, then high."))
-    if not found:
+    objs = cov.get("objects") or []
+    tips: list[dict] = []
+    for c, name in ([(o, o["name"]) for o in objs] or [(cov, None)]):
+        found = problems(c)
+        params = {"name": name} if name else {}
+        pre = f"{name}: " if name else ""
+        obj = "_obj" if name else ""
+        if "gap" in found:
+            g = c["gap"]
+            a, z = frame_time(g["first"], fps, start), frame_time(g["last"], fps, start)
+            when = f"{fmt_timestamp(min(a, z))} and {fmt_timestamp(max(a, z))}" if a is not None and z is not None else ""
+            where = f" (the video passes it between {when})" if when else ""
+            deg = f"{g['degrees']:.0f}"
+            text = (f"{pre}One side of the object was barely filmed: no camera in a {deg}° arc around it{where}. "
+                    "Walk all the way around at the same distance, or that side will look thin or blurry.")
+            tips.append(tip("warn", f"run.coverage{obj}_gap_at", text, deg=deg, when=when, **params) if when
+                        else tip("warn", f"run.coverage{obj}_gap", text, deg=deg, **params))
+        if "height" in found:
+            tips.append(tip("warn", f"run.coverage{obj}_height", f"{pre}The cameras were all at about the same height, "
+                            "so the top and bottom of the object will be soft. Film three loops: low, eye level, then high.",
+                            **params))
+    if not any(t["level"] == "warn" for t in tips):
         tips.append(tip("ok", "run.coverage_ok", "The cameras went all the way around the object, at several heights."))
     return tips
 

@@ -79,26 +79,35 @@
   const adviceHTML = (items) => (items || []).map((a) => `<li class="${esc(a.level)}">${esc(adviceText(a))}</li>`).join("");
 
   // where the cameras were around the object, seen from above: dots by angle (higher cameras
-  // nearer the middle), the largest empty arc in red when it's wide enough to leave a thin side
-  function coverageHTML(c, advice, withOk) {
-    if (!c || !c.azimuths) return "";
+  // nearer the middle), the largest empty arc in red when it's wide enough to leave a thin side.
+  // With several objects, one ring per object (its own centre, the frames it's visible in).
+  function ringSVG(c, size, label) {
     const R = 25, cx = 32, cy = 32, els = c.elevations || [];
     const lo = Math.min(...els), hi = Math.max(...els), span = Math.max(1, hi - lo);
     const pt = (az, r) => [cx + r * Math.cos(az * Math.PI / 180), cy - r * Math.sin(az * Math.PI / 180)];
-    const dots = c.azimuths.map((az, i) => { const [x, y] = pt(az, R - 9 * ((els[i] ?? lo) - lo) / span);
+    const dots = (c.azimuths || []).map((az, i) => { const [x, y] = pt(az, R - 9 * ((els[i] ?? lo) - lo) / span);
       return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.8" style="fill:var(--ink-2)"/>`; }).join("");
-    const g = c.gap || {}, wide = (g.degrees || 0) > 60;
+    const g = c.gap || {};
     let arc = "";
-    if (wide) {
+    if ((g.degrees || 0) > 60) {
       const [x1, y1] = pt(g.from, R + 4), [x2, y2] = pt(g.to, R + 4);
       arc = `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${g.degrees > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round"/>`;
     }
+    return `<svg viewBox="0 0 64 64" width="${size}" height="${size}" role="img" aria-label="${esc(label)}">
+      <circle cx="${cx}" cy="${cy}" r="${R}" style="fill:none;stroke:var(--rule)"/><circle cx="${cx}" cy="${cy}" r="2.5" style="fill:var(--signal)"/>${arc}${dots}</svg>`;
+  }
+  const facts = (c) => t("coverage.facts", { n: c.cameras, gap: Math.round((c.gap || {}).degrees || 0), h: Math.round((c.height || {}).spread || 0) });
+  function coverageHTML(c, advice, withOk) {
+    if (!c || !c.azimuths) return "";
     const tips = (advice || []).filter((a) => withOk || a.level !== "ok");
+    const objs = c.objects || [];
+    const rings = objs.length
+      ? `<div class="cov-rings">${objs.map((o) => `<figure class="cov-ring" data-testid="coverage-object">${ringSVG(o, 56, o.name)}
+          <figcaption><b>${esc(o.name)}</b><span class="meta">${esc(facts(o))}</span></figcaption></figure>`).join("")}</div>`
+      : `<div class="meta">${esc(facts(c))}</div>`;
     return `<div class="coverage" data-testid="coverage">
-      <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="${esc(t("coverage.title"))}">
-        <circle cx="${cx}" cy="${cy}" r="${R}" style="fill:none;stroke:var(--rule)"/><circle cx="${cx}" cy="${cy}" r="2.5" style="fill:var(--signal)"/>${arc}${dots}</svg>
-      <div><div class="label">${esc(t("coverage.title"))}</div>
-        <div class="meta">${esc(t("coverage.facts", { n: c.cameras, gap: Math.round(g.degrees || 0), h: Math.round((c.height || {}).spread || 0) }))}</div>
+      ${objs.length ? "" : ringSVG(c, 64, t("coverage.title"))}
+      <div><div class="label">${esc(t("coverage.title"))}</div>${rings}
         ${tips.length ? `<ul class="advice">${adviceHTML(tips)}</ul>` : ""}</div></div>`;
   }
 

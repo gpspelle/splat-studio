@@ -158,15 +158,20 @@ def main(argv: list[str] | None = None) -> None:
     # ------------------------------------------------ 2a: coverage (where the cameras were, before training)
     if not args.train_only and not args.dry_run:
         from . import coverage
-        cov = coverage.for_run(ws)
+        # with several objects chosen, one ring per object (its own centre, the frames it's visible in)
+        cov = coverage.for_run(ws, frames if args.masks and args.split_objects else None)
         if cov:
             (ws / "coverage.json").write_text(json.dumps(cov))
             say(f"    coverage: {coverage.summary_line(cov)}")
+            for o in cov.get("objects", []):
+                say(f"    coverage of {o['name']}: {coverage.summary_line(o)}")
             say("Coverage: " + json.dumps(cov, separators=(",", ":")))          # parsed by the web UI
-            append_summary(ws, [("coverage", coverage.summary_line(cov))])
-            for p in coverage.problems(cov):
-                say("    warning: " + {"gap": "one side of the object was barely filmed (see the coverage ring)",
-                                       "height": "the cameras were all at about the same height"}[p])
+            append_summary(ws, [("coverage", coverage.summary_line(cov))]
+                           + [(f"coverage {o['name']}", coverage.summary_line(o)) for o in cov.get("objects", [])])
+            for who, c in [("", cov)] + [(o["name"] + ": ", o) for o in cov.get("objects", [])]:
+                for p in coverage.problems(c):
+                    say("    warning: " + who + {"gap": "one side was barely filmed (see the coverage ring)",
+                                                 "height": "the cameras were all at about the same height"}[p])
 
     # ------------------------------------------------ 2b: masks (Choose what to keep)
     dense = ws / "dense"

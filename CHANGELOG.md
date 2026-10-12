@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+- **Coverage per object, and in the viewer** ([#26](https://github.com/gpspelle/splat-studio/issues/26)).
+  With several objects, each gets its own coverage ring, measured around the object's own centre
+  (where the rays through its mask centres meet) and counting only the frames where it's visible;
+  warnings name the object. The viewer shows a small, toggleable coverage map with a marker for
+  the direction you're viewing from, and says when that side was barely filmed. Object splats
+  show their object's coverage. `GET /api/coverage?file=`; `coverage.json` now has a basis, and
+  older runs are measured on demand.
+
 ### Fixed
 - **Suggest objects split one object in two, and recomputed on hide/show**
   ([#24](https://github.com/gpspelle/splat-studio/issues/24)). Larger masks now come first, so a

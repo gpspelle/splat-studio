@@ -28,6 +28,12 @@
   .tt-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
   .tt-row .hud-bar { border: var(--hairline) solid var(--hud-rule); }
   .tt-actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-1); }
+  .cov-map { position: fixed; left: var(--s-4); top: calc(var(--s-4) + 64px); z-index: 2; width: 168px;
+    display: flex; flex-direction: column; gap: 4px; }
+  .cov-map[hidden] { display: none; }
+  .cov-map .hud-sub { white-space: normal; }
+  .cov-map .warn { color: var(--signal); }
+  @media (max-width: 640px) { .cov-map { width: 128px; top: calc(var(--s-2) + 60px); left: var(--s-2); } }
   .app-only { display: none !important; }
   body.app .app-only { display: flex !important; }
   @media (max-width: 640px) { .hide-sm { display: none !important; } .dock { left: var(--s-2); right: var(--s-2); } .bottom { bottom: var(--s-2); }
@@ -58,6 +64,7 @@
   <div class="hud-chip hud-bar">
     <button id="reset" data-i18n="viewer.reset" data-i18n-title="viewer.reset.title">Reset view</button>
     <button id="spin" data-i18n="viewer.spin" data-i18n-title="viewer.spin.title">Auto-rotate</button>
+    <button id="covBtn" hidden data-testid="cov-toggle" data-i18n="viewer.coverage" data-i18n-title="viewer.coverage.title">Coverage</button>
   </div>
   <div class="hud-chip hud-bar" data-i18n-title="viewer.orient.title">
     <button id="flip" data-i18n="viewer.flip">Flip</button>
@@ -78,6 +85,12 @@
     <button id="turntable" data-testid="tt-open" data-i18n="tt.open" data-i18n-title="tt.open.title">Turntable video</button>
     <button id="export" class="primary" data-i18n="viewer.export" data-i18n-title="viewer.export.title">Export website</button>
   </div>
+</div>
+
+<div id="covMap" class="cov-map hud-chip pad" hidden data-testid="cov-map">
+  <div class="hud-sub"><b data-i18n="viewer.coverage">Coverage</b> <span id="covWho"></span></div>
+  <svg id="covSvg" viewBox="0 0 80 80" width="100%" role="img" data-i18n-aria-label="viewer.coverage.title"></svg>
+  <div class="hud-sub" id="covNote" data-testid="cov-note"></div>
 </div>
 
 <div id="ttPanel" class="tt hud-chip pad" hidden data-testid="tt-panel">
@@ -164,7 +177,71 @@ addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); updateCoverage(); });
+
+// ---------------------------------------------------------------- coverage map (#26)
+// Where the cameras were around the object, seen from above (as on the run card), with a marker
+// for where you're looking from: a side with few cameras is usually where the model looks thin.
+let cov = null, covAz = null;
+const COV = { R: 30, c: 40 };
+const covPt = (az, r) => [COV.c + r * Math.cos(az * Math.PI / 180), COV.c - r * Math.sin(az * Math.PI / 180)];
+function drawCoverage() {
+  const c = cov.coverage, { R } = COV, els = c.elevations || [];
+  const lo = Math.min(...els), span = Math.max(1, Math.max(...els) - lo);
+  const dots = (c.azimuths || []).map((az, i) => { const [x, y] = covPt(az, R - 10 * ((els[i] ?? lo) - lo) / span);
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.4" style="fill:var(--hud-ink-2)"/>`; }).join("");
+  const g = c.gap || {};
+  let arc = "";
+  if ((g.degrees || 0) > 60) {
+    const [x1, y1] = covPt(g.from, R + 4), [x2, y2] = covPt(g.to, R + 4);
+    arc = `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${g.degrees > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round"/>`;
+  }
+  $("covSvg").innerHTML = `<circle cx="${COV.c}" cy="${COV.c}" r="${R}" style="fill:none;stroke:var(--hud-rule)"/>${arc}${dots}
+    <circle cx="${COV.c}" cy="${COV.c}" r="2.5" style="fill:var(--hud-ink)"/>
+    <g id="covYou" data-testid="cov-you"><line id="covLine" style="stroke:var(--signal);stroke-width:1.2;stroke-dasharray:2 2"/>
+      <path id="covArrow" style="fill:var(--signal);stroke:var(--canvas);stroke-width:.8"/></g>`;
+  $("covWho").textContent = cov.object ? "· " + cov.object : "";
+}
+function viewAzimuth() {
+  const b = cov.coverage.basis; if (!b || !holder) return null;
+  const p = holder.worldToLocal(camera.position.clone()).toArray();         // the camera, in the model's own coordinates
+  const v = p.map((x, i) => x - b.target[i]), h = v.reduce((a, x, i) => a + x * b.up[i], 0);
+  const flat = v.map((x, i) => x - h * b.up[i]);
+  const d = (u) => flat.reduce((a, x, i) => a + x * u[i], 0);
+  return ((Math.atan2(d(b.e2), d(b.e1)) * 180 / Math.PI) + 360) % 360;
+}
+function updateCoverage() {
+  if (!cov || $("covMap").hidden) return;
+  const az = viewAzimuth();
+  if (az == null || (covAz != null && Math.abs(((az - covAz + 540) % 360) - 180) < 0.5)) return;
+  covAz = az;
+  const { R } = COV, [x, y] = covPt(az, R + 9), [ix, iy] = covPt(az, R - 2);
+  const n = [(COV.c - x), (COV.c - y)], L = Math.hypot(...n) || 1, u = [n[0] / L, n[1] / L], s = [-u[1], u[0]];
+  $("covArrow").setAttribute("d", `M${(x + u[0] * 7).toFixed(1)} ${(y + u[1] * 7).toFixed(1)}L${(x + s[0] * 4).toFixed(1)} ${(y + s[1] * 4).toFixed(1)}L${(x - s[0] * 4).toFixed(1)} ${(y - s[1] * 4).toFixed(1)}Z`);
+  const line = $("covLine");
+  line.setAttribute("x1", ix.toFixed(1)); line.setAttribute("y1", iy.toFixed(1)); line.setAttribute("x2", COV.c); line.setAttribute("y2", COV.c);
+  const g = cov.coverage.gap || {}, inGap = (g.degrees || 0) > 60 && ((az - g.from + 360) % 360) < g.degrees;
+  $("covNote").className = "hud-sub" + (inGap ? " warn" : "");
+  $("covNote").textContent = inGap ? t("viewer.coverage.gap") : t("viewer.coverage.ok");
+  $("covMap").dataset.view = inGap ? "gap" : "ok";
+}
+async function loadCoverage() {
+  if (!appMode) return;
+  const d = await fetch("/api/coverage?" + new URLSearchParams({ file: cfg.file })).then((r) => r.json()).catch(() => null);
+  if (!d || !d.coverage || !d.coverage.azimuths) return;
+  cov = d;
+  drawCoverage();
+  $("covBtn").hidden = false;
+  const on = store.get("viewer:coverage") !== false;
+  $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
+  covAz = null; updateCoverage();
+}
+$("covBtn").onclick = () => {
+  const on = $("covMap").hidden;
+  $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
+  store.set("viewer:coverage", on); covAz = null; updateCoverage();
+};
+addEventListener("langchange", () => { covAz = null; updateCoverage(); });
 
 // ---------------------------------------------------------------- loading
 async function fetchWithProgress(url) {
@@ -293,9 +370,11 @@ async function main() {
       camera.position.copy(controls.target).add(off); controls.update();
     },
     turntable: (opts) => recordTurntable(opts),
+    coverageView: () => (cov ? { az: covAz, view: $("covMap").dataset.view || null, object: cov.object } : null),
   };
   updateStats();
   $("overlay").style.display = "none";
+  loadCoverage();
 }
 
 // ---------------------------------------------------------------- turntable video (#13)
@@ -334,7 +413,7 @@ async function recordTurntable({ format = "mp4", seconds = 6, width, height }) {
     camera.position.copy(saved.pos); camera.aspect = saved.aspect; camera.updateProjectionMatrix();
     renderer.setPixelRatio(saved.ratio); renderer.setSize(innerWidth, innerHeight);
     controls.autoRotate = saved.spin; controls.update();
-    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); updateCoverage(); });
   }
   $("msg").textContent = t("tt.encoding"); $("prog").style.width = "100%";
   const q = new URLSearchParams({ file: cfg.file, format, fps: String(fps) });

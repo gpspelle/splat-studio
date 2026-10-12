@@ -396,6 +396,13 @@ class CoverageTest(ServerTestCase):
         self.assertRegex(gap["params"]["when"], r"^\d:\d\d and \d:\d\d$")
         self.assertIn("run.coverage_gap_at", [a["code"] for a in done["advice"]])     # and on the finished run
         self.assertTrue((self.data.root / done["run_dir"] / "coverage.json").exists())
+        # the viewer asks for it by splat (#26)
+        _, c = self.json("GET", "/api/coverage?" + urlencode({"file": done["splat"]}))
+        self.assertGreater(c["coverage"]["gap"]["degrees"], 120)
+        self.assertEqual(sorted(c["coverage"]["basis"]), ["e1", "e2", "target", "up"])
+        self.assertIsNone(c["object"])
+        _, none = self.json("GET", "/api/coverage?file=imports/nothing.ply")
+        self.assertIsNone(none["coverage"])
         self.assertIn("coverage", (self.data.root / done["run_dir"] / "summary.txt").read_text())
 
     def test_all_the_way_round_is_fine(self):

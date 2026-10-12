@@ -384,6 +384,10 @@ pre.log { background: var(--canvas); color: #d9d6ce; font: 12px/1.5 var(--font-m
 .coverage svg { flex: none; }
 .coverage .label { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; }
 .coverage .advice { margin-top: 6px; }
+.cov-rings { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: 6px; }
+.cov-ring { display: flex; gap: var(--s-2); align-items: center; margin: 0; }
+.cov-ring figcaption { display: flex; flex-direction: column; font: var(--text-sm); }
+.cov-ring figcaption .meta { font-size: 11px; }
 .run-parts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--s-2); }
 .run-parts .meta { margin-right: 2px; }
 .kv-log pre.log { margin-top: var(--s-2); }
