@@ -308,7 +308,8 @@ object** adds the next one (up to 8). Pick an object in the list before clicking
 click goes to the right one. Each object is tinted in its own colour, and **Leave out** still
 works for stands and hands. **Suggest objects** asks SAM 2 for the distinct objects on the current frame and
 outlines them with numbers; clicking one keeps it, as a new object in Several objects mode.
-Press it again to hide the suggestions.
+If one object is suggested in parts, Shift-click the other part to add it to the selected object.
+Press the button again to hide or show the suggestions; they're made once per frame.
 
 COLMAP and Brush run once, keeping all the objects. The run then saves one splat per object,
 named after it (`<splat>_part-<name>.ply`, shown as *table · standard · mug*), next to the one

@@ -228,8 +228,20 @@ class WebUiTest(BrowserTestCase):
         last = self.page.evaluate("Object.values(window.keepPage.prompts())[0].slice(-1)[0]")
         self.assertEqual(last, [sx, sy, 3])                                 # object 3, at the suggestion's point
         self.assertEqual(len(self.page.evaluate("window.keepPage.suggestions()")), 2)
+        # Shift-click joins a suggestion to the selected object (an object suggested in parts)
+        sx2, sy2 = self.page.evaluate("window.keepPage.suggestions()[1]")
+        self.page.keyboard.down("Shift"); click(sx2, sy2); self.page.keyboard.up("Shift")
+        self.assertEqual(self.page.evaluate("window.keepPage.objects().length"), 3)
+        self.assertEqual(self.page.evaluate("Object.values(window.keepPage.prompts())[0].slice(-1)[0]"), [sx2, sy2, 3])
+        asked = []
+        self.page.on("request", lambda r: "/api/keep/suggest" in r.url and asked.append(r.url))
         self.page.get_by_test_id("keep-suggest").click()                     # second press hides them
         self.assertEqual(self.page.evaluate("window.keepPage.suggestions()"), [])
+        self.assertEqual(self.page.text_content("[data-testid=keep-suggest]"), "Show suggestions")
+        self.page.get_by_test_id("keep-suggest").click()                     # and shows them again, without asking again
+        self.assertEqual(len(self.page.evaluate("window.keepPage.suggestions()")), 1)
+        self.page.get_by_test_id("keep-suggest").click()
+        self.assertEqual(asked, [])
         self.page.locator("[data-testid=keep-object] button[data-remove]").nth(2).click()   # back to two objects
         self.page.wait_for_function("window.keepPage.objects().length === 2")
         self.assertEqual(self.page.evaluate("window.keepPage.objects().map((o) => o.name)"), ["Mug", "Vase"])

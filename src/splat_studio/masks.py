@@ -334,8 +334,22 @@ def suggest(frame: Path, outdir: Path, limit: int = 8) -> list[dict]:
     if b is None:
         raise RuntimeError("the selection tool isn't installed (splat-studio setup --masking)")
     outdir.mkdir(parents=True, exist_ok=True)
+    cache = outdir / f"{frame.stem}.json"                   # suggestions are made once per frame
+    try:
+        saved = json.loads(cache.read_text())
+        if saved.get("frame_mtime") == frame.stat().st_mtime and all(Path(x["mask"]).exists() for x in saved["items"]):
+            return [{**x, "mask": Path(x["mask"])} for x in saved["items"]][:limit]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
     for old in outdir.glob(f"{frame.stem}_s*.png"):
         old.unlink()
+    items = _suggest(b, frame, outdir, limit)
+    cache.write_text(json.dumps({"frame_mtime": frame.stat().st_mtime,
+                                 "items": [{**x, "mask": str(x["mask"])} for x in items]}))
+    return items
+
+
+def _suggest(b: str, frame: Path, outdir: Path, limit: int) -> list[dict]:
     if b == "disc":
         w, h = jpeg_size(frame)
         out = []
