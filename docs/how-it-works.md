@@ -171,6 +171,14 @@ blurred, darkened copy of the frame. Made during the run (`run/thumbs/run.jpg`, 
 Tests use a stand-in backend (`SPLAT_STUDIO_MASK_BACKEND=disc`: a disc around the keep clicks)
 and a stubbed SAM 2 for the chunking logic.
 
+## Turntable videos (`static/viewer.html`, `turntable.py`)
+
+The viewer stops its render loop, sizes the canvas to the output (1080x1080 or 1920x1080, smaller
+for GIFs), warms up for a few frames, then for each of fps x seconds steps puts the camera at the
+next angle around the target, renders twice so the splat order settles, and keeps a JPEG. The
+JPEGs go to `POST /api/turntable` as one stream; ffmpeg reads it as MJPEG and writes H.264 MP4
+(or MPEG-4 if x264 is missing) or a palette-optimised GIF at 480 px. The view is restored after.
+
 ## Comparing (`static/compare.html`)
 
 Two panes, each with its own WebGL renderer, Spark renderer, camera and orbit controls. The

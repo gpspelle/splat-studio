@@ -11,6 +11,7 @@ Routes
   GET  /compare?a=...&b=...      two splats side by side GET  /api/export-compare?a=&b=  comparison website (zip)
   POST /api/upload               raw video body, X-Filename header -> {video, advice}
   POST /api/import               raw .ply body, X-Filename header
+  POST /api/turntable?file=&format=mp4|gif&fps=   concatenated JPEG frames -> {file} (MP4 or GIF next to the splat)
   POST /api/jobs                 {type: video|retrain|setup|clean|isolate, ...options}
   POST /api/jobs/<id>/cancel     DELETE /api/jobs/<id>   (removes the record, never results)
   DELETE /api/splats?file=<path> removes one library file (imports/ or a run's splat/ folder)
@@ -259,6 +260,33 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 if dest:
                     self.send_json({"path": data.rel(dest), "name": dest.name})
                 return
+            if p == "/api/turntable":
+                from .. import turntable
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                splat = data.library_splat(q.get("file", ""))
+                fmt = q.get("format", "mp4")
+                if not splat:
+                    return self.send_json({"error": "splat not found", "code": "splat_missing"}, 400)
+                if fmt not in turntable.FORMATS:
+                    return self.send_json({"error": "format must be mp4 or gif", "code": "format"}, 400)
+                left = int(self.headers.get("Content-Length") or 0)
+                if left <= 0 or left > 2_000_000_000:
+                    return self.send_json({"error": "no frames received", "code": "empty_upload"}, 400)
+                frames = splat.with_name(f"{splat.stem}_turntable.{threading.get_ident()}.mjpeg")
+                try:
+                    with open(frames, "wb") as f:
+                        while left > 0:
+                            chunk = self.rfile.read(min(1 << 20, left))
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            left -= len(chunk)
+                    out = turntable.encode(frames, turntable.output_path(splat, fmt), fmt, int(q.get("fps") or 30))
+                except (OSError, ValueError, RuntimeError) as e:
+                    return self.send_json({"error": str(e), "code": "video_failed"}, 500)
+                finally:
+                    frames.unlink(missing_ok=True)
+                return self.send_json({"file": data.rel(out), "size": out.stat().st_size})
             if p == "/api/keep/preview":
                 body = self.read_json()
                 v = data.safe_path(body.get("video", ""))

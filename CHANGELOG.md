@@ -9,6 +9,10 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Turntable video** ([#13](https://github.com/gpspelle/splat-studio/issues/13)). The viewer records
+  the model turning a full circle from the current view and downloads it as MP4 or GIF (6 or 10 s,
+  square or wide). Frames are rendered at a fixed step and sent as JPEGs; ffmpeg encodes them
+  (`POST /api/turntable`), saving `NAME_turntable.mp4`/`.gif` next to the splat.
 - **Coverage check after camera poses** ([#12](https://github.com/gpspelle/splat-studio/issues/12)).
   Before training, the run measures where the cameras were around the object and shows a
   coverage ring on its card (one dot per camera, the largest gap in red). A gap over 60° or a
