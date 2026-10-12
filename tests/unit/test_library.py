@@ -26,6 +26,8 @@ class LibraryTest(TempDirTestCase):
 
     def test_splat_title(self):
         self.assertEqual(splat_title("workspace/vase/run_1/splat/high_40000.ply"), "vase · high")
+        self.assertEqual(splat_title("workspace/table/run_1/splat/standard_30000_part-blue-mug.ply"),
+                         "table · standard · blue mug")
         self.assertEqual(splat_title("imports/scan.ply"), "scan.ply")
 
     def test_read_summary_collects_repeated_keys(self):

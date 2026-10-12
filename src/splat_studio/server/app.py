@@ -49,7 +49,8 @@ def frames_info(data: DataDir, video: str) -> dict:
     return {"video": data.rel(v), "name": v.name, "frames_dir": data.rel(frames_dir),
             "frames": [f.name for f in frames], "size": list(masksmod.jpeg_size(frames[0])) if frames else None,
             "masks_done": masksmod.has_masks(frames_dir), "masks_dir": data.rel(mdir),
-            "prompts": masksmod.load_prompts(frames_dir), "backend": masksmod.backend()}
+            "prompts": masksmod.load_prompts(frames_dir), "objects": masksmod.load_objects(frames_dir),
+            "backend": masksmod.backend()}
 
 
 def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
@@ -268,14 +269,14 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 names = [f.name for f in masksmod.frame_list(frames_dir)]
                 frame = str(body.get("frame", ""))
                 pts = masksmod.normalise_prompts({frame: body.get("points") or []}, names).get(frame)
-                if not pts or not any(pt[2] == 1 for pt in pts):
+                if not pts or not any(pt[2] >= 1 for pt in pts):
                     return self.send_json({"error": "click the object at least once", "code": "no_keep_point"}, 400)
-                out = masksmod.masks_dir(frames_dir) / "preview" / (Path(frame).stem + ".png")
-                try:
-                    masksmod.preview(frames_dir / frame, pts, out)
+                try:                                     # one mask per object clicked on this frame
+                    res = masksmod.preview_objects(frames_dir / frame, pts, masksmod.masks_dir(frames_dir) / "preview")
                 except (RuntimeError, OSError, ValueError) as e:
                     return self.send_json({"error": str(e), "code": "mask_failed"}, 500)
-                return self.send_json({"mask": data.rel(out), "t": time.time()})
+                masks = {str(k): data.rel(v) for k, v in res.items()}
+                return self.send_json({"mask": masks[min(masks, key=int)], "masks": masks, "t": time.time()})
             if p == "/api/jobs":
                 body = self.read_json()
                 try:
@@ -303,12 +304,15 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                     frames_dir = data.frames / data.frames_name(data.rel(v))
                     o = {"frames_dir": data.rel(frames_dir), "frames": opts.get("frames", 250)}
                     if t == "mask":
-                        from ..masks import frame_list, normalise_prompts
-                        prompts = normalise_prompts(body.get("prompts") or {}, [f.name for f in frame_list(frames_dir)])
-                        if not any(pt[2] == 1 for pts in prompts.values() for pt in pts):
+                        from .. import masks as masksmod
+                        prompts = masksmod.normalise_prompts(body.get("prompts") or {},
+                                                             [f.name for f in masksmod.frame_list(frames_dir)])
+                        ids = masksmod.object_ids(prompts)
+                        if not ids:
                             return self.send_json({"error": "click the object at least once", "code": "no_keep_point"}, 400)
                         pf = data.jobs / f"prompts_{int(time.time() * 1000)}.json"
-                        pf.write_text(json.dumps(prompts))
+                        pf.write_text(json.dumps({"points": prompts,
+                                                  "objects": masksmod.normalise_objects(body.get("objects"), ids)}))
                         o["prompts_file"] = data.rel(pf)
                     job = runner.submit(t, video=data.rel(v), options=o)
                 elif t in ("clean", "isolate"):

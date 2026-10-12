@@ -251,8 +251,8 @@ show Splat Studio what to keep on a frame or two, and only that is trained.
    selection tool** on the page). It installs Meta's [SAM 2](https://github.com/facebookresearch/sam2)
    in its own folder (`~/.splat-studio/sam2`, about 1 GB with PyTorch). It needs Python 3.10
    or newer, which setup installs with Homebrew if needed. It uses the Mac's GPU.
-2. On **New run**, choose a video and set **What to keep** to **Only what I choose**, then click
-   **Choose what to keep**. On that page, **Prepare frames** extracts the frames.
+2. On **New run**, choose a video and set **What to keep** to **One object** (or **Several
+   objects**, below), then click **Choose what to keep**. On that page, **Prepare frames** extracts the frames.
 3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
    hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
    where the selection is wrong, for example where the holder appears from another side.
@@ -274,6 +274,34 @@ On the command line:
 Clicks are fractions of the frame (0–1); `1` keeps, `0` leaves out. This is a beta: runs made
 before this version need COLMAP again to use masks, and parts of the object hidden behind the
 holder in every frame stay missing, so film so that each part is seen at least once.
+
+### Several objects: one splat each
+
+With three things on a table, set **What to keep** to **Several objects**. On the Choose what to
+keep page, the first object is already there: name it, and click it with **Keep**. **+ Add
+object** adds the next one (up to 8). Pick an object in the list before clicking, so each
+click goes to the right one. Each object is tinted in its own colour, and **Leave out** still
+works for stands and hands.
+
+COLMAP and Brush run once, keeping all the objects. The run then saves one splat per object,
+named after it (`<splat>_part-<name>.ply`, shown as *table · standard · mug*), next to the one
+with all of them. The finished run has a button for each object, and each one is in the
+library, ready for the viewer, a comparison or a website.
+
+To split the trained splat, every splat is projected into 48 frames spread over the video,
+using COLMAP's cameras. It goes to the object whose mask it lands in most often. A part of
+one object hidden behind another in some frames is still seen in most of them, so it stays
+with the right object. Training each object on its own would take as many times longer, and
+would leave holes where one object hides another.
+
+```bash
+./splat-studio mask frames/TABLE --prompts clicks.json   # labels 1, 2, 3 are the objects; 0 leaves out
+./splat-studio run TABLE.MOV --masks --split-objects
+./splat-studio split-objects workspace/TABLE/latest/splat/standard_30000.ply --run workspace/TABLE/latest
+```
+
+`clicks.json` can name the objects: `{"points": {"frame_00001.jpg": [[0.3, 0.5, 1], [0.7, 0.5, 2]]},
+"objects": [{"id": 1, "name": "mug"}, {"id": 2, "name": "vase"}]}`.
 
 ## Comparing two splats
 
@@ -368,11 +396,14 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
 sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um apoio aparece no
-vídeo, em **Nova execução** mude **O que manter** para **Só o que eu escolher** (beta): instale a
+vídeo, em **Nova execução** mude **O que manter** para **Um objeto** (beta): instale a
 ferramenta de seleção uma vez com `./splat-studio setup --masking` (SAM 2, cerca de 1 GB),
 clique no objeto (**Manter**) e no que deve sair (**Deixar de fora**) em um ou dois quadros,
 clique em **Aplicar a todos os quadros** e depois em **Usar esta seleção**, que volta para
-Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente. Para ver dois splats lado a lado, clique em
+Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente.
+Com várias coisas no vídeo (três objetos numa mesa), escolha **Vários objetos**: na página, dê
+nome a cada objeto, use **+ Adicionar objeto** e clique em cada um. A execução treina uma vez e
+salva um splat de cada objeto, com o nome dele, além do splat com todos. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
 exportada como site. A barra embaixo do nome de cada modelo gira só aquele modelo (**↺ 15°**,
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,

@@ -1,7 +1,9 @@
 """Choose what to keep: per-frame masks of the object, from a few clicks.
 
 The person clicks the object (keep) and things to drop (remove: a stand, a hand, a holder)
-on one or more frames. A segmentation model follows that choice through every frame and
+on one or more frames. With several objects (a table with three things on it), each click
+says which object it is: object 1, 2, 3... Each object gets its own masks in
+masks/objects/<id>/, and masks/<frame>.png is all of them together (what training keeps). A segmentation model follows that choice through every frame and
 writes one mask per frame (white = keep, black = drop) to frames/<video>/masks/<frame>.png.
 Training then makes everything outside the mask transparent, so only the chosen object is
 in the splat ("transparent" mode), or just ignores it ("ignore" mode).
@@ -38,6 +40,7 @@ SAM2_URL = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/" + SAM2_CH
 SAM2_REPO = "https://github.com/facebookresearch/sam2"
 SAM2_REF = "2b90b9f5ceec907a1c18123530e92e794ad901a4"       # includes the fix for Apple GPUs (MPS)
 MODES = ("transparent", "ignore")
+MAX_OBJECTS = 8
 
 
 # ---------------------------------------------------------------- where things live
@@ -57,9 +60,57 @@ def load_prompts(frames: Path) -> dict:
         return {}
 
 
+def load_objects(frames: Path) -> list[dict]:
+    """[{id, name}] of the saved selection ([] if none)."""
+    try:
+        objs = json.loads((masks_dir(frames) / "objects.json").read_text())
+        return [o for o in objs if isinstance(o, dict) and isinstance(o.get("id"), int)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def split_prompt_file(data) -> tuple[dict, list]:
+    """A prompts file is either {frame: points} or {"points": {frame: points}, "objects": [...]}."""
+    if isinstance(data, dict) and isinstance(data.get("points"), dict):
+        return data["points"], data.get("objects") or []
+    return (data if isinstance(data, dict) else {}), []
+
+
+def object_ids(prompts: dict) -> list[int]:
+    """The objects that have at least one click."""
+    return sorted({p[2] for pts in prompts.values() for p in pts if p[2] >= 1})
+
+
+def normalise_objects(objects, ids: list[int]) -> list[dict]:
+    """[{id, name}] for every clicked object; names default to "Object <id>"."""
+    names = {}
+    for o in objects or []:
+        try:
+            names[int(o["id"])] = " ".join(str(o.get("name") or "").split())[:40]
+        except (TypeError, ValueError, KeyError):
+            continue
+    return [{"id": i, "name": names.get(i) or f"Object {i}"} for i in ids]
+
+
+def points_for(prompts: dict, oid: int) -> dict[str, list[list]]:
+    """One object's clicks as keep (1) / remove (0) points, frame by frame. On frames where
+    it was clicked, the other objects' clicks also say "not this one". "Leave out" clicks
+    count against every object, on frames where it was clicked or where no object was."""
+    out = {}
+    for name, pts in prompts.items():
+        own = [[p[0], p[1], 1] for p in pts if p[2] == oid]
+        anyone = any(p[2] >= 1 for p in pts)
+        if own:
+            out[name] = own + [[p[0], p[1], 0] for p in pts if p[2] != oid]
+        elif not anyone:
+            out[name] = [[p[0], p[1], 0] for p in pts]
+    return out
+
+
 def normalise_prompts(prompts: dict, names: list[str]) -> dict[str, list[list]]:
-    """{frame name: [[x, y, 1|0], ...]} with x, y as fractions of the frame (0..1). Unknown
-    frames and malformed points are dropped."""
+    """{frame name: [[x, y, label], ...]} with x, y as fractions of the frame (0..1); label 0
+    leaves out, 1..MAX_OBJECTS is the object kept. Unknown frames and malformed points are
+    dropped."""
     out: dict[str, list[list]] = {}
     known = set(names)
     for name, pts in (prompts or {}).items():
@@ -71,7 +122,7 @@ def normalise_prompts(prompts: dict, names: list[str]) -> dict[str, list[list]]:
                 x, y, lab = float(p[0]), float(p[1]), int(p[2])
             except (TypeError, ValueError, IndexError):
                 continue
-            if 0 <= x <= 1 and 0 <= y <= 1 and lab in (0, 1):
+            if 0 <= x <= 1 and 0 <= y <= 1 and 0 <= lab <= MAX_OBJECTS:
                 good.append([round(x, 5), round(y, 5), lab])
         if good:
             out[name] = good
@@ -159,28 +210,53 @@ def disc_mask(w: int, h: int, points: list[list]) -> list[bytes]:
     return rows
 
 
-def run_disc(frames: list[Path], prompts: dict, out: Path, progress=print) -> None:
-    """Disc backend: the latest prompted frame's clicks apply to every frame after it."""
-    order = sorted(prompts, key=lambda n: [f.name for f in frames].index(n))
-    for i, f in enumerate(frames, 1):
-        before = [n for n in order if n <= f.name] or order[:1]
-        pts = prompts[before[-1]]
+def run_disc(frames: list[Path], objects: dict[int, dict], out: Path, progress=print) -> None:
+    """Disc backend, one object at a time: the latest prompted frame's clicks apply to every
+    frame after it. With several objects, each goes to objects/<id>/ and the union to out/."""
+    multi = len(objects) > 1
+    total, step = len(frames) * len(objects), 0
+    union: dict[str, bytearray] = {}
+    for oid, prompts in objects.items():
+        dest = out / "objects" / str(oid) if multi else out
+        order = sorted(prompts, key=lambda n: [f.name for f in frames].index(n))
+        for f in frames:
+            before = [n for n in order if n <= f.name] or order[:1]
+            w, h = jpeg_size(f)
+            rows = disc_mask(w, h, prompts[before[-1]]) if before else [bytes(w)] * h
+            write_png_gray(dest / (f.stem + ".png"), w, h, rows)
+            if multi:
+                u = union.setdefault(f.name, bytearray(w * h))
+                for y, r in enumerate(rows):
+                    if any(r):
+                        u[y * w:(y + 1) * w] = bytes(a | b for a, b in zip(u[y * w:(y + 1) * w], r))
+            step += 1
+            progress(f"    Masking frames [{step}/{total}]")
+    for f in frames if multi else []:
         w, h = jpeg_size(f)
-        write_png_gray(out / (f.stem + ".png"), w, h, disc_mask(w, h, pts))
-        progress(f"    Masking frames [{i}/{len(frames)}]")
+        u = union[f.name]
+        write_png_gray(out / (f.stem + ".png"), w, h, [bytes(u[y * w:(y + 1) * w]) for y in range(h)])
 
 
-def run_sam2(frames: list[Path], prompts: dict, out: Path, python: Path) -> int:
+def run_sam2(frames: list[Path], objects: dict[int, dict], out: Path, python: Path) -> int:
     """SAM 2 in its own environment; its progress lines go straight to our output."""
     job = out / "job.json"
-    job.write_text(json.dumps({"frames": [str(f) for f in frames], "prompts": prompts, "out": str(out),
-                               "checkpoint": str(SAM2_DIR / SAM2_CHECKPOINT), "config": SAM2_CONFIG}))
+    job.write_text(json.dumps({"frames": [str(f) for f in frames], "objects": {str(k): v for k, v in objects.items()},
+                               "out": str(out), "checkpoint": str(SAM2_DIR / SAM2_CHECKPOINT), "config": SAM2_CONFIG}))
     env = child_env({"PYTORCH_ENABLE_MPS_FALLBACK": "1"})
     return subprocess.run([str(python), "-u", "-m", "splat_studio.maskwork", "propagate", str(job)], env=env).returncode
 
 
+def preview_objects(frame: Path, points: list[list], outdir: Path) -> dict[int, Path]:
+    """One mask per clicked object on this frame: {object id: png}."""
+    res = {}
+    for oid in object_ids({frame.name: points}):
+        pts = points_for({frame.name: points}, oid)[frame.name]
+        res[oid] = preview(frame, pts, outdir / f"{frame.stem}_{oid}.png")
+    return res
+
+
 def preview(frame: Path, points: list[list], out: Path) -> Path:
-    """Mask for one frame from its clicks (shown while the person is choosing)."""
+    """Mask for one frame from its clicks, as keep (1) / remove (0) points."""
     b = backend()
     if b is None:
         raise RuntimeError("the selection tool isn't installed (splat-studio setup --masking)")
@@ -229,14 +305,16 @@ class Sam2Server:
 
 # ---------------------------------------------------------------- making masks for every frame
 
-def make_masks(frames_dir: Path, prompts: dict, which: str | None = None) -> Path:
+def make_masks(frames_dir: Path, prompts: dict, which: str | None = None, objects: list | None = None) -> Path:
     frames_dir = Path(frames_dir)
     frames = frame_list(frames_dir)
     if not frames:
         raise ValueError(f"no frames in {frames_dir}")
     prompts = normalise_prompts(prompts, [f.name for f in frames])
-    if not any(p[2] == 1 for pts in prompts.values() for p in pts):
+    ids = object_ids(prompts)
+    if not ids:
         raise ValueError("click the object at least once (a keep point)")
+    objects = normalise_objects(objects, ids)
     which = which or backend()
     if which is None:
         raise RuntimeError("the selection tool isn't installed. Run: splat-studio setup --masking")
@@ -244,20 +322,25 @@ def make_masks(frames_dir: Path, prompts: dict, which: str | None = None) -> Pat
     if out.exists():
         for old in out.glob("*.png"):
             old.unlink()
+        shutil.rmtree(out / "objects", ignore_errors=True)
         (out / "done.json").unlink(missing_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     (out / "prompts.json").write_text(json.dumps(prompts, indent=1))
-    say(f"==> Choosing what to keep: {len(frames)} frames, clicks on {len(prompts)} frame(s), {which}")
+    (out / "objects.json").write_text(json.dumps(objects, indent=1))
+    per_object = {oid: points_for(prompts, oid) for oid in ids}
+    say(f"==> Choosing what to keep: {len(frames)} frames, {len(ids)} object(s), "
+        f"clicks on {len(prompts)} frame(s), {which}")
     if which == "disc":
-        run_disc(frames, prompts, out)
+        run_disc(frames, per_object, out)
     else:
         py = sam2_python()
-        if py is None or run_sam2(frames, prompts, out, py) != 0:
+        if py is None or run_sam2(frames, per_object, out, py) != 0:
             raise RuntimeError("SAM 2 failed - see its output above")
-    missing = [f.name for f in frames if not (out / (f.stem + ".png")).exists()]
+    dirs = [out] + ([out / "objects" / str(i) for i in ids] if len(ids) > 1 else [])
+    missing = [f.name for d in dirs for f in frames if not (d / (f.stem + ".png")).exists()]
     if missing:
         raise RuntimeError(f"{len(missing)} frame(s) got no mask, e.g. {missing[0]}")
-    (out / "done.json").write_text(json.dumps({"frames": len(frames), "backend": which}))
+    (out / "done.json").write_text(json.dumps({"frames": len(frames), "backend": which, "objects": len(ids)}))
     say(f"Masks: {out}")                                  # parsed by the web UI
     return out
 
@@ -331,11 +414,14 @@ def main(argv: list[str] | None = None) -> None:
                                              "(see the 'Choose what to keep' page in the app).")
     ap.add_argument("frames", type=Path, help="frames folder, e.g. frames/vase")
     ap.add_argument("--prompts", type=Path, required=True,
-                    help='JSON {"frame.jpg": [[x, y, 1], [x, y, 0]]}, x/y as 0..1 of the frame; 1 = keep, 0 = remove')
+                    help='JSON {"frame.jpg": [[x, y, 1], [x, y, 0]]}, x/y as 0..1 of the frame; 1 = keep, 0 = remove. '
+                         'Several objects: labels 1, 2, 3..., and optionally {"points": {...}, '
+                         '"objects": [{"id": 1, "name": "mug"}, ...]}')
     ap.add_argument("--backend", choices=["sam2", "disc"], help="default: SAM 2 if installed")
     a = ap.parse_args(argv)
     try:
-        make_masks(a.frames, json.loads(a.prompts.read_text()), a.backend)
+        points, objects = split_prompt_file(json.loads(a.prompts.read_text()))
+        make_masks(a.frames, points, a.backend, objects)
     except (OSError, ValueError, RuntimeError) as e:
         sys.exit(f"Couldn't make the masks: {e}")
 

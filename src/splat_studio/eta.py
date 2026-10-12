@@ -276,7 +276,7 @@ class RunClock:
                 self.train.steps.x >= self.train.total * 0.999:
             self.h.record(f"train.per_step.{self.quality}", (t - self.train.first_step_t) / self.train.total)
             self.h.record("train.startup", self.train.first_step_t - self.phase_t0)
-        elif p in ("clean", "isolate"):
+        elif p in ("clean", "isolate", "split"):
             n = self.final_splats()
             if n:
                 self.h.record(f"{p}.per_msplat", dur / (n / 1e6))
@@ -352,7 +352,7 @@ class RunClock:
                     return per * (self.train.total - self.train.steps.x), None
                 return None, "estimating"
             return left, None
-        if p in ("clean", "isolate"):
+        if p in ("clean", "isolate", "split"):
             exp = self._cleanup_expected(p)
             return (max(0.0, exp - (now - self.phase_t0)), None) if exp else (None, "estimating")
         w = self.win

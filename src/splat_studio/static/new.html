@@ -119,7 +119,7 @@
         <div class="field">
           <label><span data-i18n="keep.label">What to keep</span><span class="tag" data-i18n="keep.beta">beta</span></label>
           <div class="seg" data-name="keep" data-testid="keep-mode">
-            <button data-v="all" class="on" data-i18n="keep.all">Everything</button><button data-v="chosen" data-i18n="keep.chosen">Only what I choose</button>
+            <button data-v="all" class="on" data-i18n="keep.all">Everything</button><button data-v="one" data-i18n="keep.one">One object</button><button data-v="several" data-i18n="keep.several">Several objects</button>
           </div>
           <div class="help" id="keepHelp"></div>
           <div class="keep-sel" id="keepSel" hidden>
@@ -266,25 +266,28 @@ async function loadSelection() {
   renderKeep(); renderStart();
 }
 const selectionReady = () => !!(selection && selection.masks_done);
+const choosing = () => seg("keep") !== "all";
 function renderKeep() {
-  const on = seg("keep") === "chosen";
+  const on = choosing();
   $("keepSel").hidden = !on;
   if (!on) return;
   const st = $("keepStatus"), link = $("keepLink");
   link.hidden = !chosenVideo;
   if (!chosenVideo) { st.className = "status"; st.textContent = t("keep.state.noVideo"); return; }
-  link.href = "/keep?" + new URLSearchParams({ video: chosenVideo });
+  link.href = "/keep?" + new URLSearchParams(seg("keep") === "several" ? { video: chosenVideo, objects: "several" } : { video: chosenVideo });
   if (!selection) { st.className = "status"; st.textContent = t("keep.state.checking"); link.textContent = t("keep.open"); return; }
-  const ready = selectionReady();
-  st.className = "status " + (ready ? "ok" : "bad");
-  st.textContent = ready ? t("keep.state.ready", { n: selection.frames.length }) : t("keep.state.none");
+  const ready = selectionReady(), nObj = (selection.objects || []).length || 1;
+  const fewObjects = ready && seg("keep") === "several" && nObj < 2;
+  st.className = "status " + (ready && !fewObjects ? "ok" : "bad");
+  st.textContent = !ready ? t("keep.state.none") : fewObjects ? t("keep.state.onlyOne")
+    : nObj > 1 ? t("keep.state.readyMany", { objects: nObj, n: selection.frames.length }) : t("keep.state.ready", { n: selection.frames.length });
   link.textContent = ready ? t("keep.edit") : t("keep.open");
   link.classList.toggle("primary", !ready);
 }
 
 // ---------------------------------------------------------------- starting the run
 function renderStart() {
-  const needSel = seg("keep") === "chosen" && !selectionReady();
+  const needSel = choosing() && !selectionReady();
   $("startBtn").disabled = !chosenVideo || needSel;
   $("startHelp").textContent = !chosenVideo ? t("start.need") : needSel ? t("start.needSelection") : "";
 }
@@ -292,7 +295,7 @@ $("startBtn").onclick = async () => {
   const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
     eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
     start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim(),
-    masks: seg("keep") === "chosen" && selectionReady() };
+    masks: choosing() && selectionReady(), split_objects: seg("keep") === "several" && selectionReady() };
   $("startBtn").disabled = true;
   try { await postJSON("/api/jobs", body); draft.clear(); location.href = "/?queued=1"; }
   catch (e) { toast(e.message); renderStart(); }
@@ -306,11 +309,11 @@ api("/api/setup").then((s) => { $("toolsNotice").hidden = !s.items.some((i) => i
   const q = new URLSearchParams(location.search), d = draft.get();
   if (d.quality) setSeg("quality", d.quality);
   if (d.detail) setSeg("detail", d.detail);
-  if (d.keep) setSeg("keep", d.keep);
+  if (d.keep) setSeg("keep", d.keep === "chosen" ? "one" : d.keep);
   CHECKS.forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
   FIELDS.forEach((k) => { if (d[k] != null) $(k).value = d[k]; });
   if (d.adv) $("adv").open = true;
-  if (q.get("keep")) setSeg("keep", q.get("keep") === "chosen" ? "chosen" : "all");
+  if (q.get("keep")) setSeg("keep", { chosen: "one", one: "one", several: "several" }[q.get("keep")] || "all");
   refreshHelp(); renderKeep(); renderStart();
   await loadVideos();
   const want = q.get("video") || d.video;

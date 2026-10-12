@@ -144,6 +144,7 @@ class DataDir:
                               "video": None if imported else p.parent.parent.parent.name,
                               "cleaned": p.stem.endswith("_clean"),
                               "isolated": p.stem.endswith("_object"),
+                              "part": "_part-" in p.stem,
                               "thumb": None if imported else self.thumbnail(run_dir=src)})
         return sorted(items, key=lambda i: -i["mtime"])
 
@@ -171,8 +172,11 @@ def splat_title(relpath: str) -> str:
     """'workspace/IMG_4821/run_x/splat/high_40000.ply' -> 'IMG_4821 · high'; imports keep their name."""
     parts = Path(relpath).parts
     if len(parts) >= 5 and parts[0] == "workspace":
-        quality = re.sub(r"_\d+$", "", re.sub(r"_(clean|object)$", "", Path(parts[-1]).stem))
-        return f"{parts[1]} · {quality}"
+        stem = Path(parts[-1]).stem
+        part = re.search(r"_part-(.+)$", stem)                 # one object of several
+        stem = stem[:part.start()] if part else stem
+        quality = re.sub(r"_\d+$", "", re.sub(r"_(clean|object)$", "", stem))
+        return f"{parts[1]} · {quality}" + (f" · {part.group(1).replace('-', ' ')}" if part else "")
     return Path(relpath).name
 
 

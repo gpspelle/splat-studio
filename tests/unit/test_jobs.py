@@ -39,6 +39,20 @@ class ParseLineTest(unittest.TestCase):
         self.assertEqual((k.isolated, k.cleaned, k.splat), ({"kept": 10, "total": 20}, None, "imports/r_object.ply"))
         self.assertEqual(build_cmd(k)[-2:], ["isolate", "imports/r.ply"])
 
+    def test_one_splat_per_object(self):
+        j = job(video="v.mov", options={"masks": True, "split_objects": True})
+        self.assertEqual(build_cmd(j)[-2:], ["--masks", "--split-objects"])
+        self.assertNotIn("--split-objects", build_cmd(job(video="v.mov", options={"split_objects": True})))  # needs masks
+        for line in ("==> Splitting the objects (the original is kept)",
+                     "Part copy (Blue mug): /d/workspace/v/run_1/splat/standard_3000_part-blue-mug.ply",
+                     "Part copy (Vase (tall)): /d/workspace/v/run_1/splat/standard_3000_part-vase-tall.ply",
+                     "Object copy: /d/workspace/v/run_1/splat/standard_3000_object.ply"):
+            parse_line(j, line)
+        self.assertEqual([p["name"] for p in j.parts], ["Blue mug", "Vase (tall)"])
+        self.assertTrue(j.parts[0]["splat"].endswith("_part-blue-mug.ply"))
+        self.assertTrue(j.object_splat.endswith("_object.ply"))           # background removal is told apart
+        self.assertEqual(validate_options({"masks": True, "split_objects": True}), {"masks": True, "split_objects": True})
+
     def test_fog_removal_is_not_an_option(self):
         self.assertEqual(validate_options({"clean": True}), {})            # old clients: ignored, it always runs
         self.assertNotIn("--clean", build_cmd(job(video="v.mov", options={"clean": True})))

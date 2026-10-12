@@ -52,7 +52,7 @@ class HelpersTest(TempDirTestCase):
 
     def test_normalise_prompts_drops_bad_points_and_unknown_frames(self):
         got = masks.normalise_prompts({
-            "f1.jpg": [[0.5, 0.5, 1], [2, 0.5, 1], [0.1, 0.1, 3], ["x", 0, 1], [0.2, 0.3, 0]],
+            "f1.jpg": [[0.5, 0.5, 1], [2, 0.5, 1], [0.1, 0.1, 99], ["x", 0, 1], [0.2, 0.3, 0]],
             "f2.jpg": [[0.5, 0.5]],
             "nope.jpg": [[0.5, 0.5, 1]],
             "f3.jpg": "garbage",
@@ -92,6 +92,33 @@ class MakeMasksTest(TempDirTestCase):
         w, h, rows = read_png_gray(out / "frame_00004.png")
         self.assertEqual((w, h), (32, 24))
         self.assertEqual(rows[12][16], 255)
+
+    def test_several_objects(self):
+        prompts = {"frame_00001.jpg": [[0.25, 0.5, 1], [0.75, 0.5, 2], [0.5, 0.95, 0]],
+                   "frame_00003.jpg": [[0.3, 0.5, 2]]}
+        out = masks.make_masks(self.frames, prompts, "disc", [{"id": 2, "name": "  Blue   mug "}])
+        self.assertEqual(masks.load_objects(self.frames), [{"id": 1, "name": "Object 1"}, {"id": 2, "name": "Blue mug"}])
+        for oid in (1, 2):
+            self.assertEqual(len(list((out / "objects" / str(oid)).glob("*.png"))), 5)
+        _, _, one = read_png_gray(out / "objects" / "1" / "frame_00001.png")
+        _, _, two = read_png_gray(out / "objects" / "2" / "frame_00001.png")
+        _, _, both = read_png_gray(out / "frame_00001.png")
+        self.assertEqual((one[12][8], one[12][24], two[12][24], two[12][8]), (255, 0, 255, 0))
+        self.assertEqual((both[12][8], both[12][24]), (255, 255))           # training keeps both
+        self.assertTrue(masks.has_masks(self.frames))
+        # one object again: the per-object folders go
+        masks.make_masks(self.frames, {"frame_00001.jpg": [[0.5, 0.5, 1]]}, "disc")
+        self.assertFalse((out / "objects").exists())
+
+    def test_points_for_each_object(self):
+        prompts = {"a": [[0.1, 0.1, 1], [0.9, 0.9, 2], [0.5, 0.5, 0]], "b": [[0.2, 0.2, 2]], "c": [[0.3, 0.3, 0]]}
+        self.assertEqual(masks.points_for(prompts, 1), {"a": [[0.1, 0.1, 1], [0.9, 0.9, 0], [0.5, 0.5, 0]],
+                                                        "c": [[0.3, 0.3, 0]]})
+        self.assertEqual(masks.points_for(prompts, 2), {"a": [[0.9, 0.9, 1], [0.1, 0.1, 0], [0.5, 0.5, 0]],
+                                                        "b": [[0.2, 0.2, 1]], "c": [[0.3, 0.3, 0]]})
+        self.assertEqual(masks.object_ids(prompts), [1, 2])
+        self.assertEqual(masks.split_prompt_file({"points": {"a": []}, "objects": [1]}), ({"a": []}, [1]))
+        self.assertEqual(masks.split_prompt_file({"a": []}), ({"a": []}, []))
 
     def test_needs_a_keep_click(self):
         with self.assertRaises(ValueError):
@@ -181,6 +208,21 @@ class MaskworkChunkingTest(TempDirTestCase):
     """maskwork.propagate with a stand-in SAM 2: every frame gets a mask, in chunks."""
 
     def test_forwards_and_backwards_in_chunks(self):
+        calls, out = self.run_stub({"prompts": {"frame_00004.jpg": [[0.5, 0.5, 1]]}})
+        self.check_single(calls, out)
+
+    def test_several_objects_one_after_the_other(self):
+        calls, out = self.run_stub({"objects": {"2": {"frame_00006.jpg": [[0.5, 0.5, 1]]},
+                                                "1": {"frame_00004.jpg": [[0.5, 0.5, 1]], "frame_00001.jpg": [[0.2, 0.2, 0]]}}})
+        for d in (out / "objects" / "1", out / "objects" / "2", out):
+            self.assertEqual(len(list(d.glob("*.png"))), 10, d)
+        # object 1 first (from frame 4, its keep click, not frame 1 with only a leave-out click), then object 2
+        self.assertEqual(calls[0][1], {0: "points"})
+        self.assertEqual([c[0] for c in calls if not c[2]][:2], [4, 3])
+        self.assertEqual([c[1] for c in calls if not c[2] and c[0] == 4], [{0: "points"}] * 2)   # obj 1: 4-7, obj 2: 6-9
+        self.assertIn({3: "points", 0: "points"}, [c[1] for c in calls if c[2]])   # the leave-out click, going back
+
+    def run_stub(self, job_fields):
         import contextlib
         import numpy as np
         from PIL import Image
@@ -223,11 +265,13 @@ class MaskworkChunkingTest(TempDirTestCase):
         out = self.tmp / "out"
         out.mkdir()
         job.write_text(json.dumps({"frames": [str(p) for p in sorted(frames.glob("*.jpg"))],
-                                   "prompts": {"frame_00004.jpg": [[0.5, 0.5, 1]]},
-                                   "out": str(out), "checkpoint": "x", "config": "y"}))
+                                   "out": str(out), "checkpoint": "x", "config": "y", **job_fields}))
         with mock.patch.dict(sys.modules, {"torch": torch}), mock.patch.object(maskwork, "CHUNK", 4), \
                 mock.patch.object(maskwork, "load_predictor", return_value=Pred()):
             maskwork.propagate(str(job))
+        return calls, out
+
+    def check_single(self, calls, out):
         self.assertEqual(sorted(p.name for p in out.glob("*.png")), [f"frame_{i:05d}.png" for i in range(10)])
         forward = [c for c in calls if not c[2]]
         backward = [c for c in calls if c[2]]

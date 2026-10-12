@@ -38,10 +38,12 @@
   function splatTitle(p) {
     const parts = p.split("/"), file = parts[parts.length - 1] || "";
     const cleaned = /_clean\.ply$/.test(file), isolated = /_object\.ply$/.test(file);
-    const q = file.replace(/_clean\.ply$|_object\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
+    const part = (file.match(/_part-(.+)\.ply$/) || [])[1];          // one object of several
+    const q = file.replace(/_part-.+\.ply$|_clean\.ply$|_object\.ply$|\.ply$/g, "").replace(/_\d+$/, "");
     // English output stays exactly "<name> · preview"; other languages translate the quality word
     const base = parts[0] !== "workspace" ? file : `${parts[1]} · ${tr("quality.", q).toLowerCase()}`;
     if (parts[0] !== "workspace") return base;
+    if (part) return `${base} · ${part.replace(/-/g, " ")}`;
     return cleaned ? `${base} · ${t("lib.cleaned")}` : isolated ? `${base} · ${t("lib.isolated")}` : base;
   }
   function runTitle(j) {
@@ -84,7 +86,8 @@
     const o = j.options || {};
     const tags = [j.source === "cli" ? t("tag.cli") : null, o.quality ? t("quality." + o.quality).toLowerCase() : null,
                   o.detail && o.detail !== "auto" ? t("tag.detail", { d: t("detail." + o.detail) }) : null,
-                  o.eval ? t("tag.eval") : null, o.remove_background ? t("tag.removeBg") : null, o.masks ? t("tag.masks") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
+                  o.eval ? t("tag.eval") : null, o.remove_background ? t("tag.removeBg") : null, o.masks ? t("tag.masks") : null,
+                  o.masks && o.split_objects ? t("tag.split") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
     const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
       : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
       : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);
@@ -101,8 +104,11 @@
     const extra = [
       j.splat && j.splat !== best ? `<a class="btn small" data-testid="view-original" href="${viewerUrl(j.splat, splatTitle(j.splat))}">${esc(t("btn.viewOriginal"))}</a>` : "",
       j.object_splat && j.object_splat !== best ? `<a class="btn small" data-testid="view-object" href="${viewerUrl(j.object_splat, splatTitle(j.object_splat))}">${esc(t("btn.viewObject"))}</a>` : ""].join("");
+    // several objects: one splat each, right on the run's line
+    const objs = (j.parts || []).length ? `<div class="run-parts" data-testid="run-parts"><span class="meta">${esc(t("run.parts"))}</span>${j.parts.map((x) =>
+      `<a class="btn small" data-testid="view-part" href="${viewerUrl(x.splat, splatTitle(x.splat))}">${esc(x.name)}</a>`).join("")}</div>` : "";
     const guide = (j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><a class="link" href="/guide">${esc(t("btn.guide"))}</a></div>` : "";
-    return { running, qd, tags, timing, facts, view, extra, canRetrain, kv, guide,
+    return { running, qd, tags, timing, facts, view, extra, canRetrain, kv, guide, objs,
              err: j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : "",
              noSplat: j.status === "done" && j.type === "video" && !j.splat ? `<div class="meta">${esc(t("run.noSplat"))}</div>` : "",
              thumb: `<div class="thumb" style="${j.thumb ? `background-image:url('${fileUrl(j.thumb)}')` : ""}"></div>`,
@@ -145,7 +151,7 @@
       <div style="min-width:0">
         ${p.head}</div>
         <div class="meta">${esc(p.timing)}${p.facts ? " · " + esc(p.facts) : ""}</div>
-        ${p.err}${!isOpen && warn.length ? `<ul class="advice" data-testid="run-warnings">${adviceHTML(warn)}</ul>` : ""}
+        ${p.objs}${p.err}${!isOpen && warn.length ? `<ul class="advice" data-testid="run-warnings">${adviceHTML(warn)}</ul>` : ""}
       </div>
       <div class="actions"><div class="row">${p.view}
         <button class="small ghost" data-testid="run-details" aria-expanded="${isOpen}" onclick="runs.toggle('${esc(j.id)}')">${esc(t(isOpen ? "btn.less" : "btn.details"))}</button></div></div>

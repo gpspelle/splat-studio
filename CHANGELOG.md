@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- **Several objects: one splat each (beta).** **What to keep** on New run has **Everything**, **One
+  object** and **Several objects**. With several, the Choose what to keep page lists the objects
+  (**+ Add object**, up to 8), each with a name and its own colour; clicks go to the selected
+  one. SAM 2 follows each object through the video. Training runs once with all of them kept,
+  then the splat is split into `NAME_part-<object>.ply` files by projecting it into 48 frames
+  and giving each splat to the object whose mask it lands in most often. Finished runs show a
+  button per object. New: `run --split-objects`, `split-objects NAME.ply --run RUN`, object
+  labels 1–8 in `mask --prompts`, and a `split_objects` option for video jobs.
 - **Choose what to keep (beta)** (`/keep`, from **What to keep → Only what I
   choose** on New run). Click the object (**Keep**) and a stand, hand or holder (**Leave out**) on a frame or
   two. Meta's SAM 2 follows that selection through every frame, and training keeps only the
