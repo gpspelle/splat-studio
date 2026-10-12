@@ -158,8 +158,9 @@ so the split stays standard-library Python; 500,000 splats take about 15 seconds
 
 **Suggested objects** (`masks.suggest`, `maskwork.pick_suggestions`). The preview process builds
 SAM 2's automatic mask generator on first use (16 points per side). Masks between 0.4% and 50%
-of the frame are ranked by predicted quality x stability, and any mask that overlaps one already
-kept by more than half of the smaller is dropped, up to 8. Each comes back with a point inside it
+of the frame are taken largest first (a whole object before its parts, which often score higher),
+and any mask that overlaps one already kept by more than half of the smaller is dropped, up to 8.
+The result is cached per frame (`masks/suggest/<frame>.json`), so showing them again is free. Each comes back with a point inside it
 (its centre, or the nearest mask pixel), which becomes the keep click when the suggestion is
 clicked. The stand-in backend returns three fixed suggestions for tests.
 

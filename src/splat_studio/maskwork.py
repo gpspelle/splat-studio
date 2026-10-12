@@ -179,14 +179,15 @@ def propagate(job_file: str) -> None:
 
 
 def pick_suggestions(masks: list[dict], limit: int = 8, min_area: float = 0.004, max_area: float = 0.5):
-    """SAM 2 automatic masks -> distinct, object-sized ones: the best scored first, skipping any
-    mostly inside or over one already kept. Returns the kept dicts."""
+    """SAM 2 automatic masks -> distinct, object-sized ones. Larger masks come first, so a whole
+    object wins over its parts (a part often scores higher than the whole); any mask mostly inside
+    or over one already kept is skipped. Returns the kept dicts."""
     import numpy as np
     if not masks:
         return []
     total = masks[0]["segmentation"].size
     cands = [m for m in masks if min_area <= m["area"] / total <= max_area]
-    cands.sort(key=lambda m: (m.get("predicted_iou", 0) * m.get("stability_score", 1)), reverse=True)
+    cands.sort(key=lambda m: (m["area"], m.get("predicted_iou", 0) * m.get("stability_score", 1)), reverse=True)
     kept = []
     for m in cands:
         seg = m["segmentation"]

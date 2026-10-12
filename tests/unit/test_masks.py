@@ -250,6 +250,18 @@ class MakeMasksTest(TempDirTestCase):
             self.assertEqual(rows[int(g["y"] * h)][int(g["x"] * w)], 255)   # the point is inside its mask
             self.assertTrue(0 < g["area"] < 0.5)
 
+    def test_suggestions_are_made_once_per_frame(self):
+        out = self.tmp / "sg"
+        with mock.patch.object(masks, "backend", return_value="disc"), \
+                mock.patch.object(masks, "_suggest", wraps=masks._suggest) as made:
+            first = masks.suggest(self.frames / "frame_00002.jpg", out)
+            again = masks.suggest(self.frames / "frame_00002.jpg", out)
+            self.assertEqual(made.call_count, 1)                           # the second time comes from the cache
+            self.assertEqual(again, first)
+            (out / "frame_00002_s0.png").unlink()                          # a missing mask: made again
+            masks.suggest(self.frames / "frame_00002.jpg", out)
+            self.assertEqual(made.call_count, 2)
+
     def test_needs_a_keep_click(self):
         with self.assertRaises(ValueError):
             masks.make_masks(self.frames, {"frame_00001.jpg": [[0.5, 0.5, 0]]}, "disc")
@@ -361,11 +373,13 @@ class MaskworkChunkingTest(TempDirTestCase):
                     "predicted_iou": score, "stability_score": 1.0}
         ring = disc(50, 50, 20, 0.9)
         ring["segmentation"] = ring["segmentation"] & ~disc(50, 50, 8, 0)["segmentation"]   # centre not inside
+        part = disc(80, 80, 6, 0.99)                                         # the top of an object, scored higher
         found = maskwork.pick_suggestions([disc(20, 20, 10, 0.95), disc(21, 20, 9, 0.99),   # same object twice
-                                           disc(80, 80, 12, 0.9), disc(50, 50, 60, 0.99),   # the whole frame: too big
+                                           part, disc(80, 80, 12, 0.9), disc(50, 50, 60, 0.99),   # too big
                                            disc(5, 95, 1, 0.99), ring])                     # a speck: too small
         self.assertEqual(len(found), 3)
-        self.assertEqual(found[0]["predicted_iou"], 0.99)                    # the better of the two copies
+        self.assertFalse(any(f is part for f in found))                       # the whole object wins over its part
+        self.assertIn(12, [round((f["area"] / np.pi) ** 0.5) for f in found])
         x, y = maskwork.inside_point(ring["segmentation"])
         self.assertTrue(ring["segmentation"][int(y * 100), int(x * 100)])
         self.assertEqual(maskwork.pick_suggestions([]), [])

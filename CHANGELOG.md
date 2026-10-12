@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Fixed
+- **Suggest objects split one object in two, and recomputed on hide/show**
+  ([#24](https://github.com/gpspelle/splat-studio/issues/24)). Larger masks now come first, so a
+  whole object wins over its parts; Shift-click adds a suggestion to the selected object. Hiding and
+  showing suggestions is instant, and they're cached per frame on disk (`masks/suggest/<frame>.json`).
 - **Choose what to keep: the last object and its clicks couldn't be removed**
   ([#22](https://github.com/gpspelle/splat-studio/issues/22)). The last object now has a remove
   button too (leaving one empty object to start again). **Undo click** takes back the latest click

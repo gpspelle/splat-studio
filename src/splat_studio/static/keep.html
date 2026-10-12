@@ -218,7 +218,7 @@ function draw() {
     g.drawImage(off, 0, 0);
   }
   // suggested objects (#15): a light veil with a bright outline, and a number to click
-  const sgs = suggestions.get(frameName()) || [];
+  const sgs = hiddenSuggestions.has(frameName()) ? [] : suggestions.get(frameName()) || [];
   sgs.forEach((sg) => g.drawImage(sg.layer, 0, 0, w, h));
   const br = Math.max(9, Math.round(Math.min(w, h) / 45));
   sgs.forEach((sg, i) => {
@@ -312,7 +312,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
   if (x < 0 || x > 1 || y < 0 || y > 1) return;
   const name = frameName();
-  if (tool === "keep" && acceptSuggestion(name, x, y)) return;
+  if (tool === "keep" && acceptSuggestion(name, x, y, e.shiftKey)) return;
   (prompts[name] = prompts[name] || []).push([+x.toFixed(5), +y.toFixed(5), tool === "keep" ? current : 0]);
   clickHistory.push(name);
   edited();
@@ -320,6 +320,7 @@ canvas.addEventListener("pointerdown", (e) => {
 
 // ---------------------------------------------------------------- suggested objects (#15)
 const suggestions = new Map();            // frame -> [{x, y, area, w, h, mask: ImageData, layer: canvas}]
+const hiddenSuggestions = new Set();      // frames whose suggestions are kept but not shown
 function loadSuggestion(sg) {
   return new Promise((res) => {
     const im = new Image();
@@ -346,7 +347,10 @@ function loadSuggestion(sg) {
 }
 async function suggestNow() {
   const name = frameName(); if (!name) return;
-  if (suggestions.has(name)) { suggestions.delete(name); draw(); renderSuggest(); return; }    // second press hides them
+  if (suggestions.has(name)) {                         // already made for this frame: just hide or show them
+    hiddenSuggestions.has(name) ? hiddenSuggestions.delete(name) : hiddenSuggestions.add(name);
+    draw(); renderSuggest(); return;
+  }
   $("suggestBtn").disabled = true; $("suggestStatus").textContent = t("keep.suggest.working");
   try {
     const d = await postJSON("/api/keep/suggest", { video, frame: name });
@@ -356,11 +360,12 @@ async function suggestNow() {
   draw(); renderSuggest();
 }
 // a click inside a suggestion keeps that object: a new object in Several objects mode
-function acceptSuggestion(name, x, y) {
-  const list = suggestions.get(name) || [];
+// with Shift, the suggestion joins the selected object instead (for an object suggested in parts)
+function acceptSuggestion(name, x, y, join) {
+  const list = hiddenSuggestions.has(name) ? [] : suggestions.get(name) || [];
   const sg = list.find((s) => s.mask.data[(Math.min(s.h - 1, Math.floor(y * s.h)) * s.w + Math.min(s.w - 1, Math.floor(x * s.w))) * 4] > 127);
   if (!sg) return false;
-  if (multi && countOn(current) > 0 && objects.length < MAX_OBJECTS) {
+  if (multi && !join && countOn(current) > 0 && objects.length < MAX_OBJECTS) {
     const id = Math.max(0, ...objects.map((o) => o.id)) + 1;
     objects.push({ id, name: "" }); current = id;
   }
@@ -371,10 +376,10 @@ function acceptSuggestion(name, x, y) {
   return true;
 }
 function renderSuggest() {
-  const list = suggestions.get(frameName());
-  $("suggestBtn").textContent = list ? t("keep.suggest.hide") : t("keep.suggest");
+  const hidden = hiddenSuggestions.has(frameName()), list = hidden ? null : suggestions.get(frameName());
+  $("suggestBtn").textContent = list ? t("keep.suggest.hide") : hidden ? t("keep.suggest.show") : t("keep.suggest");
   $("suggestBtn").disabled = !info?.backend || !info?.frames?.length;
-  $("suggestStatus").textContent = !list ? "" : list.length ? t("keep.suggest.hint", { n: list.length }) : t("keep.suggest.none");
+  $("suggestStatus").textContent = !list ? "" : list.length ? t(multi ? "keep.suggest.hintMulti" : "keep.suggest.hint", { n: list.length }) : t("keep.suggest.none");
 }
 $("suggestBtn").onclick = suggestNow;
 function edited() {
@@ -577,7 +582,7 @@ async function load() {
 addEventListener("langchange", () => { renderStatus(); renderObjects(); renderSuggest(); if (info) showFrame(idx); });
 load();
 // read-only helpers for the automated tests
-window.keepPage = { suggestions: () => (suggestions.get(frameName()) || []).map((s) => [s.x, s.y]), changed: () => [...changed], prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
+window.keepPage = { suggestions: () => (hiddenSuggestions.has(frameName()) ? [] : suggestions.get(frameName()) || []).map((s) => [s.x, s.y]), changed: () => [...changed], prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
                     maskShown: () => maskCache.has(frameName()),
                     masksShown: () => Object.keys(maskCache.get(frameName()) || {}).length };
 </script>
