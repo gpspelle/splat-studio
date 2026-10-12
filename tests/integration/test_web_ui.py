@@ -119,7 +119,7 @@ class WebUiTest(BrowserTestCase):
         self.open_new()
         self.assertFalse(self.page.get_by_test_id("keep-link").is_visible())     # "Everything" by default
         self.page.click('.seg[data-name="detail"] button[data-v="low"]')
-        self.page.click('.seg[data-name="keep"] button[data-v="chosen"]')
+        self.page.click('.seg[data-name="keep"] button[data-v="one"]')
         self.assertIn("Choose a video first", self.page.get_by_test_id("keep-status").text_content())
         self.page.set_input_files("#fileInput", str(make_video(self.tmp / "vase.mov", seconds=6, size="960x540")))
         status = self.page.get_by_test_id("keep-status")
@@ -130,7 +130,7 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_url("**/keep?video=*")
         self.assertEqual(self.page.get_by_test_id("keep-run").count(), 0)          # runs start only on New run
         self.assertEqual(self.page.get_attribute("[data-testid=keep-use]", "aria-disabled"), "true")
-        self.page.get_by_test_id("keep-frames").click()
+        self.assertTrue(self.page.get_by_test_id("keep-frames").is_hidden())       # frames start on their own
         canvas = self.page.get_by_test_id("keep-canvas")
         canvas.wait_for(state="visible", timeout=60000)
         self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
@@ -155,7 +155,7 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_function("window.newRun.selectionReady()", timeout=10000)
         self.assertEqual(self.page.get_by_test_id("chosen-video").text_content(), "vase.mov")
         self.assertEqual(self.page.get_attribute('.seg[data-name="detail"] button.on', "data-v"), "low")
-        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "chosen")
+        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "one")
         self.assertIn("Selection ready", status.text_content())
         self.assertEqual(self.page.get_by_test_id("keep-link").text_content(), "Edit selection")
         self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
@@ -171,6 +171,78 @@ class WebUiTest(BrowserTestCase):
         self.open_new()                                               # the draft was used up
         self.assertIsNone(self.page.evaluate("window.newRun.video()"))
         self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "all")
+        self.assertEqual(self.errors, [])
+
+    def test_several_objects(self):
+        os.environ["SPLAT_STUDIO_MASK_BACKEND"] = "disc"         # stand-in for SAM 2
+        self.addCleanup(os.environ.pop, "SPLAT_STUDIO_MASK_BACKEND", None)
+        self.open_new()
+        self.page.click('.seg[data-name="keep"] button[data-v="several"]')
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "table.mov", seconds=6, size="960x540")))
+        self.page.wait_for_function("document.querySelector('[data-testid=keep-status]').textContent.includes('No selection')")
+        self.page.get_by_test_id("keep-link").click()
+        self.page.wait_for_url("**/keep?*objects=several*")
+        self.assertTrue(self.page.get_by_test_id("keep-frames").is_hidden())       # frames start on their own
+        canvas = self.page.get_by_test_id("keep-canvas")
+        canvas.wait_for(state="visible", timeout=60000)
+        self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
+        self.assertEqual(self.page.get_by_test_id("keep-object").count(), 1)
+        box = canvas.bounding_box()
+        click = lambda x, y: self.page.mouse.click(box["x"] + box["width"] * x, box["y"] + box["height"] * y)
+        self.page.locator("[data-testid=keep-object] input").first.fill("Mug")
+        click(0.25, 0.5)
+        self.page.get_by_test_id("keep-add-object").click()
+        self.page.keyboard.type("Vase")
+        click(0.75, 0.5)
+        self.page.get_by_test_id("tool-drop").click()
+        click(0.5, 0.95)
+        self.page.wait_for_function("window.keepPage.masksShown() === 2", timeout=30000)
+        pts = self.page.evaluate("Object.values(window.keepPage.prompts())[0]")
+        self.assertEqual([p[2] for p in pts], [1, 2, 0])
+        self.assertEqual(self.page.evaluate("window.keepPage.objects().map((o) => o.name)"), ["Mug", "Vase"])
+        self.assertIn("1 click(s)", self.page.get_by_test_id("keep-object").nth(1).text_content())
+        self.page.get_by_test_id("keep-apply").click()
+        self.page.wait_for_function("window.keepPage.masksDone() && window.keepPage.masksShown() === 2", timeout=60000)
+        self.page.wait_for_timeout(400)
+        self.shot("keep-objects")
+        self.page.reload()                                            # objects and names are kept
+        self.page.wait_for_function("window.keepPage.masksDone() && window.keepPage.masksShown() === 2", timeout=30000)
+        self.assertEqual(self.page.evaluate("window.keepPage.objects().map((o) => o.name)"), ["Mug", "Vase"])
+        self.page.get_by_test_id("keep-use").click()
+        self.page.wait_for_url(self.url + "/new", timeout=10000)
+        self.page.wait_for_function("window.newRun.selectionReady()", timeout=10000)
+        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "several")
+        self.assertIn("2 objects", self.page.get_by_test_id("keep-status").text_content())
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        self.page.wait_for_selector("[data-testid=run-done] >> text=View splat", timeout=180000)
+        _, jobs = self.json("GET", "/api/jobs")
+        run = next(j for j in jobs if j["type"] == "video")
+        self.assertEqual((run["options"]["masks"], run["options"]["split_objects"]), (True, True))
+        self.assertIn("one splat per object", self.page.evaluate("document.querySelector('[data-testid=run-done]').textContent"))
+        self.assertEqual(self.errors, [])
+
+    def test_finished_run_offers_each_object(self):
+        from plyfile import write_three_objects
+        splat = self.data.root / "workspace" / "table" / "run_1" / "splat"
+        write_three_objects(splat / "standard_30000.ply", n=300)
+        for name in ("red-ball", "blue-ball"):
+            write_three_objects(splat / f"standard_30000_part-{name}.ply", n=100)
+        job = self.add_finished_run("table", 1)
+        job.splat = "workspace/table/run_1/splat/standard_30000.ply"
+        job.parts = [{"name": "Red ball", "splat": "workspace/table/run_1/splat/standard_30000_part-red-ball.ply"},
+                     {"name": "Blue ball", "splat": "workspace/table/run_1/splat/standard_30000_part-blue-ball.ply"}]
+        job.save(force=True)
+        self.page.goto(self.url)
+        parts = self.page.get_by_test_id("view-part")
+        parts.first.wait_for()
+        self.assertEqual(parts.all_text_contents(), ["Red ball", "Blue ball"])
+        titles = self.page.evaluate("[...document.querySelectorAll('.tile .body b')].map((b) => b.textContent)")
+        self.assertIn("table · standard · red ball", titles)
+        parts.first.click()
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        self.assertEqual(self.page.inner_text("#title"), "table · standard · red ball")
         self.assertEqual(self.errors, [])
 
     def test_studio_and_new_run_are_separate_pages(self):
@@ -363,7 +435,7 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.assertEqual(self.page.text_content("[data-i18n='new.title']"), "Nova execução")
         self.assertIn("3 voltas", self.page.get_by_test_id("tips-strip").inner_text())
         self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
-        self.assertEqual(self.page.text_content(".seg[data-name='keep'] button[data-v='chosen']"), "Só o que eu escolher")
+        self.assertEqual(self.page.text_content(".seg[data-name='keep'] button[data-v='several']"), "Vários objetos")
         self.assertEqual(self.page.evaluate("document.documentElement.lang"), "pt-BR")
         self.page.reload()                                            # remembered
         self.page.wait_for_function("document.getElementById('prevVideo').options.length > 0")

@@ -269,6 +269,8 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertEqual((info["frames"], info["masks_done"], info["backend"]), ([], False, "disc"))
 
         _, job = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+        _, again = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+        self.assertEqual(again["id"], job["id"])                     # page opened twice: one frames job
         self.assertEqual(self.wait_done(job["id"])["status"], "done")
         _, info = self.json("GET", f"/api/frames?{q}")
         self.assertGreaterEqual(len(info["frames"]), 20)
@@ -303,6 +305,11 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertEqual(len(list((dense / "masks").glob("*.png"))), len(list((dense / "images").glob("*.jpg"))))
         summary = (run / "summary.txt").read_text()
         self.assertIn("--alpha-mode transparent", summary)
+        # the library shows the chosen object, not the first frame
+        self.assertTrue((run / "thumbs" / "run.jpg").exists())
+        self.assertTrue(done["thumb"].endswith("/thumbs/run.jpg"), done["thumb"])
+        _, lib = self.json("GET", "/api/splats")
+        self.assertTrue(all(x["thumb"].endswith("/thumbs/run.jpg") for x in lib if x["video"] == "vase"))
         self.assertIn("masks:", summary)
 
     def test_runs_without_masks_are_unchanged(self):
@@ -314,3 +321,39 @@ class ChooseWhatToKeepTest(ServerTestCase):
         run = self.data.root / done["run_dir"]
         self.assertFalse((run / "dense" / "masks").exists())
         self.assertNotIn("--alpha-mode", (run / "summary.txt").read_text())
+
+
+@needs_ffmpeg
+class SeveralObjectsTest(ServerTestCase):
+    """Two objects chosen in one video: masks for each, both kept for training, and the run tries
+    to split them (the stand-in COLMAP has no real camera poses, so it reports why it couldn't)."""
+
+    def test_two_objects(self):
+        with mock_env({"SPLAT_STUDIO_MASK_BACKEND": "disc"}):
+            up = json.loads(self.upload(make_video(self.tmp / "table.mov", seconds=4))[1])
+            _, job = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+            self.assertEqual(self.wait_done(job["id"])["status"], "done")
+            q = urlencode({"video": up["video"]})
+            first = self.json("GET", f"/api/frames?{q}")[1]["frames"][0]
+            pts = [[0.25, 0.5, 1], [0.75, 0.5, 2], [0.5, 0.95, 0]]
+            status, prev = self.json("POST", "/api/keep/preview", {"video": up["video"], "frame": first, "points": pts})
+            self.assertEqual(status, 200, prev)
+            self.assertEqual(sorted(prev["masks"]), ["1", "2"])
+            _, job = self.json("POST", "/api/jobs", {"type": "mask", "video": up["video"], "prompts": {first: pts},
+                                                     "objects": [{"id": 1, "name": "Mug"}, {"id": 2, "name": "Vase"},
+                                                                 {"id": 5, "name": "never clicked"}]})
+            self.assertEqual(self.wait_done(job["id"])["status"], "done")
+            _, info = self.json("GET", f"/api/frames?{q}")
+            self.assertEqual(info["objects"], [{"id": 1, "name": "Mug"}, {"id": 2, "name": "Vase"}])
+            frames = self.data.root / info["frames_dir"]
+            self.assertEqual(len(list((frames / "masks" / "objects" / "2").glob("*.png"))), len(info["frames"]))
+
+            _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
+                                                     "frames": 24, "masks": True, "split_objects": True})
+            done = self.wait_done(job["id"])
+        self.assertEqual(done["status"], "done", done.get("error"))
+        self.assertTrue(done["options"]["split_objects"])
+        self.assertTrue((self.data.root / done["run_dir"] / "dense" / "masks").is_dir())
+        _, log = self.json("GET", f"/api/jobs/{job['id']}/log")
+        self.assertIn("==> Splitting the objects", log["log"])
+        self.assertIn("couldn't split the objects", log["log"])      # stand-in COLMAP: no camera poses

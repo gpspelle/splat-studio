@@ -7,7 +7,8 @@ PyTorch, sam2), never in the app's own Python: masks.py starts it as a separate 
 Frames are processed in chunks so memory stays bounded on long videos (SAM 2 keeps every
 frame of a chunk in memory at 1024x1024). Each chunk starts from the person's clicks on its
 frames, or from the previous chunk's last mask, and runs forwards from the first clicked
-frame and backwards from it.
+frame and backwards from it. Several objects are propagated one after the other, each into
+masks/objects/<id>/, and their union is written to masks/ (what training keeps).
 """
 from __future__ import annotations
 
@@ -63,8 +64,20 @@ def save_mask(mask_logits, out: Path) -> "object":
     return m
 
 
+class Progress:
+    """'Masking frames [k/N]' across every object."""
+    def __init__(self, total: int):
+        self.total, self.count, self.seen = total, 0, set()
+
+    def tick(self, key) -> None:
+        if key not in self.seen:
+            self.seen.add(key)
+            self.count += 1
+            print(f"    Masking frames [{self.count}/{self.total}]", flush=True)
+
+
 def run_chunk(pred, paths: list[Path], prompts: dict, carry, carry_at: int, reverse: bool, out: Path,
-              done: set, total: int) -> "object":
+              progress: "Progress") -> "object":
     """Propagate through one chunk; returns the mask of the chunk's last processed frame."""
     import torch
     with tempfile.TemporaryDirectory() as td:
@@ -88,29 +101,24 @@ def run_chunk(pred, paths: list[Path], prompts: dict, carry, carry_at: int, reve
             start = len(paths) - 1 if reverse else 0
             for idx, _ids, logits in pred.propagate_in_video(state, start_frame_idx=start, reverse=reverse):
                 last = save_mask(logits, out / (paths[idx].stem + ".png"))
-                if paths[idx].name not in done:
-                    done.add(paths[idx].name)
-                    print(f"    Masking frames [{len(done)}/{total}]", flush=True)
+                progress.tick((str(out), paths[idx].name))
             pred.reset_state(state)
             return last
 
 
-def propagate(job_file: str) -> None:
-    job = json.loads(Path(job_file).read_text())
-    frames = [Path(p) for p in job["frames"]]
-    prompts, out = job["prompts"], Path(job["out"])
+def propagate_object(pred, frames: list[Path], prompts: dict, out: Path, progress: "Progress") -> None:
+    """Masks for one object in every frame: forwards from its first clicked frame, then backwards."""
     names = [f.name for f in frames]
-    anchors = sorted(names.index(n) for n in prompts if n in names)
+    # start from a frame where the object itself was clicked (not one with only "leave out" clicks)
+    anchors = sorted(names.index(n) for n, pts in prompts.items() if n in names and any(p[2] == 1 for p in pts))
     if not anchors:
-        sys.exit("no clicks on any frame")
-    pred = load_predictor(job["checkpoint"], job["config"])
-    print(f"    SAM 2 on {device()}", flush=True)
-    done: set = set()
+        sys.exit("no clicks on the object on any frame")
+    out.mkdir(parents=True, exist_ok=True)
     a = anchors[0]
     carry, cur = None, a                                      # forwards from the first clicked frame
     while cur < len(frames):
         end = min(len(frames), cur + CHUNK)
-        carry = run_chunk(pred, frames[cur:end], prompts, carry, 0, False, out, done, len(frames))
+        carry = run_chunk(pred, frames[cur:end], prompts, carry, 0, False, out, progress)
         if end >= len(frames):
             break
         cur = end - 1                                         # overlap one frame: the carried mask
@@ -122,8 +130,38 @@ def propagate(job_file: str) -> None:
         while cur > 0:
             start = max(0, cur - CHUNK + 1)
             chunk = frames[start:cur + 1]
-            carry = run_chunk(pred, chunk, prompts, carry, len(chunk) - 1, True, out, done, len(frames))
+            carry = run_chunk(pred, chunk, prompts, carry, len(chunk) - 1, True, out, progress)
             cur = start
+
+
+def write_union(frames: list[Path], dirs: list[Path], out: Path) -> None:
+    import numpy as np
+    from PIL import Image
+    for f in frames:
+        m = None
+        for d in dirs:
+            a = np.array(Image.open(d / (f.stem + ".png"))) > 127
+            m = a if m is None else (m | a)
+        Image.fromarray(m.astype(np.uint8) * 255).save(out / (f.stem + ".png"))
+
+
+def propagate(job_file: str) -> None:
+    job = json.loads(Path(job_file).read_text())
+    frames = [Path(p) for p in job["frames"]]
+    out = Path(job["out"])
+    objects = job.get("objects") or {"1": job["prompts"]}    # older jobs: one object
+    pred = load_predictor(job["checkpoint"], job["config"])
+    print(f"    SAM 2 on {device()}", flush=True)
+    progress = Progress(len(frames) * len(objects))
+    if len(objects) == 1:
+        propagate_object(pred, frames, next(iter(objects.values())), out, progress)
+        return
+    dirs = []
+    for oid, prompts in sorted(objects.items(), key=lambda kv: int(kv[0])):
+        d = out / "objects" / str(oid)
+        propagate_object(pred, frames, prompts, d, progress)
+        dirs.append(d)
+    write_union(frames, dirs, out)
 
 
 def serve(ckpt: str, config: str) -> None:

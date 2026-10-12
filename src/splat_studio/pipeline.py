@@ -87,6 +87,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--masks", action="store_true",
                     help="train only what was chosen on the 'Choose what to keep' page "
                          "(uses frames/<video>/masks, made by `splat-studio mask`)")
+    ap.add_argument("--split-objects", action="store_true",
+                    help="with --masks and several objects chosen: also save one splat per object "
+                         "(NAME_part-<object>.ply)")
     ap.add_argument("--mask-mode", choices=["transparent", "ignore"], default="transparent",
                     help="transparent: everything not chosen is left out of the splat (default); "
                          "ignore: it is just not used for training")
@@ -165,6 +168,8 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(f"Couldn't prepare the masks: {e}")
         say(f"    {n} masks ({args.mask_mode})")
         append_summary(ws, [("masks", f"{n} frames, {args.mask_mode}")])
+        from .thumbs import make as make_thumb
+        make_thumb(frames, masksmod.masks_dir(frames), ws / "thumbs" / "run.jpg")   # the library shows the object
 
     # ------------------------------------------------ 3: Brush
     if args.no_train:
@@ -218,6 +223,20 @@ def main(argv: list[str] | None = None) -> None:
                 append_summary(ws, [("object splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
             except (PlyError, OSError, ValueError) as e:
                 say(f"    couldn't remove the background: {e}")
+        if args.split_objects and args.masks and not args.train_only:
+            say("\n==> Splitting the objects (the original is kept)")
+            from .objects import split
+            from .splats import PlyError
+            try:
+                from .masks import masks_dir
+                from .thumbs import make as make_thumb
+                for s in split(plys[-1], ws, frames, log=say):
+                    make_thumb(frames, masks_dir(frames) / "objects" / str(s["id"]),
+                               ws / "thumbs" / (Path(s["output"]).stem + ".jpg"))   # its own library picture
+                    say(f"Part copy ({s['name']}): {s['output']}")      # parsed by the web UI
+                    append_summary(ws, [(f"object {s['name']}", f"{s['output']}  ({s['kept']} splats)")])
+            except (PlyError, OSError, ValueError, RuntimeError) as e:
+                say(f"    couldn't split the objects: {e}")
     else:
         say(f"\nBrush finished but no .ply was found in {out_dir} - check its output above.")
 

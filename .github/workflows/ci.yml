@@ -25,9 +25,15 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then brew install ffmpeg; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi
       - name: Unit tests
-        run: python -m unittest discover -s tests/unit -t . -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests/unit -t . -v 2>&1 | tee unit.log || { python scripts/annotate_failures.py unit.log; exit 1; }
       - name: Integration tests (real ffmpeg, stand-in COLMAP and Brush)
-        run: python -m unittest discover -s tests/integration -t . -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests/integration -t . -v 2>&1 | tee integration.log || { python scripts/annotate_failures.py integration.log; exit 1; }
 
   browser:
     name: web UI in a real browser

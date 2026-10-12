@@ -124,6 +124,55 @@ def write_room_scene(path: Path, seed: int = 5, up_axis: str | None = "0 -1 0") 
     return path
 
 
+def write_points(path: Path, pts, up_axis: str | None = "0 -1 0") -> Path:
+    """A splat PLY from (x, y, z, (r, g, b), size, opacity) tuples, in world coordinates as given."""
+    header = "ply\nformat binary_little_endian 1.0\ncomment Exported from Brush\n"
+    if up_axis:
+        header += f"comment Vertical axis: {up_axis}\n"
+    header += f"element vertex {len(pts)}\n" + "".join(f"property float {p}\n" for p in PROPS) + "end_header\n"
+    row = struct.Struct("<" + "f" * len(PROPS))
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(header.encode())
+        for x, y, z, col, s, op in pts:
+            ls = math.log(s)
+            logit = math.log(op / (1 - op))
+            f.write(row.pack(x, y, z, 0, 0, 0, _dc(col[0]), _dc(col[1]), _dc(col[2]), *([0.0] * 45),
+                             logit, ls, ls, ls, 1, 0, 0, 0))
+    return path
+
+
+THREE_OBJECTS = {1: (-0.8, -0.25, 0.0), 2: (0.0, -0.25, 0.0), 3: (0.8, -0.25, 0.0)}   # y-down, on a table at y=0
+
+
+def write_three_objects(path: Path, n: int = 1500, seed: int = 9) -> Path:
+    """Three balls (radius 0.22) in a row on a table, as a splat trained on all three would be:
+    the objects opaque, a little faint table left over."""
+    rnd = random.Random(seed)
+    cols = {1: (0.9, 0.3, 0.2), 2: (0.2, 0.6, 0.9), 3: (0.3, 0.8, 0.3)}
+    pts = []
+    for oid, (cx, cy, cz) in THREE_OBJECTS.items():
+        for _ in range(n):
+            u, v = rnd.uniform(-1, 1), rnd.uniform(0, 2 * math.pi)
+            r = 0.22 * rnd.random() ** 0.3
+            w = math.sqrt(1 - u * u)
+            pts.append((cx + r * w * math.cos(v), cy + r * u, cz + r * w * math.sin(v), cols[oid], 0.01, 0.95))
+    for _ in range(n // 3):                            # leftover table, nearly transparent
+        pts.append((rnd.uniform(-1.6, 1.6), 0.0, rnd.uniform(-0.8, 0.8), (0.5, 0.5, 0.5), 0.03, 0.03))
+    return write_points(path, pts)
+
+
+def write_cameras_bin(path: Path, width: int = 320, height: int = 240, params=(260.0, 260.0, 160.0, 120.0, 0, 0, 0, 0),
+                      model: int = 4) -> Path:
+    """COLMAP cameras.bin with one camera (OPENCV by default: fx fy cx cy k1 k2 p1 p2)."""
+    out = struct.pack("<Q", 1) + struct.pack("<iiQQ", 1, model, width, height) + struct.pack(f"<{len(params)}d", *params)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(out)
+    return path
+
+
 def write_images_bin(path: Path, n: int = 36, radius: float = 1.6, target=(0.0, -0.6, 0.0), seed: int = 4) -> Path:
     """COLMAP images.bin with n cameras walking around `target` at ~radius, at three heights,
     each looking at the target (world coordinates match write_foggy_scene, which is y-down)."""

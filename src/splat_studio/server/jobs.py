@@ -34,7 +34,7 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated", "eta_total", "eta_note", "masks"]
+              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -82,6 +82,8 @@ RE_TRACK = re.compile(r"^\s+(\S+\.jpg) -> (\S+\.jpg)\s+\((\d+) frames\)")
 RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
 RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
+RE_PART_COPY = re.compile(r"Part copy \((.*)\): (.+\.ply)")
+RE_STAGE_SPLIT = re.compile(r"==> Splitting the objects")
 RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
 RE_STAGE_CLEAN = re.compile(r"==> Removing background fog")
 RE_MASKING = re.compile(r"Masking frames \[(\d+)/(\d+)\]")
@@ -185,6 +187,12 @@ def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -
             job.isolated = counts                                  # background removal, not fog
         else:
             job.cleaned = counts
+    if RE_STAGE_SPLIT.search(line):
+        clock.start_phase("split", t)
+    m = RE_PART_COPY.search(line)
+    if m:
+        part = {"name": m.group(1), "splat": rel(m.group(2).strip())}
+        job.parts = [x for x in (job.parts or []) if x["splat"] != part["splat"]] + [part]
     m = RE_OBJECT_COPY.search(line)
     if m:
         job.object_splat = rel(m.group(1).strip())
@@ -254,6 +262,8 @@ def build_cmd(job: Job) -> list[str]:
         args.append("--remove-background")
     if o.get("masks") and job.type == "video":
         args.append("--masks")
+        if o.get("split_objects"):
+            args.append("--split-objects")
     extra = (o.get("brush_args") or "").split()
     if extra:
         args += ["--", *extra]
@@ -270,7 +280,7 @@ class ApiError(ValueError):
 
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
-                                     "brush_args", "remove_background", "masks")
+                                     "brush_args", "remove_background", "masks", "split_objects")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")

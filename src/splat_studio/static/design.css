@@ -43,6 +43,8 @@
   --scrim: rgba(18, 18, 17, .5);
   --canvas: #0b0b0a;         /* 3D viewport, dark in both themes */
   --canvas-light: #efede7;
+  /* objects in "Choose what to keep", drawn over video frames: the same in both themes */
+  --obj-1: #1fa45a; --obj-2: #2f6fde; --obj-3: #d63ab8; --obj-4: #e08a00; --obj-5: #0aa3b8; --obj-6: #7d4ce0;
   --hud-bg: rgba(11, 11, 10, .78);
   --hud-ink: #efede7;
   --hud-ink-2: #a8a49b;
@@ -378,6 +380,8 @@ pre.log { background: var(--canvas); color: #d9d6ce; font: 12px/1.5 var(--font-m
 .run.compact .advice { margin-top: 6px; }
 .run.compact .more .head { margin-bottom: var(--s-1); }
 .more-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-3); }
+.run-parts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--s-2); }
+.run-parts .meta { margin-right: 2px; }
 .kv-log pre.log { margin-top: var(--s-2); }
 .runs-sub { font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--ink-3);
   padding: var(--s-2) var(--s-4); background: var(--sunken); border-bottom: var(--hairline) solid var(--rule-soft); }

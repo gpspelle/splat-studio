@@ -137,6 +137,22 @@ transparent, everything outside it.
    mask becomes the image's alpha and what's outside is trained to be see-through, so a stand
    disappears instead of being guessed at. `ignore` mode only leaves those pixels out of the loss.
 
+**Several objects.** Clicks carry a label: 0 leaves out, 1–8 is the object. Each object is
+propagated on its own (its clicks as keep points; on the same frames, the other objects' clicks
+and the leave-out clicks as remove points) into `masks/objects/<id>/`, and their union is
+`masks/<frame>.png`, so training keeps all of them at once. `objects.py` then splits the
+trained splat: visible splats are grouped on a 120-across voxel grid, each voxel centre is
+projected into 48 evenly spread frames with the distorted COLMAP model (OPENCV and the other
+standard camera models), and the voxel goes to the object whose mask holds it in at least half
+of the frames where it's in view (at least 3). Masks are read at 320 px wide through ffmpeg,
+so the split stays standard-library Python; 500,000 splats take about 15 seconds.
+
+**Library pictures** (`thumbs.py`). From ~24 masks spread over the video, the one with the
+largest selection that doesn't touch the frame's edge wins; its frame is cropped around the
+selection at the tiles' 16:10 shape, and ffmpeg's `maskedmerge` keeps the selection sharp over a
+blurred, darkened copy of the frame. Made during the run (`run/thumbs/run.jpg`, and
+`<splat>.jpg` per object), or once in the background for runs made before.
+
 Tests use a stand-in backend (`SPLAT_STUDIO_MASK_BACKEND=disc`: a disc around the keep clicks)
 and a stubbed SAM 2 for the chunking logic.
 

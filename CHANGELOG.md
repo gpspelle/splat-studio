@@ -9,6 +9,14 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Several objects: one splat each (beta).** **What to keep** on New run has **Everything**, **One
+  object** and **Several objects**. With several, the Choose what to keep page lists the objects
+  (**+ Add object**, up to 8), each with a name and its own colour; clicks go to the selected
+  one. SAM 2 follows each object through the video. Training runs once with all of them kept,
+  then the splat is split into `NAME_part-<object>.ply` files by projecting it into 48 frames
+  and giving each splat to the object whose mask it lands in most often. Finished runs show a
+  button per object. New: `run --split-objects`, `split-objects NAME.ply --run RUN`, object
+  labels 1–8 in `mask --prompts`, and a `split_objects` option for video jobs.
 - **Choose what to keep (beta)** (`/keep`, from **What to keep → Only what I
   choose** on New run). Click the object (**Keep**) and a stand, hand or holder (**Leave out**) on a frame or
   two. Meta's SAM 2 follows that selection through every frame, and training keeps only the
@@ -36,6 +44,14 @@
   with error code `splat_busy`.
 
 ### Changed
+- **Library pictures show the object.** Runs trained on a selection use a frame where the
+  selection is large and fully in view, cropped around it with the rest blurred and darkened
+  (`run/thumbs/run.jpg`), instead of the video's first frame. With several objects, each
+  object's splat gets its own picture from its masks. Older runs get theirs the first time the
+  library lists them.
+- **Choose what to keep prepares the frames by itself** when it opens (using the frame count
+  from New run), instead of waiting for a **Prepare frames** click. Opening the page twice
+  reuses the frames job that's already running.
 - **New run is its own page** (`/new`, **New run** in the menu and on the Studio). The Studio
   (`/`) now shows only the runs and the library; starting a run goes back there. New run keeps
   the video and settings while you go to Choose what to keep and back. **Train again** has its
