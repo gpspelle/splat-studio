@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- **Choose what to keep showed each preview one click late.** The selection tool's "ready"
+  line was taken as the answer to the first click, so every later click got the previous
+  click's mask, often from another frame, where it looked shifted or rotated. Replies are now
+  matched to their click, and clicks made at the same time no longer swap masks.
+
 ### Added
 - **Several objects: one splat each (beta).** **What to keep** on New run has **Everything**, **One
   object** and **Several objects**. With several, the Choose what to keep page lists the objects
