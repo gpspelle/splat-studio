@@ -1,0 +1,27 @@
+name: Bug
+description: Something doesn't work as it should
+labels: ["kind: bug"]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The run's log (Details → log), or the terminal output. A screenshot helps too.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the footer of the app (for example v0.4.0), plus your Mac model.

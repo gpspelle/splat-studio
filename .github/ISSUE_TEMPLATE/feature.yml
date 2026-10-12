@@ -1,0 +1,29 @@
+name: Feature
+description: A new capability, small enough for one pull request
+labels: ["kind: feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What gets in the way today, for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What we'd build, in a few sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: A checklist that says when it's done. Include tests and docs.
+      value: |
+        - [ ] 
+        - [ ] Tests
+        - [ ] README (EN/PT), docs, CHANGELOG, screenshots if the UI changes
+    validations:
+      required: true
