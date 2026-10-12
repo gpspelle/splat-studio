@@ -202,7 +202,7 @@ document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e)
   if (s.dataset.name === "keep") { renderKeep(); renderStart(); }
   saveDraft();
 }));
-[...CHECKS, ...FIELDS].forEach((k) => $(k).addEventListener("change", saveDraft));
+[...CHECKS, ...FIELDS].forEach((k) => $(k).addEventListener("change", () => { saveDraft(); renderKeep(); }));
 $("adv").addEventListener("toggle", saveDraft);
 
 // ---------------------------------------------------------------- choosing / uploading a video
@@ -274,7 +274,9 @@ function renderKeep() {
   const st = $("keepStatus"), link = $("keepLink");
   link.hidden = !chosenVideo;
   if (!chosenVideo) { st.className = "status"; st.textContent = t("keep.state.noVideo"); return; }
-  link.href = "/keep?" + new URLSearchParams(seg("keep") === "several" ? { video: chosenVideo, objects: "several" } : { video: chosenVideo });
+  const kq = { video: chosenVideo, frames: +$("frames").value || 250 };
+  if (seg("keep") === "several") kq.objects = "several";
+  link.href = "/keep?" + new URLSearchParams(kq);
   if (!selection) { st.className = "status"; st.textContent = t("keep.state.checking"); link.textContent = t("keep.open"); return; }
   const ready = selectionReady(), nObj = (selection.objects || []).length || 1;
   const fewObjects = ready && seg("keep") === "several" && nObj < 2;

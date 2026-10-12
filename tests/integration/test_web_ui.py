@@ -130,7 +130,7 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_url("**/keep?video=*")
         self.assertEqual(self.page.get_by_test_id("keep-run").count(), 0)          # runs start only on New run
         self.assertEqual(self.page.get_attribute("[data-testid=keep-use]", "aria-disabled"), "true")
-        self.page.get_by_test_id("keep-frames").click()
+        self.assertTrue(self.page.get_by_test_id("keep-frames").is_hidden())       # frames start on their own
         canvas = self.page.get_by_test_id("keep-canvas")
         canvas.wait_for(state="visible", timeout=60000)
         self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
@@ -182,7 +182,7 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_function("document.querySelector('[data-testid=keep-status]').textContent.includes('No selection')")
         self.page.get_by_test_id("keep-link").click()
         self.page.wait_for_url("**/keep?*objects=several*")
-        self.page.get_by_test_id("keep-frames").click()
+        self.assertTrue(self.page.get_by_test_id("keep-frames").is_hidden())       # frames start on their own
         canvas = self.page.get_by_test_id("keep-canvas")
         canvas.wait_for(state="visible", timeout=60000)
         self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")

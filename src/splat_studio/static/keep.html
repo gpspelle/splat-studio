@@ -76,7 +76,7 @@
     <section class="card">
       <h2><span data-i18n="keep.frame">Frame</span><span class="meta" id="frameInfo"></span></h2>
       <div class="stage" id="stage">
-        <div class="empty-stage" id="emptyStage" data-i18n="keep.noFrames">Prepare the frames to start.</div>
+        <div class="empty-stage" id="emptyStage" data-i18n="keep.noFrames">Preparing the frames…</div>
         <img id="frameImg" alt="" hidden>
         <canvas id="overlay" hidden data-testid="keep-canvas"></canvas>
       </div>
@@ -101,8 +101,8 @@
       </div>
       <div class="step" id="step1">
         <h3><span class="n">1</span><span data-i18n="keep.s1">Frames</span></h3>
-        <p data-i18n="keep.s1.text">The video is cut into frames, as for a run. They're reused when you start it.</p>
-        <button id="framesBtn" data-testid="keep-frames" data-i18n="keep.s1.button">Prepare frames</button>
+        <p data-i18n="keep.s1.text">The video is cut into frames as soon as you open this page. They're reused when the run starts.</p>
+        <button id="framesBtn" data-testid="keep-frames" hidden data-i18n="keep.s1.retry">Try again</button>
         <div class="meta status" id="framesStatus"></div>
       </div>
       <div class="step" id="step2">
@@ -111,6 +111,7 @@
         <div id="objBox" hidden>
           <p class="multi-help" data-i18n="keep.objs.text">Pick an object, then click it with Keep. Name each one: the names are used for their splats.</p>
           <div class="objs" id="objList" data-testid="keep-objects"></div>
+          <p class="meta" data-i18n="keep.objs.note">Each frame shows the objects clicked on it. Apply to all frames follows every object through the video.</p>
           <button class="small" id="addObj" data-testid="keep-add-object" style="margin-bottom:var(--s-3)" data-i18n="keep.objs.add">+ Add object</button>
         </div>
         <div class="seg tool" data-name="tool" role="group">
@@ -262,8 +263,8 @@ function renderTicks() {
 
 function renderStatus() {
   const frames = info?.frames?.length || 0;
-  $("framesStatus").textContent = frames ? t("keep.s1.ready", { n: frames }) : "";
-  $("framesBtn").hidden = !!frames;
+  if (frames || !preparing) $("framesStatus").textContent = frames ? t("keep.s1.ready", { n: frames }) : "";
+  $("framesBtn").hidden = !!frames || preparing;
   $("step1").classList.toggle("done", !!frames);
   const nFrames = Object.keys(prompts).filter((k) => prompts[k].length).length;
   $("clickStatus").textContent = totalClicks() ? t("keep.s2.count", { clicks: totalClicks(), frames: nFrames }) : "";
@@ -295,12 +296,14 @@ function edited() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(previewNow, 250);
 }
+let previewSeq = 0;
 async function previewNow() {
-  const name = frameName(), pts = pointsOn(name);
+  const name = frameName(), pts = pointsOn(name), seq = ++previewSeq;
   if (!pts.some((p) => p[2] >= 1) || !info.backend) { maskCache.delete(name); draw(); return; }
   $("clickStatus").textContent = t("keep.previewing");
   try {
     const d = await postJSON("/api/keep/preview", { video, frame: name, points: pts });
+    if (seq !== previewSeq) return;                  // a newer click is on its way: show that one
     loadMasks(name, d.masks || { 1: d.mask });
   } catch (err) { toast(err.message); }
   renderStatus();
@@ -378,13 +381,21 @@ async function watch(job, statusEl, bar, done) {
     }
   }
 }
-$("framesBtn").onclick = async () => {
+// frames are prepared as soon as the page opens (the same job if one is already running)
+let preparing = false;
+async function prepareFrames() {
+  if (preparing) return;
+  preparing = true; $("framesBtn").hidden = true;
+  $("emptyStage").textContent = t("keep.noFrames");
+  $("framesStatus").textContent = t("keep.working");
   try {
-    const job = await postJSON("/api/jobs", { type: "frames", video, frames: 250 });
-    $("framesBtn").disabled = true;
-    watch(job, $("framesStatus"), null, () => load());
-  } catch (err) { toast(err.message); }
-};
+    const job = await postJSON("/api/jobs", { type: "frames", video, frames: +params.get("frames") || 250 });
+    await watch(job, $("framesStatus"), null, () => load());
+  } catch (err) { toast(err.message); $("framesStatus").textContent = err.message; }
+  preparing = false;
+  renderStatus();
+}
+$("framesBtn").onclick = prepareFrames;
 $("installBtn").onclick = async () => {
   try {
     const job = await postJSON("/api/jobs", { type: "setup", masking: true });
@@ -426,6 +437,7 @@ async function load() {
   showFinal = masksDone;
   const has = info.frames.length > 0;
   $("emptyStage").hidden = has; img.hidden = !has; canvas.hidden = !has;
+  if (!has) prepareFrames();
   $("scrub").max = Math.max(0, info.frames.length - 1);
   if (masksDone) $("applyStatus").textContent = t("keep.s3.done");
   if (has) {

@@ -38,6 +38,9 @@
   with error code `splat_busy`.
 
 ### Changed
+- **Choose what to keep prepares the frames by itself** when it opens (using the frame count
+  from New run), instead of waiting for a **Prepare frames** click. Opening the page twice
+  reuses the frames job that's already running.
 - **New run is its own page** (`/new`, **New run** in the menu and on the Studio). The Studio
   (`/`) now shows only the runs and the library; starting a run goes back there. New run keeps
   the video and settings while you go to Choose what to keep and back. **Train again** has its

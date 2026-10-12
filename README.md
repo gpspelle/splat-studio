@@ -252,7 +252,8 @@ show Splat Studio what to keep on a frame or two, and only that is trained.
    in its own folder (`~/.splat-studio/sam2`, about 1 GB with PyTorch). It needs Python 3.10
    or newer, which setup installs with Homebrew if needed. It uses the Mac's GPU.
 2. On **New run**, choose a video and set **What to keep** to **One object** (or **Several
-   objects**, below), then click **Choose what to keep**. On that page, **Prepare frames** extracts the frames.
+   objects**, below), then click **Choose what to keep**. The frames are extracted as soon as
+   that page opens.
 3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
    hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
    where the selection is wrong, for example where the holder appears from another side.

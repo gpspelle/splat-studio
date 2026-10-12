@@ -269,6 +269,8 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertEqual((info["frames"], info["masks_done"], info["backend"]), ([], False, "disc"))
 
         _, job = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+        _, again = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+        self.assertEqual(again["id"], job["id"])                     # page opened twice: one frames job
         self.assertEqual(self.wait_done(job["id"])["status"], "done")
         _, info = self.json("GET", f"/api/frames?{q}")
         self.assertGreaterEqual(len(info["frames"]), 20)

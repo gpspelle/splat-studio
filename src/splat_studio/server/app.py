@@ -314,7 +314,10 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                         pf.write_text(json.dumps({"points": prompts,
                                                   "objects": masksmod.normalise_objects(body.get("objects"), ids)}))
                         o["prompts_file"] = data.rel(pf)
-                    job = runner.submit(t, video=data.rel(v), options=o)
+                    running = next((j for j in list(runner.jobs.values()) if j.type == "frames" and t == "frames"
+                                    and j.video == data.rel(v) and j.status in ("queued", "running")), None)
+                    # opening the page twice doesn't extract the frames twice
+                    job = running or runner.submit(t, video=data.rel(v), options=o)
                 elif t in ("clean", "isolate"):
                     f = data.safe_path(body.get("splat", ""))
                     if not f or not f.is_file() or f.suffix.lower() != ".ply":

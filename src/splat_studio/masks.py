@@ -28,6 +28,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import threading
 import zlib
 from pathlib import Path
 
@@ -269,38 +270,51 @@ def preview(frame: Path, points: list[list], out: Path) -> Path:
 
 
 class Sam2Server:
-    """One long-lived SAM 2 process for previews, so each click doesn't reload the model."""
+    """One long-lived SAM 2 process for previews, so each click doesn't reload the model.
+
+    The web server answers requests on several threads, so one request talks to the process
+    at a time, and each reply carries the id of the request it answers: a reply is never
+    handed to the wrong click (a frame's mask shown on another frame)."""
     _inst: "Sam2Server | None" = None
+    _start = threading.Lock()
 
     def __init__(self, python: Path):
         env = child_env({"PYTORCH_ENABLE_MPS_FALLBACK": "1"})
         self.proc = subprocess.Popen([str(python), "-u", "-m", "splat_studio.maskwork", "serve",
                                       str(SAM2_DIR / SAM2_CHECKPOINT), SAM2_CONFIG],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+        self.lock = threading.Lock()
+        self.next_id = 0
 
     @classmethod
     def get(cls) -> "Sam2Server":
-        if cls._inst is None or cls._inst.proc.poll() is not None:
-            py = sam2_python()
-            if py is None:
-                raise RuntimeError("the selection tool isn't installed (splat-studio setup --masking)")
-            cls._inst = cls(py)
-        return cls._inst
+        with cls._start:
+            if cls._inst is None or cls._inst.proc.poll() is not None:
+                py = sam2_python()
+                if py is None:
+                    raise RuntimeError("the selection tool isn't installed (splat-studio setup --masking)")
+                cls._inst = cls(py)
+            return cls._inst
 
     def preview(self, frame: Path, points: list[list], out: Path) -> Path:
-        self.proc.stdin.write(json.dumps({"frame": str(frame), "points": points, "out": str(out)}) + "\n")
-        self.proc.stdin.flush()
-        while True:
-            line = self.proc.stdout.readline()
-            if not line:
-                raise RuntimeError("the selection tool stopped unexpectedly")
-            try:
-                reply = json.loads(line)
-            except ValueError:
-                continue                             # library chatter
-            if reply.get("error"):
-                raise RuntimeError(reply["error"])
-            return Path(reply["out"])
+        with self.lock:
+            self.next_id += 1
+            rid = self.next_id
+            self.proc.stdin.write(json.dumps({"id": rid, "frame": str(frame), "points": points, "out": str(out)}) + "\n")
+            self.proc.stdin.flush()
+            while True:
+                line = self.proc.stdout.readline()
+                if not line:
+                    raise RuntimeError("the selection tool stopped unexpectedly")
+                try:
+                    reply = json.loads(line)
+                except ValueError:
+                    continue                         # library chatter
+                if not isinstance(reply, dict) or reply.get("id") != rid:
+                    continue                         # the "ready" line, or a reply to an older request
+                if reply.get("error"):
+                    raise RuntimeError(reply["error"])
+                return Path(reply["out"])
 
 
 # ---------------------------------------------------------------- making masks for every frame
