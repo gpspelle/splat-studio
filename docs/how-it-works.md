@@ -156,6 +156,13 @@ standard camera models), and the voxel goes to the object whose mask holds it in
 of the frames where it's in view (at least 3). Masks are read at 320 px wide through ffmpeg,
 so the split stays standard-library Python; 500,000 splats take about 15 seconds.
 
+**Suggested objects** (`masks.suggest`, `maskwork.pick_suggestions`). The preview process builds
+SAM 2's automatic mask generator on first use (16 points per side). Masks between 0.4% and 50%
+of the frame are ranked by predicted quality x stability, and any mask that overlaps one already
+kept by more than half of the smaller is dropped, up to 8. Each comes back with a point inside it
+(its centre, or the nearest mask pixel), which becomes the keep click when the suggestion is
+clicked. The stand-in backend returns three fixed suggestions for tests.
+
 **Fixing a slipped frame** (`masks.update_masks`). After an Apply, frames whose clicks changed
 are redone on their own: for each object clicked on a changed frame (every object, for a frame
 with only leave-out clicks), from the previous frame that object was clicked on to the next one,

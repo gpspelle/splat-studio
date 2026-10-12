@@ -83,6 +83,9 @@ print(json.dumps({"ready": True, "device": "cpu"}), flush=True)
 for line in sys.stdin:
     req = json.loads(line)
     time.sleep(random.uniform(0, 0.03))
+    if req.get("kind") == "suggest":
+        print(json.dumps({"id": req["id"], "suggestions": [{"x": 0.5, "y": 0.5, "area": 0.1, "mask": req["outdir"] + "/s0.png"}]}), flush=True)
+        continue
     print(json.dumps({"id": req["id"], "out": req["out"]}), flush=True)
 """
 
@@ -112,6 +115,11 @@ class Sam2ServerTest(TempDirTestCase):
         self.assertEqual(out, self.tmp / "p" / "f1.png")
         out = masks.Sam2Server.get().preview(self.tmp / "f2.jpg", [[0.5, 0.5, 1]], self.tmp / "p" / "f2.png")
         self.assertEqual(out, self.tmp / "p" / "f2.png")         # not the previous frame's mask
+
+    def test_suggestions_come_back_with_their_request(self):
+        got = masks.Sam2Server.get().suggest(self.tmp / "f1.jpg", self.tmp / "sg", 8)
+        self.assertEqual(got, [{"x": 0.5, "y": 0.5, "area": 0.1, "mask": self.tmp / "sg" / "s0.png"}])
+        self.assertEqual(masks.Sam2Server.get().preview(self.tmp / "f2.jpg", [[0.5, 0.5, 1]], self.tmp / "m.png"), self.tmp / "m.png")
 
     def test_clicks_at_the_same_time_get_their_own_masks(self):
         import threading
@@ -229,6 +237,19 @@ class MakeMasksTest(TempDirTestCase):
         self.assertEqual(masks.split_prompt_file({"points": {"a": []}, "objects": [1]}), ({"a": []}, [1]))
         self.assertEqual(masks.split_prompt_file({"a": []}), ({"a": []}, []))
 
+    def test_suggestions_with_the_stand_in(self):
+        out = self.tmp / "sg"
+        out.mkdir()
+        (out / "frame_00001_s9.png").write_bytes(b"old")
+        with mock.patch.object(masks, "backend", return_value="disc"):
+            got = masks.suggest(self.frames / "frame_00001.jpg", out)
+        self.assertEqual([(g["x"], g["y"]) for g in got], list(masks.DISC_SUGGESTIONS))
+        self.assertFalse((out / "frame_00001_s9.png").exists())            # last time's suggestions go
+        for g in got:
+            w, h, rows = masks.read_png_gray(g["mask"])
+            self.assertEqual(rows[int(g["y"] * h)][int(g["x"] * w)], 255)   # the point is inside its mask
+            self.assertTrue(0 < g["area"] < 0.5)
+
     def test_needs_a_keep_click(self):
         with self.assertRaises(ValueError):
             masks.make_masks(self.frames, {"frame_00001.jpg": [[0.5, 0.5, 0]]}, "disc")
@@ -330,6 +351,24 @@ class MaskworkChunkingTest(TempDirTestCase):
         self.assertEqual([c[0] for c in calls if not c[2]][:2], [4, 3])
         self.assertEqual([c[1] for c in calls if not c[2] and c[0] == 4], [{0: "points"}] * 2)   # obj 1: 4-7, obj 2: 6-9
         self.assertIn({3: "points", 0: "points"}, [c[1] for c in calls if c[2]])   # the leave-out click, going back
+
+    def test_picking_suggestions(self):
+        import numpy as np
+        from splat_studio import maskwork
+        def disc(cx, cy, r, score):
+            yy, xx = np.mgrid[0:100, 0:100]
+            return {"segmentation": (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r, "area": int(np.pi * r * r),
+                    "predicted_iou": score, "stability_score": 1.0}
+        ring = disc(50, 50, 20, 0.9)
+        ring["segmentation"] = ring["segmentation"] & ~disc(50, 50, 8, 0)["segmentation"]   # centre not inside
+        found = maskwork.pick_suggestions([disc(20, 20, 10, 0.95), disc(21, 20, 9, 0.99),   # same object twice
+                                           disc(80, 80, 12, 0.9), disc(50, 50, 60, 0.99),   # the whole frame: too big
+                                           disc(5, 95, 1, 0.99), ring])                     # a speck: too small
+        self.assertEqual(len(found), 3)
+        self.assertEqual(found[0]["predicted_iou"], 0.99)                    # the better of the two copies
+        x, y = maskwork.inside_point(ring["segmentation"])
+        self.assertTrue(ring["segmentation"][int(y * 100), int(x * 100)])
+        self.assertEqual(maskwork.pick_suggestions([]), [])
 
     def test_only_the_given_segments(self):
         calls, out = self.run_stub({"objects": {"1": {"frame_00004.jpg": [[0.5, 0.5, 1]], "frame_00008.jpg": [[0.4, 0.5, 1]]}},

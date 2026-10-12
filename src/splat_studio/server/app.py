@@ -11,6 +11,7 @@ Routes
   GET  /compare?a=...&b=...      two splats side by side GET  /api/export-compare?a=&b=  comparison website (zip)
   POST /api/upload               raw video body, X-Filename header -> {video, advice}
   POST /api/import               raw .ply body, X-Filename header
+  POST /api/keep/suggest         {video, frame} -> {suggestions: [{x, y, area, mask}]} (objects on one frame)
   POST /api/turntable?file=&format=mp4|gif&fps=   concatenated JPEG frames -> {file} (MP4 or GIF next to the splat)
   POST /api/jobs                 {type: video|retrain|setup|clean|isolate, ...options}
   POST /api/jobs/<id>/cancel     DELETE /api/jobs/<id>   (removes the record, never results)
@@ -287,6 +288,21 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 finally:
                     frames.unlink(missing_ok=True)
                 return self.send_json({"file": data.rel(out), "size": out.stat().st_size})
+            if p == "/api/keep/suggest":                   # distinct objects on one frame (#15)
+                body = self.read_json()
+                v = data.safe_path(body.get("video", ""))
+                if not v or not v.is_file():
+                    return self.send_json({"error": "video not found", "code": "video_missing"}, 400)
+                from .. import masks as masksmod
+                frames_dir = data.frames / data.frames_name(data.rel(v))
+                frame = str(body.get("frame", ""))
+                if frame not in {f.name for f in masksmod.frame_list(frames_dir)}:
+                    return self.send_json({"error": "frame not found", "code": "frame_missing"}, 400)
+                try:
+                    sug = masksmod.suggest(frames_dir / frame, masksmod.masks_dir(frames_dir) / "suggest")
+                except (RuntimeError, OSError, ValueError) as e:
+                    return self.send_json({"error": str(e), "code": "mask_failed"}, 500)
+                return self.send_json({"suggestions": [{**x, "mask": data.rel(x["mask"])} for x in sug]})
             if p == "/api/keep/preview":
                 body = self.read_json()
                 v = data.safe_path(body.get("video", ""))

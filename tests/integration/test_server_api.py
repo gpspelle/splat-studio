@@ -281,6 +281,12 @@ class ChooseWhatToKeepTest(ServerTestCase):
         self.assertEqual(status, 200, prev)
         r, png = self.request("GET", "/files/" + prev["mask"])
         self.assertEqual((r.status, png[:4]), (200, b"\x89PNG"))
+        status, sug = self.json("POST", "/api/keep/suggest", {"video": up["video"], "frame": first})   # #15
+        self.assertEqual(status, 200, sug)
+        self.assertEqual(len(sug["suggestions"]), 3)
+        self.assertEqual(self.request("GET", "/files/" + sug["suggestions"][0]["mask"])[0].status, 200)
+        status, err = self.json("POST", "/api/keep/suggest", {"video": up["video"], "frame": "nope.jpg"})
+        self.assertEqual((status, err["code"]), (400, "frame_missing"))
         status, err = self.json("POST", "/api/keep/preview", {"video": up["video"], "frame": first,
                                                                "points": [[0.9, 0.1, 0]]})
         self.assertEqual((status, err["code"]), (400, "no_keep_point"))
