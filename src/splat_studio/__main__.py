@@ -12,6 +12,7 @@
     splat-studio clean MODEL.ply      save MODEL_clean.ply without the background fog
     splat-studio isolate MODEL.ply    save MODEL_object.ply with only the object (no table, floor, room)
     splat-studio split-objects MODEL.ply --run RUN   one splat per object chosen in "Choose what to keep"
+    splat-studio coverage RUN         where the cameras were around the object (gaps, heights)
 """
 from __future__ import annotations
 
@@ -82,6 +83,9 @@ def main(argv: list[str] | None = None) -> None:
     if cmd == "clean":
         from .splats import main_clean
         return main_clean(rest)
+    if cmd == "coverage":
+        from .coverage import main as coverage_main
+        return coverage_main(rest)
     if cmd == "split-objects":
         from .objects import main as split_main
         return split_main(rest)

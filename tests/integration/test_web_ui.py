@@ -262,6 +262,27 @@ class WebUiTest(BrowserTestCase):
         self.assertEqual(self.page.inner_text("#title"), "table · standard · red ball")
         self.assertEqual(self.errors, [])
 
+    def test_coverage_ring_and_warning(self):
+        os.environ["FAKE_COLMAP_POSES"] = "gap"                       # one side never filmed
+        self.addCleanup(os.environ.pop, "FAKE_COLMAP_POSES", None)
+        self.open_new()
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "side.mov", seconds=6, size="960x540")))
+        self.page.get_by_test_id("video-advice").wait_for(state="visible")
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        row = self.page.locator("[data-testid=run-done]").first
+        row.wait_for(timeout=180000)
+        self.assertIn("barely filmed", row.locator("[data-testid=run-warnings]").text_content())
+        row.locator("[data-testid=run-details]").click()
+        ring = row.get_by_test_id("coverage")
+        ring.wait_for()
+        self.assertEqual(ring.locator("path").count(), 1)                 # the gap, drawn as an arc
+        self.assertGreater(ring.locator("circle").count(), 20)            # one dot per camera
+        self.assertRegex(ring.text_content(), r"largest gap 1[2-4]\d°")
+        self.shot("coverage", page=None)
+        self.assertEqual(self.errors, [])
+
     def test_studio_and_new_run_are_separate_pages(self):
         self.page.goto(self.url)
         self.page.get_by_test_id("setup-pill").wait_for()

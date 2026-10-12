@@ -94,6 +94,11 @@ Splat Studio helps you get it right with fewer attempts:
 
 - **Before processing**, it checks each upload's length, resolution, frame rate, HDR and
   orientation, and tells you what to fix.
+- **Right after the camera poses**, before training, it checks where the cameras were around
+  the object. A **coverage ring** on the run (seen from above, one dot per camera) shows any side
+  you skipped in red. A gap over 60°, or cameras all at one height, gives a warning that names
+  the moment in the video, so you can stop the run and film that side.
+  `./splat-studio coverage workspace/<video>/latest` prints the same numbers.
 - **After a run**, if tracking broke, it tells you **at which seconds of the video** it
   happened, so you know exactly which part to re-film.
 - It flags blurry footage, and runs that couldn't be reconstructed, with concrete advice.
@@ -400,6 +405,10 @@ cd splat-studio
 Para gravar bem: **uma gravação contínua com 3 voltas** ao redor do objeto (baixa, média, alta),
 andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× sem zoom; objeto fosco
 sobre uma superfície com textura. O guia completo está no app (**Guia de gravação**).
+
+Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
+câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
+de uma altura só.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
