@@ -324,6 +324,30 @@ def run_sam2(frames: list[Path], objects: dict[int, dict], out: Path, python: Pa
     return subprocess.run([str(python), "-u", "-m", "splat_studio.maskwork", "propagate", str(job)], env=env).returncode
 
 
+DISC_SUGGESTIONS = ((0.25, 0.55), (0.5, 0.5), (0.75, 0.55))     # the stand-in backend's fixed "objects"
+
+
+def suggest(frame: Path, outdir: Path, limit: int = 8) -> list[dict]:
+    """Distinct objects on one frame, for one-click selection: [{x, y, area, mask}] with x, y a
+    point inside the object (fractions of the frame), area as a fraction, mask a PNG path."""
+    b = backend()
+    if b is None:
+        raise RuntimeError("the selection tool isn't installed (splat-studio setup --masking)")
+    outdir.mkdir(parents=True, exist_ok=True)
+    for old in outdir.glob(f"{frame.stem}_s*.png"):
+        old.unlink()
+    if b == "disc":
+        w, h = jpeg_size(frame)
+        out = []
+        for i, (x, y) in enumerate(DISC_SUGGESTIONS[:limit]):
+            rows = disc_mask(w, h, [[x, y, 1], [min(1, x + 0.25), y, 0], [max(0, x - 0.25), y, 0]])
+            p = outdir / f"{frame.stem}_s{i}.png"
+            write_png_gray(p, w, h, rows)
+            out.append({"x": x, "y": y, "area": round(sum(r.count(255) for r in rows) / (w * h), 4), "mask": p})
+        return out
+    return Sam2Server.get().suggest(frame, outdir, limit)
+
+
 def preview_objects(frame: Path, points: list[list], outdir: Path) -> dict[int, Path]:
     """One mask per clicked object on this frame: {object id: png}."""
     res = {}
@@ -373,11 +397,15 @@ class Sam2Server:
                 cls._inst = cls(py)
             return cls._inst
 
-    def preview(self, frame: Path, points: list[list], out: Path) -> Path:
+    def suggest(self, frame: Path, outdir: Path, limit: int) -> list[dict]:
+        reply = self._ask({"kind": "suggest", "frame": str(frame), "outdir": str(outdir), "limit": limit})
+        return [{**s, "mask": Path(s["mask"])} for s in reply.get("suggestions", [])]
+
+    def _ask(self, req: dict) -> dict:
         with self.lock:
             self.next_id += 1
             rid = self.next_id
-            self.proc.stdin.write(json.dumps({"id": rid, "frame": str(frame), "points": points, "out": str(out)}) + "\n")
+            self.proc.stdin.write(json.dumps({"id": rid, **req}) + "\n")
             self.proc.stdin.flush()
             while True:
                 line = self.proc.stdout.readline()
@@ -391,7 +419,10 @@ class Sam2Server:
                     continue                         # the "ready" line, or a reply to an older request
                 if reply.get("error"):
                     raise RuntimeError(reply["error"])
-                return Path(reply["out"])
+                return reply
+
+    def preview(self, frame: Path, points: list[list], out: Path) -> Path:
+        return Path(self._ask({"frame": str(frame), "points": points, "out": str(out)})["out"])
 
 
 # ---------------------------------------------------------------- making masks for every frame

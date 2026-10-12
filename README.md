@@ -301,7 +301,9 @@ With three things on a table, set **What to keep** to **Several objects**. On th
 keep page, the first object is already there: name it, and click it with **Keep**. **+ Add
 object** adds the next one (up to 8). Pick an object in the list before clicking, so each
 click goes to the right one. Each object is tinted in its own colour, and **Leave out** still
-works for stands and hands.
+works for stands and hands. **Suggest objects** asks SAM 2 for the distinct objects on the current frame and
+outlines them with numbers; clicking one keeps it, as a new object in Several objects mode.
+Press it again to hide the suggestions.
 
 COLMAP and Brush run once, keeping all the objects. The run then saves one splat per object,
 named after it (`<splat>_part-<name>.ply`, shown as *table · standard · mug*), next to the one
@@ -434,7 +436,8 @@ clique em **Aplicar a todos os quadros** (se um quadro escapar, clique nele de n
 **Atualizar quadros alterados**, que refaz só os quadros em volta) e depois em **Usar esta seleção**, que volta para
 Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente.
 Com várias coisas no vídeo (três objetos numa mesa), escolha **Vários objetos**: na página, dê
-nome a cada objeto, use **+ Adicionar objeto** e clique em cada um. A execução treina uma vez e
+nome a cada objeto, use **+ Adicionar objeto** e clique em cada um (ou use **Sugerir objetos** e clique
+nas sugestões numeradas). A execução treina uma vez e
 salva um splat de cada objeto, com o nome dele, além do splat com todos. Na biblioteca, cada um aparece com
 uma imagem do próprio objeto, e não com o primeiro quadro do vídeo. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser

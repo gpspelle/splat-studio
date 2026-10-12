@@ -216,6 +216,22 @@ class WebUiTest(BrowserTestCase):
         self.page.wait_for_function("window.keepPage.masksShown() === 2", timeout=30000)
         pts = self.page.evaluate("Object.values(window.keepPage.prompts())[0]")
         self.assertEqual([p[2] for p in pts], [1, 2, 0])
+        # suggested objects (#15): one click on a suggestion keeps it as a new object
+        self.page.get_by_test_id("keep-suggest").click()
+        self.page.wait_for_function("window.keepPage.suggestions().length === 3", timeout=30000)
+        self.assertIn("3 suggestion(s)", self.page.get_by_test_id("suggest-status").text_content())
+        self.shot("keep-suggest")
+        self.page.get_by_test_id("tool-keep").click()
+        sx, sy = self.page.evaluate("window.keepPage.suggestions()[2]")
+        click(sx, sy)
+        self.page.wait_for_function("window.keepPage.objects().length === 3")
+        last = self.page.evaluate("Object.values(window.keepPage.prompts())[0].slice(-1)[0]")
+        self.assertEqual(last, [sx, sy, 3])                                 # object 3, at the suggestion's point
+        self.assertEqual(len(self.page.evaluate("window.keepPage.suggestions()")), 2)
+        self.page.get_by_test_id("keep-suggest").click()                     # second press hides them
+        self.assertEqual(self.page.evaluate("window.keepPage.suggestions()"), [])
+        self.page.locator("[data-testid=keep-object] button[data-remove]").nth(2).click()   # back to two objects
+        self.page.wait_for_function("window.keepPage.objects().length === 2")
         self.assertEqual(self.page.evaluate("window.keepPage.objects().map((o) => o.name)"), ["Mug", "Vase"])
         self.assertIn("1 click(s)", self.page.get_by_test_id("keep-object").nth(1).text_content())
         self.page.get_by_test_id("keep-apply").click()

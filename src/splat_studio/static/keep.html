@@ -121,7 +121,9 @@
         <div class="row" style="margin-top:var(--s-3)">
           <button class="small" id="undoBtn" data-i18n="keep.undo">Undo click</button>
           <button class="small ghost" id="clearBtn" data-i18n="keep.clear">Clear this frame</button>
+          <button class="small" id="suggestBtn" data-testid="keep-suggest">Suggest objects</button>
         </div>
+        <div class="meta status" id="suggestStatus" data-testid="suggest-status"></div>
         <div class="meta status" id="clickStatus"></div>
       </div>
       <div class="step" id="step3">
@@ -213,6 +215,16 @@ function draw() {
     og.putImageData(d, 0, 0);
     g.drawImage(off, 0, 0);
   }
+  // suggested objects (#15): a light veil with a bright outline, and a number to click
+  const sgs = suggestions.get(frameName()) || [];
+  sgs.forEach((sg) => g.drawImage(sg.layer, 0, 0, w, h));
+  const br = Math.max(9, Math.round(Math.min(w, h) / 45));
+  sgs.forEach((sg, i) => {
+    g.beginPath(); g.arc(sg.x * w, sg.y * h, br, 0, Math.PI * 2);
+    g.fillStyle = "rgba(11, 11, 10, .85)"; g.fill(); g.lineWidth = Math.max(2, br / 5); g.strokeStyle = "#ffffff"; g.stroke();
+    g.fillStyle = "#ffffff"; g.font = `600 ${Math.round(br * 1.1)}px Inter, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(String(i + 1), sg.x * w, sg.y * h + 1);
+  });
   const r = Math.max(6, Math.round(Math.min(w, h) / 70));
   for (const [x, y, lab] of pointsOn()) {
     g.beginPath(); g.arc(x * w, y * h, r, 0, Math.PI * 2);
@@ -249,6 +261,7 @@ function showFrame(i) {
   if (!info || !info.frames.length) return;
   idx = Math.max(0, Math.min(info.frames.length - 1, i));
   $("scrub").value = idx;
+  renderSuggest();
   const name = frameName();
   $("frameInfo").textContent = t("keep.frameOf", { n: idx + 1, total: info.frames.length });
   img.onload = draw;
@@ -297,9 +310,69 @@ canvas.addEventListener("pointerdown", (e) => {
   const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
   if (x < 0 || x > 1 || y < 0 || y > 1) return;
   const name = frameName();
+  if (tool === "keep" && acceptSuggestion(name, x, y)) return;
   (prompts[name] = prompts[name] || []).push([+x.toFixed(5), +y.toFixed(5), tool === "keep" ? current : 0]);
   edited();
 });
+
+// ---------------------------------------------------------------- suggested objects (#15)
+const suggestions = new Map();            // frame -> [{x, y, area, w, h, mask: ImageData, layer: canvas}]
+function loadSuggestion(sg) {
+  return new Promise((res) => {
+    const im = new Image();
+    im.onload = () => {
+      const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const g = c.getContext("2d");
+      g.drawImage(im, 0, 0);
+      const mask = g.getImageData(0, 0, w, h), m = mask.data, layer = g.createImageData(w, h), L = layer.data;
+      const at = (x, y) => x < 0 || y < 0 || x >= w || y >= h ? 0 : m[(y * w + x) * 4];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (m[i] <= 127) continue;
+        const edge = at(x - 1, y) <= 127 || at(x + 1, y) <= 127 || at(x, y - 1) <= 127 || at(x, y + 1) <= 127
+          || at(x - 2, y) <= 127 || at(x + 2, y) <= 127 || at(x, y - 2) <= 127 || at(x, y + 2) <= 127;
+        L[i] = L[i + 1] = L[i + 2] = 255; L[i + 3] = edge ? 235 : 55;
+      }
+      g.putImageData(layer, 0, 0);
+      res({ ...sg, w, h, mask, layer: c });
+    };
+    im.onerror = () => res(null);
+    im.src = fileUrl(sg.mask) + "?t=" + Date.now();
+  });
+}
+async function suggestNow() {
+  const name = frameName(); if (!name) return;
+  if (suggestions.has(name)) { suggestions.delete(name); draw(); renderSuggest(); return; }    // second press hides them
+  $("suggestBtn").disabled = true; $("suggestStatus").textContent = t("keep.suggest.working");
+  try {
+    const d = await postJSON("/api/keep/suggest", { video, frame: name });
+    suggestions.set(name, (await Promise.all(d.suggestions.map(loadSuggestion))).filter(Boolean));
+  } catch (err) { toast(err.message); }
+  $("suggestBtn").disabled = false;
+  draw(); renderSuggest();
+}
+// a click inside a suggestion keeps that object: a new object in Several objects mode
+function acceptSuggestion(name, x, y) {
+  const list = suggestions.get(name) || [];
+  const sg = list.find((s) => s.mask.data[(Math.min(s.h - 1, Math.floor(y * s.h)) * s.w + Math.min(s.w - 1, Math.floor(x * s.w))) * 4] > 127);
+  if (!sg) return false;
+  if (multi && countOn(current) > 0 && objects.length < MAX_OBJECTS) {
+    const id = Math.max(0, ...objects.map((o) => o.id)) + 1;
+    objects.push({ id, name: "" }); current = id;
+  }
+  (prompts[name] = prompts[name] || []).push([sg.x, sg.y, current]);
+  list.splice(list.indexOf(sg), 1);
+  edited(); renderObjects(); renderSuggest();
+  return true;
+}
+function renderSuggest() {
+  const list = suggestions.get(frameName());
+  $("suggestBtn").textContent = list ? t("keep.suggest.hide") : t("keep.suggest");
+  $("suggestBtn").disabled = !info?.backend || !info?.frames?.length;
+  $("suggestStatus").textContent = !list ? "" : list.length ? t("keep.suggest.hint", { n: list.length }) : t("keep.suggest.none");
+}
+$("suggestBtn").onclick = suggestNow;
 function edited() {
   if (appliedIds.length) changed.add(frameName());   // the other frames keep their masks
   else showFinal = false;
@@ -475,12 +548,12 @@ async function load() {
     const first = Object.keys(prompts).find((k) => info.frames.includes(k));
     showFrame(first ? info.frames.indexOf(first) : 0);
   }
-  renderStatus();
+  renderStatus(); renderSuggest();
 }
-addEventListener("langchange", () => { renderStatus(); renderObjects(); if (info) showFrame(idx); });
+addEventListener("langchange", () => { renderStatus(); renderObjects(); renderSuggest(); if (info) showFrame(idx); });
 load();
 // read-only helpers for the automated tests
-window.keepPage = { changed: () => [...changed], prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
+window.keepPage = { suggestions: () => (suggestions.get(frameName()) || []).map((s) => [s.x, s.y]), changed: () => [...changed], prompts: () => prompts, index: () => idx, masksDone: () => masksDone, objects: () => objects,
                     maskShown: () => maskCache.has(frameName()),
                     masksShown: () => Object.keys(maskCache.get(frameName()) || {}).length };
 </script>

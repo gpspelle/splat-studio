@@ -178,15 +178,75 @@ def propagate(job_file: str) -> None:
     write_union(frames, dirs, out)
 
 
+def pick_suggestions(masks: list[dict], limit: int = 8, min_area: float = 0.004, max_area: float = 0.5):
+    """SAM 2 automatic masks -> distinct, object-sized ones: the best scored first, skipping any
+    mostly inside or over one already kept. Returns the kept dicts."""
+    import numpy as np
+    if not masks:
+        return []
+    total = masks[0]["segmentation"].size
+    cands = [m for m in masks if min_area <= m["area"] / total <= max_area]
+    cands.sort(key=lambda m: (m.get("predicted_iou", 0) * m.get("stability_score", 1)), reverse=True)
+    kept = []
+    for m in cands:
+        seg = m["segmentation"]
+        if any(np.logical_and(seg, k["segmentation"]).sum() > 0.5 * min(seg.sum(), k["segmentation"].sum())
+               for k in kept):
+            continue
+        kept.append(m)
+        if len(kept) >= limit:
+            break
+    return kept
+
+
+def inside_point(seg) -> tuple[float, float]:
+    """A point inside the mask (fractions of the frame): its centre if that's inside, else the
+    mask pixel nearest to it."""
+    import numpy as np
+    ys, xs = np.nonzero(seg)
+    cy, cx = ys.mean(), xs.mean()
+    if not seg[int(round(cy)), int(round(cx))]:
+        i = int(np.argmin((ys - cy) ** 2 + (xs - cx) ** 2))
+        cy, cx = ys[i], xs[i]
+    h, w = seg.shape
+    return round(float(cx) / w, 5), round(float(cy) / h, 5)
+
+
+def suggest(gen, frame: Path, outdir: Path, limit: int) -> list[dict]:
+    import numpy as np
+    from PIL import Image
+    img = np.array(Image.open(frame).convert("RGB"))
+    out = []
+    outdir.mkdir(parents=True, exist_ok=True)
+    for i, m in enumerate(pick_suggestions(gen.generate(img), limit)):
+        seg = m["segmentation"]
+        p = outdir / f"{frame.stem}_s{i}.png"
+        Image.fromarray(seg.astype(np.uint8) * 255).save(p)
+        x, y = inside_point(seg)
+        out.append({"x": x, "y": y, "area": round(float(seg.mean()), 4), "mask": str(p)})
+    return out
+
+
 def serve(ckpt: str, config: str) -> None:
     """One-frame previews: {"id", "frame", "points", "out"} per line -> {"id", "out"} or {"id", "error"}."""
     import torch
     pred = load_predictor(ckpt, config)
+    gen = None                                                # the automatic mask generator, made on first use
     print(json.dumps({"ready": True, "device": str(device())}), flush=True)
     for line in sys.stdin:
         req = {}
         try:
             req = json.loads(line)
+            if req.get("kind") == "suggest":                  # objects on one frame, for one-click selection
+                if gen is None:
+                    from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+                    from sam2.build_sam import build_sam2
+                    gen = SAM2AutomaticMaskGenerator(build_sam2(config, ckpt, device=device()), points_per_side=16,
+                                                     pred_iou_thresh=0.8, stability_score_thresh=0.9)
+                with torch.inference_mode():
+                    sug = suggest(gen, Path(req["frame"]), Path(req["outdir"]), int(req.get("limit", 8)))
+                print(json.dumps({"id": req.get("id"), "suggestions": sug}), flush=True)
+                continue
             frame, out = Path(req["frame"]), Path(req["out"])
             with tempfile.TemporaryDirectory() as td, torch.inference_mode():
                 link_frames([frame], Path(td))

@@ -9,6 +9,10 @@
   matched to their click, and clicks made at the same time no longer swap masks.
 
 ### Added
+- **Suggested objects** ([#15](https://github.com/gpspelle/splat-studio/issues/15), beta). **Suggest
+  objects** on Choose what to keep asks SAM 2's automatic masks for the distinct objects on the
+  current frame (up to 8, filtered by size and quality, no duplicates) and outlines them with
+  numbers. Clicking one keeps it: as a new object in Several objects mode. `POST /api/keep/suggest`.
 - **Batch queue for many videos** ([#14](https://github.com/gpspelle/splat-studio/issues/14)). New run
   accepts several videos at once (drop, choose or add earlier uploads), each listed with its checks
   and a **Remove** button. **Start N runs** queues one run per video with the same settings. With
