@@ -58,7 +58,13 @@ the object is the point the cameras' viewing rays pass closest to (least squares
 gets an angle around the object and a height angle seen from it. The largest empty arc between
 neighbouring cameras over 60°, or a spread under 15° between the 10th and 90th percentile
 heights, is a warning; the frames on either side of the gap give the moment in the video. The
-run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`.
+run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`. The basis
+(centre, up and two axes) is saved with it, so the viewer can turn its camera position, taken
+into the model's own coordinates, into the same angle and place a marker on the ring.
+
+With several objects, each object's centre is where the rays through its mask centres meet
+(least squares over ~90 sampled frames), and only the frames where its mask covers at least 0.2%
+of the frame count, so occlusion by another object shows up as a gap. All rings share one basis.
 
 ## Stage 3: training (`splat_studio/brush.py`, `pipeline.py`)
 

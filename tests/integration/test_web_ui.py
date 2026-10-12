@@ -318,11 +318,22 @@ class WebUiTest(BrowserTestCase):
         job.splat = "workspace/table/run_1/splat/standard_30000.ply"
         job.parts = [{"name": "Red ball", "splat": "workspace/table/run_1/splat/standard_30000_part-red-ball.ply"},
                      {"name": "Blue ball", "splat": "workspace/table/run_1/splat/standard_30000_part-blue-ball.ply"}]
+        ring = {"cameras": 30, "azimuths": [i * 12.0 for i in range(30)], "elevations": [0.0] * 30,
+                "gap": {"degrees": 12.0, "from": 0.0, "to": 12.0, "first": "a.jpg", "last": "b.jpg"},
+                "height": {"low": 0.0, "high": 20.0, "spread": 20.0}}
+        job.coverage = {**ring, "objects": [{"id": 1, "name": "Red ball", **ring},
+                                            {"id": 2, "name": "Blue ball", **ring, "cameras": 18}]}
         job.save(force=True)
         self.page.goto(self.url)
         parts = self.page.get_by_test_id("view-part")
         parts.first.wait_for()
         self.assertEqual(parts.all_text_contents(), ["Red ball", "Blue ball"])
+        row = self.page.locator("[data-testid=run-done]", has=self.page.get_by_test_id("view-part"))
+        row.get_by_test_id("run-details").click()                                # one coverage ring per object (#26)
+        rings = row.get_by_test_id("coverage-object")
+        rings.first.wait_for()
+        self.assertEqual(rings.count(), 2)
+        self.assertIn("Blue ball18 cameras", rings.nth(1).text_content().replace("\n", "").replace(" ", "", 2))
         titles = self.page.evaluate("[...document.querySelectorAll('.tile .body b')].map((b) => b.textContent)")
         self.assertIn("table · standard · red ball", titles)
         parts.first.click()
@@ -349,6 +360,27 @@ class WebUiTest(BrowserTestCase):
         self.assertGreater(ring.locator("circle").count(), 20)            # one dot per camera
         self.assertRegex(ring.text_content(), r"largest gap 1[2-4]\d°")
         self.shot("coverage", page=None)
+        # the same coverage in the viewer, with a marker for where you're looking from (#26)
+        row.locator("text=View splat").click()
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        cmap = self.page.get_by_test_id("cov-map")
+        cmap.wait_for(state="visible", timeout=10000)
+        views = set()
+        for _ in range(24):                                              # walk all the way round
+            self.page.evaluate("window.splatViewer.orbit(15)")
+            self.page.wait_for_timeout(60)
+            views.add(self.page.evaluate("window.splatViewer.coverageView().view"))
+        self.assertEqual(views, {"ok", "gap"})                          # some views face the side nobody filmed
+        self.page.wait_for_function("window.splatViewer.coverageView().view === 'ok' || true")
+        self.page.get_by_test_id("cov-toggle").click()                  # hide it, and it stays hidden
+        self.assertTrue(cmap.is_hidden())
+        self.page.reload()
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        self.page.get_by_test_id("cov-toggle").wait_for(state="visible")
+        self.assertTrue(cmap.is_hidden())
+        self.page.get_by_test_id("cov-toggle").click()
+        cmap.wait_for(state="visible")
+        self.shot("viewer-coverage")
         self.assertEqual(self.errors, [])
 
     def test_batch_of_videos_and_saved_defaults(self):

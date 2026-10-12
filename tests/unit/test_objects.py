@@ -44,31 +44,39 @@ class ProjectionTest(unittest.TestCase):
         self.assertEqual(objects.part_path(p, "???", taken).name, "standard_30000_part-object.ply")
 
 
+def make_three_balls(tmp: Path, hide=None):
+    """A run with 36 cameras around three balls, each ball's masks drawn from its true position.
+    hide(object id, camera index) -> True leaves that ball out of that frame (hidden from view)."""
+    run, frames = tmp / "workspace" / "balls" / "run_1", tmp / "frames" / "balls"
+    model = run / "sparse" / "0"
+    cams = objects.read_cameras_bin(write_cameras_bin(model / "cameras.bin"))
+    imgs = objects.read_images_bin(write_images_bin(model / "images.bin", n=36, radius=3.0, target=(0, -0.25, 0)))
+    (run / "dense").mkdir(parents=True)
+    (run / "dense" / "source_model.txt").write_text(str(model))
+    cam = cams[1]
+    for k, img in enumerate(imgs):
+        for oid, c in THREE_OBJECTS.items():
+            uv = objects.project(cam, img, c)
+            edge = objects.project(cam, img, (c[0], c[1] - 0.22, c[2]))
+            r = math.dist(uv, edge) * 1.15 if uv and edge else 0
+            if hide and hide(oid, k):
+                r = 0
+            w, h = cam["width"], cam["height"]
+            rows = [bytes(255 if uv and (x - uv[0]) ** 2 + (y - uv[1]) ** 2 <= r * r else 0 for x in range(w))
+                    for y in range(h)]
+            masks.write_png_gray(frames / "masks" / "objects" / str(oid) / img["name"].replace(".jpg", ".png"), w, h, rows)
+    (frames / "masks" / "objects.json").write_text('[{"id": 1, "name": "Red ball"}, {"id": 2, "name": "Blue ball"},'
+                                                    ' {"id": 3, "name": "Green ball"}]')
+    ply = write_three_objects(run / "splat" / "standard_30000.ply")
+    return ply, run, frames, imgs
+
+
 @needs_ffmpeg
 class SplitTest(TempDirTestCase):
     """Three balls on a table, seen by 36 cameras; masks drawn from the true positions."""
 
-    def make_scene(self, occluded_share=0.0):
-        run, frames = self.tmp / "workspace" / "balls" / "run_1", self.tmp / "frames" / "balls"
-        model = run / "sparse" / "0"
-        cams = objects.read_cameras_bin(write_cameras_bin(model / "cameras.bin"))
-        imgs = objects.read_images_bin(write_images_bin(model / "images.bin", n=36, radius=3.0, target=(0, -0.25, 0)))
-        (run / "dense").mkdir(parents=True)
-        (run / "dense" / "source_model.txt").write_text(str(model))
-        cam = cams[1]
-        for img in imgs:
-            for oid, c in THREE_OBJECTS.items():
-                uv = objects.project(cam, img, c)
-                edge = objects.project(cam, img, (c[0], c[1] - 0.22, c[2]))
-                r = math.dist(uv, edge) * 1.15 if uv and edge else 0
-                w, h = cam["width"], cam["height"]
-                rows = [bytes(255 if uv and (x - uv[0]) ** 2 + (y - uv[1]) ** 2 <= r * r else 0 for x in range(w))
-                        for y in range(h)]
-                masks.write_png_gray(frames / "masks" / "objects" / str(oid) / img["name"].replace(".jpg", ".png"),
-                                     w, h, rows)
-        (frames / "masks" / "objects.json").write_text('[{"id": 1, "name": "Red ball"}, {"id": 2, "name": "Blue ball"},'
-                                                        ' {"id": 3, "name": "Green ball"}]')
-        ply = write_three_objects(run / "splat" / "standard_30000.ply")
+    def make_scene(self):
+        ply, run, frames, _ = make_three_balls(self.tmp)
         return ply, run, frames
 
     def test_each_ball_gets_its_own_splat(self):

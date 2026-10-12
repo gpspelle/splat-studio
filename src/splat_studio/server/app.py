@@ -7,6 +7,7 @@ Routes
   GET  /api/jobs                 runs (UI jobs + command-line runs), newest first
   GET  /api/jobs/<id>/log        terminal log of a job
   GET  /api/splats               splat library          GET  /api/videos         uploaded videos (+ advice)
+  GET  /api/coverage?file=       where the cameras were, for a splat's run (its object's, for an object splat)
   GET  /api/setup                dependency status      GET  /api/export?file=   viewer website (zip)
   GET  /compare?a=...&b=...      two splats side by side GET  /api/export-compare?a=&b=  comparison website (zip)
   POST /api/upload               raw video body, X-Filename header -> {video, advice}
@@ -53,6 +54,29 @@ def frames_info(data: DataDir, video: str) -> dict:
             "masks_done": masksmod.has_masks(frames_dir), "masks_dir": data.rel(mdir),
             "prompts": masksmod.load_prompts(frames_dir), "objects": masksmod.load_objects(frames_dir),
             "backend": masksmod.backend()}
+
+
+def coverage_for(data: DataDir, file: str) -> dict:
+    """Coverage of the run a splat came from; an object's own coverage for one object's splat."""
+    from .. import coverage
+    from ..objects import slug
+    f = data.library_splat(file)
+    run = data.run_dir_of(f) if f else None
+    if not run:
+        return {"coverage": None}
+    rd = data.root / run
+    frames = data.frames / (data.frames_name(run_dir=run) or "")
+    split = any((rd / "splat").glob("*_part-*.ply"))           # several objects were chosen for this run
+    cov = coverage.load(rd, frames if split else None)
+    if not cov:
+        return {"coverage": None}
+    m = re.search(r"_part-(.+)$", f.stem)
+    if m:
+        for o in cov.get("objects", []):
+            s_ = slug(o["name"])
+            if m.group(1) == s_ or re.fullmatch(re.escape(s_) + r"-\d+", m.group(1)):
+                return {"coverage": o, "object": o["name"]}
+    return {"coverage": {k: v for k, v in cov.items() if k != "objects"}, "object": None}
 
 
 def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
@@ -181,6 +205,8 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 return self.send_file(static_dir / "new.html")
             if p == "/keep":
                 return self.send_file(static_dir / "keep.html")
+            if p == "/api/coverage":                    # for the viewer's coverage map (#26)
+                return self.send_json(coverage_for(data, q.get("file", "")))
             if p == "/api/frames":
                 return self.send_json(frames_info(data, q.get("video", "")))
             if p == "/guide":
