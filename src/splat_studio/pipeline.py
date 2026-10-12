@@ -84,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--remove-background", action="store_true",
                     help="also save NAME_object.ply with only the object: no table, floor or room "
                          "(the original is kept)")
+    ap.add_argument("--masks", action="store_true",
+                    help="train only what was chosen on the 'Choose what to keep' page "
+                         "(uses frames/<video>/masks, made by `splat-studio mask`)")
+    ap.add_argument("--mask-mode", choices=["transparent", "ignore"], default="transparent",
+                    help="transparent: everything not chosen is left out of the splat (default); "
+                         "ignore: it is just not used for training")
     ap.add_argument("--viewer", action="store_true", help="open the Brush window while training")
     ap.add_argument("--brush", help="path to the brush binary")
     ap.add_argument("--dry-run", action="store_true", help="print the commands without running them")
@@ -145,8 +151,22 @@ def main(argv: list[str] | None = None) -> None:
             except OSError:
                 pass
 
-    # ------------------------------------------------ 3: Brush
+    # ------------------------------------------------ 2b: masks (Choose what to keep)
     dense = ws / "dense"
+    if args.masks and not args.train_only and not args.dry_run:
+        from . import masks as masksmod
+        if not masksmod.has_masks(frames):
+            sys.exit(f"--masks: no finished selection in {masksmod.masks_dir(frames)} - "
+                     "choose what to keep first (splat-studio mask)")
+        say("\n==> Preparing the selection for training")
+        try:
+            n = masksmod.prepare_for_dense(frames, ws, args.mask_mode)
+        except (OSError, ValueError, RuntimeError) as e:
+            sys.exit(f"Couldn't prepare the masks: {e}")
+        say(f"    {n} masks ({args.mask_mode})")
+        append_summary(ws, [("masks", f"{n} frames, {args.mask_mode}")])
+
+    # ------------------------------------------------ 3: Brush
     if args.no_train:
         say(f"\n==> Stopping before training (--no-train). Train later with:\n"
             f"    splat-studio run --train-only {os.path.relpath(ws.parent / 'latest')} --quality {args.quality}")
@@ -161,6 +181,9 @@ def main(argv: list[str] | None = None) -> None:
         size = brushmod.image_size(dense)
     params, why = brushmod.choose_brush_params(n_img, n_pts, args.quality, args.detail, size)
     say(f"    {why}")
+    from .masks import dense_mask_mode
+    if dense_mask_mode(dense) == "transparent" and not args.dry_run:
+        params["--alpha-mode"] = "transparent"      # what wasn't chosen is trained to be see-through
     cmd = brush_command(brush, dense, params, args.quality, args.eval, args.viewer, brush_extra)
     if not args.dry_run:
         append_summary(ws, [("brush settings", why), ("brush command", " ".join(shlex.quote(str(c)) for c in cmd))])

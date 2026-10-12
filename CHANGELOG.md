@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- **Choose what to keep (beta)** (`/keep`, from **Choose what to keep** under the chosen
+  video). Click the object (**Keep**) and a stand, hand or holder (**Leave out**) on a frame or
+  two. Meta's SAM 2 follows that selection through every frame, and training keeps only the
+  chosen object: Brush trains what's outside the masks to be transparent. Install it with
+  `./splat-studio setup --masking` (its own environment, about 1 GB). New commands and options:
+  `./splat-studio mask FRAMES --prompts JSON`, `run --masks [--mask-mode transparent|ignore]`;
+  API `GET /api/frames`, `POST /api/keep/preview`, and job types `frames` and `mask`. Runs with
+  masks show a **your selection** tag. Runs made before this need COLMAP again to use masks.
 - **History page** (`/history`) for finished runs: grouped by day, with search by video name,
   a filter for finished, failed or stopped runs, and **Remove from list**, which deletes only
   the job record and log (`DELETE /api/jobs/<id>`), never splats or run folders.

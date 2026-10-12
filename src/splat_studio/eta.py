@@ -388,7 +388,7 @@ class RunClock:
     def _future(self) -> tuple[float | None, str | None]:
         """Time for the phases after the current one, from history. None if unknown."""
         p, total, note = self.phase, 0.0, None
-        if self.kind in ("clean", "isolate"):
+        if self.kind in ("clean", "isolate", "frames", "mask", "setup"):
             return 0.0, None
         order = (["frames"] + list(FIRST_ATTEMPT) if self.kind == "video" else []) + ["train"]
         if self.clean_after:

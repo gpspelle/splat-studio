@@ -102,6 +102,11 @@
         <div class="name" id="chosenName"></div>
         <button class="ghost small" id="clearVideo" data-i18n="chosen.change">Change</button>
       </div>
+      <div id="keepBox" hidden style="margin-top:12px">
+        <a class="btn small wide" id="keepLink" data-testid="keep-link" data-i18n-title="keep.open.title"><span data-i18n="keep.open">Choose what to keep</span>&nbsp;<span class="tag" data-i18n="keep.beta">beta</span></a>
+        <label class="check" id="useMasksRow" hidden><input type="checkbox" id="useMasks" checked data-testid="use-masks">
+          <span><span data-i18n="keep.useSelection">Train only what I chose</span><br><span class="meta" data-i18n="keep.selection">Selection ready</span></span></label>
+      </div>
       <ul class="advice" id="videoAdvice" data-testid="video-advice" hidden></ul>
       <div class="field" id="pickField">
         <label for="prevVideo" data-i18n="reuse.label">Or pick a video you uploaded before</label>
@@ -263,6 +268,20 @@ function setChosen(path, name, advice) {
   $("startBtn").disabled = !path;
   $("startHelp").textContent = path ? "" : t("start.need");
   renderVideoAdvice();
+  renderKeep();
+}
+// "Choose what to keep": link to the page, and use a finished selection for this video
+let keepReady = false;
+async function renderKeep() {
+  $("keepBox").hidden = !chosenVideo;
+  keepReady = false; $("useMasksRow").hidden = true;
+  if (!chosenVideo) return;
+  $("keepLink").href = "/keep?" + new URLSearchParams({ video: chosenVideo });
+  const v = chosenVideo;
+  const f = await api("/api/frames?" + new URLSearchParams({ video: v })).catch(() => null);
+  if (v !== chosenVideo || !f) return;
+  keepReady = !!f.masks_done;
+  $("useMasksRow").hidden = !keepReady;
 }
 function renderVideoAdvice() {
   const show = chosenVideo && chosenAdvice && chosenAdvice.length;
@@ -306,7 +325,8 @@ function renderVideoOptions() {
 $("startBtn").onclick = async () => {
   const body = { type: "video", video: chosenVideo, quality: seg("quality"), detail: seg("detail"),
     eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
-    start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim() };
+    start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim(),
+    masks: keepReady && $("useMasks").checked };
   try { await postJSON("/api/jobs", body); toast(t("toast.queued")); setChosen(null); $("prevVideo").value = ""; refresh(); }
   catch (e) { toast(e.message); }
 };

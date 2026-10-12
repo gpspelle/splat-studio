@@ -109,6 +109,47 @@ class BrowserTestCase(ServerTestCase):
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg
 class WebUiTest(BrowserTestCase):
+    def test_choose_what_to_keep(self):
+        os.environ["SPLAT_STUDIO_MASK_BACKEND"] = "disc"         # stand-in for SAM 2
+        self.addCleanup(os.environ.pop, "SPLAT_STUDIO_MASK_BACKEND", None)
+        self.page.goto(self.url)
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "vase.mov", seconds=6, size="960x540")))
+        link = self.page.get_by_test_id("keep-link")
+        link.wait_for(state="visible")
+        self.assertFalse(self.page.get_by_test_id("use-masks").is_visible())   # nothing chosen yet
+        link.click()
+        self.page.wait_for_url("**/keep?video=*")
+        self.page.get_by_test_id("keep-frames").click()
+        canvas = self.page.get_by_test_id("keep-canvas")
+        canvas.wait_for(state="visible", timeout=60000)
+        self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
+        box = canvas.bounding_box()
+        self.page.mouse.click(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        self.page.get_by_test_id("tool-drop").click()
+        self.page.mouse.click(box["x"] + box["width"] * 0.9, box["y"] + box["height"] * 0.15)
+        self.page.wait_for_function("window.keepPage.maskShown()", timeout=30000)
+        pts = self.page.evaluate("Object.values(window.keepPage.prompts())[0]")
+        self.assertEqual([p[2] for p in pts], [1, 0])
+        self.assertAlmostEqual(pts[0][0], 0.5, delta=0.02)
+        self.page.get_by_test_id("keep-apply").click()
+        self.page.wait_for_function("window.keepPage.masksDone()", timeout=60000)
+        self.page.wait_for_timeout(500)
+        self.shot("keep")
+        self.page.reload()                                            # the clicks and masks are kept
+        self.page.wait_for_function("window.keepPage.masksDone() && window.keepPage.maskShown()", timeout=30000)
+        self.assertEqual(len(self.page.evaluate("Object.values(window.keepPage.prompts())[0]")), 2)
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.get_by_test_id("keep-run").click()
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        self.page.wait_for_selector("[data-testid=run-done] >> text=View splat", timeout=180000)
+        _, jobs = self.json("GET", "/api/jobs")
+        run = next(j for j in jobs if j["type"] == "video")
+        self.assertTrue(run["options"]["masks"])
+        self.assertTrue((self.data.root / run["run_dir"] / "dense" / "masks").is_dir())
+        self.assertIn("your selection", self.page.evaluate("document.querySelector('[data-testid=run-done]').textContent"))
+        self.assertEqual(self.errors, [])
+
     def test_header_footer_and_recording_guide(self):
         self.page.goto(self.url)
         self.page.get_by_test_id("setup-pill").wait_for()

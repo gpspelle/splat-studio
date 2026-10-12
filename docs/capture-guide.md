@@ -69,3 +69,7 @@ walking through. Re-filming now takes a minute. Coming back later takes much lon
 - **Turntables**: the object turns but the background doesn't, which breaks the tracking
 - Cuts, pauses followed by fast pans, zooming
 - Moving people, pets or curtains in view
+
+A stand, a holder or your hand in the shot is fine if you need it: **Choose what to keep**
+(beta) removes it before training. Make sure every part of the object is seen in some frames,
+since what the holder covers in every frame can't be recovered.
