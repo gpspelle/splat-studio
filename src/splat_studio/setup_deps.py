@@ -47,6 +47,11 @@ def has_cv2() -> bool:
     return subprocess.run([sys.executable, "-c", "import cv2"], capture_output=True).returncode == 0
 
 
+def has_sam2() -> bool:
+    from .masks import sam2_python
+    return sam2_python() is not None
+
+
 def check() -> list[dict]:
     """Status of every dependency, without installing anything (used by the web UI)."""
     extend_path()
@@ -60,6 +65,8 @@ def check() -> list[dict]:
         {"name": "Rust", "ok": brush.find_cargo() is not None, "required": False,
          "why": "only needed to build Brush"},
         {"name": "OpenCV", "ok": has_cv2(), "required": False, "why": "drops blurry frames (optional)"},
+        {"name": "SAM 2", "ok": has_sam2(), "required": False,
+         "why": "Choose what to keep: follows the object through the video (optional, ~1 GB)"},
     ]
     if sys.platform == "darwin":
         items.insert(0, {"name": "Homebrew", "ok": find_brew() is not None, "required": False,
@@ -152,3 +159,72 @@ def ensure_dependencies(dry: bool = False) -> None:
         if not ok:
             say("    (couldn't install OpenCV - continuing; blurry frames won't be filtered)")
     say("    all dependencies present")
+
+
+# ---------------------------------------------------------------- optional: SAM 2 (Choose what to keep)
+
+def find_python310() -> str | None:
+    """A Python 3.10+ for the SAM 2 environment (the app itself runs on 3.9+)."""
+    extend_path()
+    for name in ("python3.13", "python3.12", "python3.11", "python3.10", "python3"):
+        for d in ("/opt/homebrew/bin", "/usr/local/bin", None):
+            exe = str(Path(d) / name) if d else shutil.which(name)
+            if not exe or not Path(exe).exists():
+                continue
+            r = subprocess.run([exe, "-c", "import sys; print(sys.version_info >= (3, 10))"],
+                               capture_output=True, text=True)
+            if r.stdout.strip() == "True":
+                return exe
+    return None
+
+
+def install_masking(dry: bool = False) -> None:
+    """Install SAM 2 in its own environment (~/.splat-studio/sam2): PyTorch, the sam2 package
+    (pinned) and the 'small' 2.1 checkpoint (~185 MB). About 1 GB in total."""
+    from . import masks
+    say("==> Installing the selection tool (SAM 2) for 'Choose what to keep'")
+    py = find_python310()
+    if py is None:
+        brew_bin = find_brew()
+        if sys.platform == "darwin" and brew_bin:
+            say("    Python 3.10+ missing - installing python@3.12 with Homebrew")
+            if sh(f"{brew_bin} install python@3.12", dry) != 0:
+                sys.exit("brew install python@3.12 failed - see the errors above")
+            py = find_python310() or "/opt/homebrew/bin/python3.12"
+        else:
+            sys.exit("SAM 2 needs Python 3.10 or newer. Install it, then run: splat-studio setup --masking")
+    root = masks.SAM2_DIR
+    venv = root / "venv"
+    vpy = venv / "bin" / "python"
+    if not vpy.exists():
+        say(f"    creating {venv} with {py}")
+        if sh(f"{shlex.quote(py)} -m venv {shlex.quote(str(venv))}", dry) != 0:
+            sys.exit("couldn't create the SAM 2 environment")
+    pip = f"{shlex.quote(str(vpy))} -m pip install --upgrade"
+    steps = [
+        (f"{pip} pip", "pip"),
+        (f"{pip} torch torchvision", "PyTorch (the largest download)"),
+        (f"SAM2_BUILD_CUDA=0 {pip} 'git+{masks.SAM2_REPO}@{masks.SAM2_REF}'", "SAM 2"),
+    ]
+    for cmd, what in steps:
+        say(f"    installing {what}")
+        if sh(cmd, dry) != 0:
+            sys.exit(f"installing {what} failed - see the errors above")
+    ckpt = root / masks.SAM2_CHECKPOINT
+    if not ckpt.exists():
+        say(f"    downloading the SAM 2.1 model ({masks.SAM2_CHECKPOINT}, ~185 MB)")
+        if not dry:
+            import urllib.request
+            tmp = ckpt.with_name(ckpt.name + ".part")
+            try:
+                urllib.request.urlretrieve(masks.SAM2_URL, tmp)
+            except OSError as e:
+                sys.exit(f"download failed: {e}\nGet it by hand from {masks.SAM2_URL} into {root}")
+            tmp.replace(ckpt)
+    if not dry:
+        r = subprocess.run([str(vpy), "-c", "import torch, sam2; print('mps' if torch.backends.mps.is_available() else 'cpu')"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit("SAM 2 installed but doesn't import:\n" + r.stderr[-1500:])
+        say(f"    SAM 2 ready (runs on {r.stdout.strip() or 'cpu'})")
+    say("\nSetup complete: Choose what to keep is ready.")

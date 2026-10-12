@@ -34,7 +34,7 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated", "eta_total", "eta_note"]
+              "object_splat", "isolated", "eta_total", "eta_note", "masks"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -84,6 +84,8 @@ RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
 RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
 RE_STAGE_CLEAN = re.compile(r"==> Removing background fog")
+RE_MASKING = re.compile(r"Masking frames \[(\d+)/(\d+)\]")
+RE_MASKS_DONE = re.compile(r"^Masks: (.+)$")
 STAGE_NAMES = {"0": "Setup", "1": "Frames", "2": "Camera poses", "3": "Training"}
 ERROR_HINTS = ("failed", "Error", "error:", "Not good enough", "not found", "Traceback", "isn't installed",
                "could not reconstruct")
@@ -162,6 +164,15 @@ def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -
     if m:
         brk = {"first": m.group(1), "last": m.group(2), "count": int(m.group(3))}
         job.track_breaks = [b for b in (job.track_breaks or []) if b["first"] != brk["first"]] + [brk]
+    m = RE_MASKING.search(line)
+    if m:
+        done, total = int(m.group(1)), int(m.group(2))
+        job.step_label, job.step_pct = "masking frames", int(100 * done / total) if total else None
+        clock.start_phase("masking frames", t)
+        clock.progress(t, done / total if total else 0)
+    m = RE_MASKS_DONE.search(line.strip())
+    if m:
+        job.masks = rel(m.group(1).strip())
     if RE_STAGE_CLEAN.search(line):
         clock.start_phase("clean", t)
     if RE_STAGE_ISOLATE.search(line):
@@ -212,7 +223,13 @@ def record_timeline(job: Job, t: float) -> None:
 def build_cmd(job: Job) -> list[str]:
     o = job.options or {}
     if job.type == "setup":
+        if o.get("masking"):
+            return [sys.executable, "-u", "-m", "splat_studio", "setup", "--masking"]
         return module_cmd("pipeline", "--setup-only")
+    if job.type == "frames":
+        return module_cmd("frames", job.video, "--out", o["frames_dir"], "--target", str(int(o.get("frames") or 250)))
+    if job.type == "mask":
+        return [sys.executable, "-u", "-m", "splat_studio", "mask", o["frames_dir"], "--prompts", o["prompts_file"]]
     if job.type == "clean":
         args = ["clean", o["splat"]] + (["--run", job.run_dir] if job.run_dir else [])
         return [sys.executable, "-u", "-m", "splat_studio", *args]
@@ -235,6 +252,8 @@ def build_cmd(job: Job) -> list[str]:
         args.append("--eval")
     if o.get("remove_background"):
         args.append("--remove-background")
+    if o.get("masks") and job.type == "video":
+        args.append("--masks")
     extra = (o.get("brush_args") or "").split()
     if extra:
         args += ["--", *extra]
@@ -251,7 +270,7 @@ class ApiError(ValueError):
 
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
-                                     "brush_args", "remove_background")
+                                     "brush_args", "remove_background", "masks")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")

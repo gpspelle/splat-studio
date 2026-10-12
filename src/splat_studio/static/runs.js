@@ -84,7 +84,7 @@
     const o = j.options || {};
     const tags = [j.source === "cli" ? t("tag.cli") : null, o.quality ? t("quality." + o.quality).toLowerCase() : null,
                   o.detail && o.detail !== "auto" ? t("tag.detail", { d: t("detail." + o.detail) }) : null,
-                  o.eval ? t("tag.eval") : null, o.remove_background ? t("tag.removeBg") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
+                  o.eval ? t("tag.eval") : null, o.remove_background ? t("tag.removeBg") : null, o.masks ? t("tag.masks") : null].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join("");
     const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
       : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
       : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose what to keep · Splat Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/i18n.js"></script>
+<link rel="stylesheet" href="/design.css">
+<script src="/theme.js"></script>
+<script src="/site.js"></script>
+<style>
+  /* Choose what to keep. Colors, type and components come from design.css. */
+  main { max-width: 1240px; margin: 0 auto; padding: var(--s-6) var(--s-5) 0; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-5); }
+  .page-head h1 { font: var(--text-display); letter-spacing: var(--track-tight); margin: 0; display: flex; align-items: center; gap: var(--s-3); }
+  .page-head p { margin: var(--s-2) 0 0; color: var(--ink-2); max-width: 68ch; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--s-5); align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+
+  /* the frame, with the choice drawn over it */
+  .stage { position: relative; background: var(--canvas); border-bottom: var(--hairline) solid var(--rule); user-select: none; }
+  .stage img, .stage canvas { display: block; width: 100%; height: auto; }
+  .stage canvas { position: absolute; inset: 0; height: 100%; cursor: crosshair; touch-action: none; }
+  .stage .empty-stage { aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--hud-ink-2); font: var(--text-meta); text-align: center; padding: var(--s-4); }
+  .scrub { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); }
+  .scrub input[type=range] { flex: 1; accent-color: var(--signal); min-width: 0; }
+  .scrub .meta { white-space: nowrap; }
+  .ticks { position: relative; height: 10px; margin: 0 var(--s-4) var(--s-3); }
+  .ticks i { position: absolute; top: 0; width: 3px; height: 10px; background: var(--signal); transform: translateX(-1px); }
+  .legend { display: flex; gap: var(--s-4); flex-wrap: wrap; padding: 0 var(--s-4) var(--s-3); font: var(--text-meta); color: var(--ink-3); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 2px solid var(--paper); }
+  .dot.keep { background: var(--ok); } .dot.drop { background: var(--bad); }
+
+  /* the steps */
+  .step { padding: var(--s-4); }
+  .step + .step { border-top: var(--hairline) solid var(--rule-soft); }
+  .step h3 { margin: 0 0 var(--s-2); font: var(--text-label); letter-spacing: var(--track-label); text-transform: uppercase; display: flex; gap: var(--s-2); align-items: center; }
+  .step h3 .n { width: 20px; height: 20px; display: grid; place-items: center; background: var(--ink); color: var(--paper); font: 600 11px var(--font-mono); }
+  .step.done h3 .n { background: var(--ok); }
+  .step p { margin: 0 0 var(--s-3); font: var(--text-sm); color: var(--ink-2); }
+  .step .row { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+  .seg.tool button.on[data-v=keep] { background: var(--ok); color: var(--paper); }
+  .seg.tool button.on[data-v=drop] { background: var(--bad); color: var(--paper); }
+  .status { margin-top: var(--s-2); display: flex; align-items: flex-start; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+  .status::before { margin-top: 0.5em; }
+  .bar { margin-top: var(--s-2); }
+  .wide-btn { width: 100%; }
+  .head-side { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+  .notice { border: var(--hairline) solid var(--rule); border-left: 4px solid var(--signal); padding: var(--s-3) var(--s-4); background: var(--paper); font: var(--text-sm); }
+</style>
+</head>
+<body data-page="new">
+<main>
+  <div class="page-head">
+    <div>
+      <h1><span data-i18n="keep.title">Choose what to keep</span> <span class="tag" data-i18n="keep.beta">beta</span></h1>
+      <p data-i18n="keep.lead">Click the object to keep it, and anything holding it up to leave it out. Splat Studio follows your choice through the whole video.</p>
+    </div>
+    <div class="head-side">
+      <div class="meta" id="videoName"></div>
+      <a class="btn small ghost" id="backLink" href="/new" data-testid="keep-back" data-i18n="keep.back">← Back to New run</a>
+    </div>
+  </div>
+
+  <div class="layout">
+    <section class="card">
+      <h2><span data-i18n="keep.frame">Frame</span><span class="meta" id="frameInfo"></span></h2>
+      <div class="stage" id="stage">
+        <div class="empty-stage" id="emptyStage" data-i18n="keep.noFrames">Prepare the frames to start.</div>
+        <img id="frameImg" alt="" hidden>
+        <canvas id="overlay" hidden data-testid="keep-canvas"></canvas>
+      </div>
+      <div class="scrub">
+        <button class="small" id="prev" aria-label="Previous frame">←</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Frame" data-testid="keep-scrub">
+        <button class="small" id="next" aria-label="Next frame">→</button>
+      </div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+      <div class="legend"><span><span class="dot keep"></span><span data-i18n="keep.legend.keep">keep</span></span>
+        <span><span class="dot drop"></span><span data-i18n="keep.legend.drop">leave out</span></span>
+        <span data-i18n="keep.legend.dim">dimmed: left out of the splat</span></div>
+    </section>
+
+    <section class="card" id="steps">
+      <h2><span data-i18n="keep.steps">Steps</span></h2>
+      <div class="notice" id="installNotice" hidden style="margin:var(--s-4) var(--s-4) 0">
+        <b data-i18n="keep.install.title">The selection tool isn't installed yet</b>
+        <p style="margin:6px 0 var(--s-3)" data-i18n="keep.install.text">It uses SAM 2, an open model from Meta that runs on your Mac. About 1 GB, installed once.</p>
+        <button class="primary" id="installBtn" data-testid="keep-install" data-i18n="keep.install.button">Install the selection tool</button>
+        <div class="meta status" id="installStatus"></div>
+      </div>
+      <div class="step" id="step1">
+        <h3><span class="n">1</span><span data-i18n="keep.s1">Frames</span></h3>
+        <p data-i18n="keep.s1.text">The video is cut into frames, as for a run. They're reused when you start it.</p>
+        <button id="framesBtn" data-testid="keep-frames" data-i18n="keep.s1.button">Prepare frames</button>
+        <div class="meta status" id="framesStatus"></div>
+      </div>
+      <div class="step" id="step2">
+        <h3><span class="n">2</span><span data-i18n="keep.s2">Click</span></h3>
+        <p data-i18n="keep.s2.text">Choose Keep and click the object. Choose Leave out and click a stand, hand or holder. A few clicks on one frame are usually enough; add some on another frame where it goes wrong.</p>
+        <div class="seg tool" data-name="tool" role="group">
+          <button data-v="keep" class="on" data-testid="tool-keep" data-i18n="keep.tool.keep">Keep</button>
+          <button data-v="drop" data-testid="tool-drop" data-i18n="keep.tool.drop">Leave out</button>
+        </div>
+        <div class="row" style="margin-top:var(--s-3)">
+          <button class="small" id="undoBtn" data-i18n="keep.undo">Undo click</button>
+          <button class="small ghost" id="clearBtn" data-i18n="keep.clear">Clear this frame</button>
+        </div>
+        <div class="meta status" id="clickStatus"></div>
+      </div>
+      <div class="step" id="step3">
+        <h3><span class="n">3</span><span data-i18n="keep.s3">Follow through the video</span></h3>
+        <p data-i18n="keep.s3.text">Applies your clicks to every frame. Scrub through afterwards and fix any frame where it slipped.</p>
+        <button class="primary wide-btn" id="applyBtn" data-testid="keep-apply" disabled data-i18n="keep.s3.button">Apply to all frames</button>
+        <div class="bar" id="applyBar" hidden><i></i></div>
+        <div class="meta status" id="applyStatus"></div>
+      </div>
+      <div class="step" id="step4">
+        <h3><span class="n">4</span><span data-i18n="keep.s4">Back to the run</span></h3>
+        <p data-i18n="keep.s4.text">Your selection is saved with the video. Set the quality and the other options on New run, then start it there.</p>
+        <a class="btn primary wide-btn" id="useBtn" data-testid="keep-use" aria-disabled="true" data-i18n="keep.s4.button">Use this selection</a>
+      </div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const t = window.t;
+const params = new URLSearchParams(location.search);
+const video = params.get("video") || "";
+const fileUrl = (p) => "/files/" + p.split("/").map(encodeURIComponent).join("/");
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("show"), 3000); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.error) { throw new Error(data.code && window.i18n.has("err." + data.code) ? t("err." + data.code) : (data.error || r.statusText)); }
+  return data;
+}
+const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+window.site.mount();
+window.theme.mount();
+window.i18n.mountSwitcher();
+window.i18n.apply();
+
+// ---------------------------------------------------------------- state
+let info = null, idx = 0, prompts = {}, masksDone = false, tool = "keep";
+const storeKey = "keep:" + video;
+const maskCache = new Map();             // frame -> {url, img} of the mask currently shown
+let showFinal = false;                   // after "Apply", the frames show the propagated masks
+
+function frameName(i = idx) { return info?.frames?.[i]; }
+function pointsOn(name = frameName()) { return prompts[name] || []; }
+function totalClicks() { return Object.values(prompts).reduce((n, p) => n + p.length, 0); }
+function hasKeep() { return Object.values(prompts).some((p) => p.some((q) => q[2] === 1)); }
+function save() { store.set(storeKey, prompts); }
+
+// ---------------------------------------------------------------- drawing
+const img = $("frameImg"), canvas = $("overlay");
+function draw() {
+  if (!info || !frameName()) return;
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  canvas.width = w; canvas.height = h;
+  const g = canvas.getContext("2d");
+  g.clearRect(0, 0, w, h);
+  const m = maskCache.get(frameName());
+  if (m && m.img.complete && m.img.naturalWidth) {
+    // dim what is left out: an overlay whose opacity is the inverse of the mask
+    const off = document.createElement("canvas"); off.width = w; off.height = h;
+    const og = off.getContext("2d");
+    og.drawImage(m.img, 0, 0, w, h);
+    const d = og.getImageData(0, 0, w, h), px = d.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const keep = px[i] > 127;
+      px[i] = 11; px[i + 1] = 11; px[i + 2] = 10; px[i + 3] = keep ? 0 : 175;
+    }
+    og.putImageData(d, 0, 0);
+    g.drawImage(off, 0, 0);
+  }
+  const r = Math.max(6, Math.round(Math.min(w, h) / 90));
+  for (const [x, y, lab] of pointsOn()) {
+    g.beginPath(); g.arc(x * w, y * h, r, 0, Math.PI * 2);
+    g.fillStyle = lab ? getCss("--ok") : getCss("--bad"); g.fill();
+    g.lineWidth = Math.max(2, r / 3); g.strokeStyle = "#ffffff"; g.stroke();
+  }
+}
+function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#fff"; }
+
+function loadMask(name, rel) {
+  const url = fileUrl(rel) + "?t=" + Date.now();
+  const im = new Image();
+  im.onload = () => { if (name === frameName()) draw(); };
+  im.src = url;
+  maskCache.set(name, { url, img: im });
+}
+
+function showFrame(i) {
+  if (!info || !info.frames.length) return;
+  idx = Math.max(0, Math.min(info.frames.length - 1, i));
+  $("scrub").value = idx;
+  const name = frameName();
+  $("frameInfo").textContent = t("keep.frameOf", { n: idx + 1, total: info.frames.length });
+  img.onload = draw;
+  img.src = fileUrl(info.frames_dir + "/" + name);
+  if (showFinal && !maskCache.has(name)) loadMask(name, info.masks_dir + "/" + name.replace(/\.jpg$/i, ".png"));
+  draw();
+  renderStatus();
+}
+
+function renderTicks() {
+  const n = info?.frames?.length || 1;
+  $("ticks").innerHTML = Object.keys(prompts).filter((k) => prompts[k].length)
+    .map((k) => info.frames.indexOf(k)).filter((i) => i >= 0)
+    .map((i) => `<i style="left:${(100 * i / Math.max(1, n - 1)).toFixed(2)}%"></i>`).join("");
+}
+
+function renderStatus() {
+  const frames = info?.frames?.length || 0;
+  $("framesStatus").textContent = frames ? t("keep.s1.ready", { n: frames }) : "";
+  $("framesBtn").hidden = !!frames;
+  $("step1").classList.toggle("done", !!frames);
+  const nFrames = Object.keys(prompts).filter((k) => prompts[k].length).length;
+  $("clickStatus").textContent = totalClicks() ? t("keep.s2.count", { clicks: totalClicks(), frames: nFrames }) : "";
+  $("step2").classList.toggle("done", hasKeep());
+  $("applyBtn").disabled = !hasKeep() || !info?.backend || !frames;
+  $("step3").classList.toggle("done", masksDone);
+  if (masksDone) { $("useBtn").href = backUrl(true); $("useBtn").removeAttribute("aria-disabled"); }
+  else { $("useBtn").removeAttribute("href"); $("useBtn").setAttribute("aria-disabled", "true"); }
+  $("installNotice").hidden = !info || !!info.backend;
+  renderTicks();
+}
+
+// ---------------------------------------------------------------- clicking
+let previewTimer = null;
+canvas.addEventListener("pointerdown", (e) => {
+  if (!info || !frameName()) return;
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  const name = frameName();
+  (prompts[name] = prompts[name] || []).push([+x.toFixed(5), +y.toFixed(5), tool === "keep" ? 1 : 0]);
+  edited();
+});
+function edited() {
+  save(); masksDone = false; showFinal = false;
+  maskCache.delete(frameName());
+  draw(); renderStatus();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(previewNow, 250);
+}
+async function previewNow() {
+  const name = frameName(), pts = pointsOn(name);
+  if (!pts.some((p) => p[2] === 1) || !info.backend) { draw(); return; }
+  $("clickStatus").textContent = t("keep.previewing");
+  try {
+    const d = await postJSON("/api/keep/preview", { video, frame: name, points: pts });
+    loadMask(name, d.mask);
+  } catch (err) { toast(err.message); }
+  renderStatus();
+}
+$("undoBtn").onclick = () => { const p = pointsOn(); if (p.length) { p.pop(); edited(); } };
+$("clearBtn").onclick = () => { delete prompts[frameName()]; edited(); };
+document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  s.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  if (s.dataset.name === "tool") tool = b.dataset.v;
+}));
+$("scrub").oninput = (e) => showFrame(+e.target.value);
+$("prev").onclick = () => showFrame(idx - 1);
+$("next").onclick = () => showFrame(idx + 1);
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.key === "ArrowLeft") showFrame(idx - 1);
+  if (e.key === "ArrowRight") showFrame(idx + 1);
+  if (e.key === "k" || e.key === "K") document.querySelector("[data-v=keep]").click();
+  if (e.key === "x" || e.key === "X") document.querySelector("[data-v=drop]").click();
+});
+
+// ---------------------------------------------------------------- jobs (frames, masks, install, run)
+async function watch(job, statusEl, bar, done) {
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 700));
+    const jobs = await api("/api/jobs").catch(() => []);
+    const j = jobs.find((x) => x.id === job.id);
+    if (!j) continue;
+    if (bar) { bar.hidden = false; bar.querySelector("i").style.width = (j.step_pct || 0) + "%"; }
+    statusEl.textContent = j.status === "running" ? (j.step_pct != null ? `${j.step_pct}%` : t("keep.working"))
+      + (j.eta ? " · " + t("run.stepLeft", { t: j.eta }) : "") : t("status." + j.status);
+    if (!["queued", "running"].includes(j.status)) {
+      if (bar) bar.hidden = true;
+      if (j.status === "done") done(j); else statusEl.textContent = j.error || t("status." + j.status);
+      return;
+    }
+  }
+}
+$("framesBtn").onclick = async () => {
+  try {
+    const job = await postJSON("/api/jobs", { type: "frames", video, frames: 250 });
+    $("framesBtn").disabled = true;
+    watch(job, $("framesStatus"), null, () => load());
+  } catch (err) { toast(err.message); }
+};
+$("installBtn").onclick = async () => {
+  try {
+    const job = await postJSON("/api/jobs", { type: "setup", masking: true });
+    $("installBtn").disabled = true;
+    watch(job, $("installStatus"), null, () => load());
+  } catch (err) { toast(err.message); }
+};
+$("applyBtn").onclick = async () => {
+  try {
+    const job = await postJSON("/api/jobs", { type: "mask", video, prompts });
+    $("applyBtn").disabled = true;
+    watch(job, $("applyStatus"), $("applyBar"), () => {
+      masksDone = true; showFinal = true; maskCache.clear();
+      $("applyStatus").textContent = t("keep.s3.done");
+      showFrame(idx);
+    });
+  } catch (err) { toast(err.message); }
+};
+const backUrl = (keep) => "/new?" + new URLSearchParams(keep ? { video, keep: "chosen" } : { video });
+$("backLink").href = backUrl(false);
+
+// ---------------------------------------------------------------- load
+async function load() {
+  try { info = await api("/api/frames?" + new URLSearchParams({ video })); }
+  catch (err) { $("emptyStage").textContent = err.message; return; }
+  $("videoName").textContent = info.name;
+  prompts = store.get(storeKey) || info.prompts || {};
+  masksDone = !!info.masks_done;
+  showFinal = masksDone;
+  const has = info.frames.length > 0;
+  $("emptyStage").hidden = has; img.hidden = !has; canvas.hidden = !has;
+  $("scrub").max = Math.max(0, info.frames.length - 1);
+  if (masksDone) $("applyStatus").textContent = t("keep.s3.done");
+  if (has) {
+    const first = Object.keys(prompts).find((k) => info.frames.includes(k));
+    showFrame(first ? info.frames.indexOf(first) : 0);
+  }
+  renderStatus();
+}
+addEventListener("langchange", () => { renderStatus(); if (info) showFrame(idx); });
+load();
+// read-only helpers for the automated tests
+window.keepPage = { prompts: () => prompts, index: () => idx, masksDone: () => masksDone,
+                    maskShown: () => maskCache.has(frameName()) };
+</script>
+</body>
+</html>

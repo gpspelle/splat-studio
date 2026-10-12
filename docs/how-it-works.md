@@ -110,6 +110,36 @@ The result, `NAME_object.ply`, keeps the header comments (including the up axis)
 synthetic vase-on-a-table scene with opaque walls and fog: more than 93% of the vase kept, no
 table, wall or fog splats, with and without camera positions.
 
+## Choosing what to keep (`masks.py`, `maskwork.py`, `static/keep.html`)
+
+Beta. The person clicks the object (keep) and things to drop (leave out) on a few frames; a
+segmentation model turns that into one mask per frame, and training ignores, or makes
+transparent, everything outside it.
+
+1. **Frames.** The page runs the frames stage on its own (`frames` job) so there is something to
+   click on; the run later reuses the same `frames/<video>/` folder.
+2. **Preview.** Each click posts the frame's points to `/api/keep/preview`. With SAM 2 a single
+   long-lived `maskwork serve` process answers (JSON lines), so the model loads once.
+3. **Propagation.** `splat-studio mask` writes `frames/<video>/masks/<frame>.png` (white = keep)
+   plus `prompts.json` and `done.json`. SAM 2 runs in its own environment
+   (`~/.splat-studio/sam2/venv`, Python 3.10+ with PyTorch) as `maskwork propagate`: chunks of
+   64 frames, forwards from the first clicked frame and then backwards, each chunk starting
+   from the clicks on its frames or the mask carried over from the previous chunk's edge
+   frame, which bounds memory on long videos. `PYTORCH_ENABLE_MPS_FALLBACK=1` lets it use the
+   Mac's GPU. The app itself still uses only the standard library: masks are written as PNGs
+   by hand, and image sizes are read from JPEG headers.
+4. **Into the training images.** COLMAP resizes the frames (`ws/images`) and undistorts them
+   (`dense/images`), so each mask goes through the same steps (`masks.prepare_for_dense`): ffmpeg
+   resizes it with nearest-neighbour scaling, then `colmap image_undistorter` runs on the masks
+   with the same distorted model, recorded in `dense/source_model.txt`. The result is
+   thresholded back to black and white in `dense/masks/<image stem>.png`, where Brush finds it.
+5. **Training.** In `transparent` mode (the default) Brush gets `--alpha-mode transparent`: the
+   mask becomes the image's alpha and what's outside is trained to be see-through, so a stand
+   disappears instead of being guessed at. `ignore` mode only leaves those pixels out of the loss.
+
+Tests use a stand-in backend (`SPLAT_STUDIO_MASK_BACKEND=disc`: a disc around the keep clicks)
+and a stubbed SAM 2 for the chunking logic.
+
 ## Comparing (`static/compare.html`)
 
 Two panes, each with its own WebGL renderer, Spark renderer, camera and orbit controls. The
@@ -130,7 +160,8 @@ Server-side advice and errors carry codes and parameters, so they're translated 
   time left, registered frames, track breaks, and the resulting splat.
 - `library.py`: the data folder (videos, runs, splats), and the website export.
 - `../guidance.py`: checks on uploaded videos and advice after runs.
-- `static/`: the Studio page and the viewer, with three.js and Spark bundled, so nothing is
+- `static/`: the Studio page (`index.html`: runs and library), New run (`new.html`: the video
+  and its settings, kept in `sessionStorage` while you visit Choose what to keep), and the viewer, with three.js and Spark bundled, so nothing is
   loaded from the internet.
 
 ## Testing (`tests/`)

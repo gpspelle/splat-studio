@@ -88,6 +88,10 @@ class BrowserTestCase(ServerTestCase):
         self.pw.stop()
         super().tearDown()
 
+    def open_new(self):
+        self.page.goto(self.url + "/new")
+        self.page.wait_for_function("document.getElementById('prevVideo').options.length > 0")
+
     def shot(self, name, full_page=False, page=None):
         if SHOTS:
             Path(SHOTS).mkdir(parents=True, exist_ok=True)
@@ -109,14 +113,88 @@ class BrowserTestCase(ServerTestCase):
 @unittest.skipIf(sync_playwright is None, "playwright not installed")
 @needs_ffmpeg
 class WebUiTest(BrowserTestCase):
+    def test_choose_what_to_keep(self):
+        os.environ["SPLAT_STUDIO_MASK_BACKEND"] = "disc"         # stand-in for SAM 2
+        self.addCleanup(os.environ.pop, "SPLAT_STUDIO_MASK_BACKEND", None)
+        self.open_new()
+        self.assertFalse(self.page.get_by_test_id("keep-link").is_visible())     # "Everything" by default
+        self.page.click('.seg[data-name="detail"] button[data-v="low"]')
+        self.page.click('.seg[data-name="keep"] button[data-v="chosen"]')
+        self.assertIn("Choose a video first", self.page.get_by_test_id("keep-status").text_content())
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "vase.mov", seconds=6, size="960x540")))
+        status = self.page.get_by_test_id("keep-status")
+        self.page.wait_for_function("document.querySelector('[data-testid=keep-status]').textContent.includes('No selection')")
+        self.assertTrue(self.page.is_disabled("#startBtn"))                       # a selection is needed first
+        self.assertIn("Choose what to keep first", self.page.text_content("#startHelp"))
+        self.page.get_by_test_id("keep-link").click()
+        self.page.wait_for_url("**/keep?video=*")
+        self.assertEqual(self.page.get_by_test_id("keep-run").count(), 0)          # runs start only on New run
+        self.assertEqual(self.page.get_attribute("[data-testid=keep-use]", "aria-disabled"), "true")
+        self.page.get_by_test_id("keep-frames").click()
+        canvas = self.page.get_by_test_id("keep-canvas")
+        canvas.wait_for(state="visible", timeout=60000)
+        self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
+        box = canvas.bounding_box()
+        self.page.mouse.click(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        self.page.get_by_test_id("tool-drop").click()
+        self.page.mouse.click(box["x"] + box["width"] * 0.9, box["y"] + box["height"] * 0.15)
+        self.page.wait_for_function("window.keepPage.maskShown()", timeout=30000)
+        pts = self.page.evaluate("Object.values(window.keepPage.prompts())[0]")
+        self.assertEqual([p[2] for p in pts], [1, 0])
+        self.assertAlmostEqual(pts[0][0], 0.5, delta=0.02)
+        self.page.get_by_test_id("keep-apply").click()
+        self.page.wait_for_function("window.keepPage.masksDone()", timeout=60000)
+        self.page.wait_for_timeout(500)
+        self.shot("keep")
+        self.page.reload()                                            # the clicks and masks are kept
+        self.page.wait_for_function("window.keepPage.masksDone() && window.keepPage.maskShown()", timeout=30000)
+        self.assertEqual(len(self.page.evaluate("Object.values(window.keepPage.prompts())[0]")), 2)
+        self.page.get_by_test_id("keep-use").click()
+        self.page.wait_for_url(self.url + "/new", timeout=10000)
+        # back on New run: same video, same settings, selection ready
+        self.page.wait_for_function("window.newRun.selectionReady()", timeout=10000)
+        self.assertEqual(self.page.get_by_test_id("chosen-video").text_content(), "vase.mov")
+        self.assertEqual(self.page.get_attribute('.seg[data-name="detail"] button.on', "data-v"), "low")
+        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "chosen")
+        self.assertIn("Selection ready", status.text_content())
+        self.assertEqual(self.page.get_by_test_id("keep-link").text_content(), "Edit selection")
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        self.page.wait_for_selector("[data-testid=run-done] >> text=View splat", timeout=180000)
+        _, jobs = self.json("GET", "/api/jobs")
+        run = next(j for j in jobs if j["type"] == "video")
+        self.assertTrue(run["options"]["masks"])
+        self.assertEqual((run["options"]["quality"], run["options"]["detail"]), ("preview", "low"))
+        self.assertTrue((self.data.root / run["run_dir"] / "dense" / "masks").is_dir())
+        self.assertIn("your selection", self.page.evaluate("document.querySelector('[data-testid=run-done]').textContent"))
+        self.open_new()                                               # the draft was used up
+        self.assertIsNone(self.page.evaluate("window.newRun.video()"))
+        self.assertEqual(self.page.get_attribute('.seg[data-name="keep"] button.on', "data-v"), "all")
+        self.assertEqual(self.errors, [])
+
+    def test_studio_and_new_run_are_separate_pages(self):
+        self.page.goto(self.url)
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.page.locator("#fileInput").count(), 0)              # no form on the Studio page
+        self.assertIn("Start a new run", self.page.get_by_test_id("runs").text_content())
+        self.page.get_by_test_id("new-run").click()
+        self.page.wait_for_url(self.url + "/new")
+        self.assertEqual(self.page.get_attribute("[data-testid=nav-new]", "aria-current"), "page")
+        self.assertTrue(self.page.is_disabled("#startBtn"))
+        self.page.get_by_test_id("nav-studio").click()
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.errors, [])
+
     def test_header_footer_and_recording_guide(self):
         self.page.goto(self.url)
         self.page.get_by_test_id("setup-pill").wait_for()
-        self.assertIn("3 loops", self.page.get_by_test_id("tips-strip").inner_text())
         self.assertEqual(self.page.get_attribute("[data-testid=nav-studio]", "aria-current"), "page")
         self.assertIn("github.com/gpspelle/splat-studio", self.page.get_attribute("[data-testid=github-link]", "href"))
         self.page.wait_for_function("/^v\\d/.test(document.getElementById('siteVersion').textContent)")
         self.assertIn("MIT License", self.page.inner_text(".site-foot"))
+        self.page.get_by_test_id("nav-new").click()
+        self.assertIn("3 loops", self.page.get_by_test_id("tips-strip").inner_text())
         self.page.get_by_test_id("nav-guide").click()
         guide = self.page.get_by_test_id("guide")
         guide.wait_for(state="visible")
@@ -130,8 +208,7 @@ class WebUiTest(BrowserTestCase):
         self.assertEqual(self.errors, [])
 
     def test_upload_run_view_and_export(self):
-        self.page.goto(self.url)
-        self.page.get_by_test_id("setup-pill").wait_for()
+        self.open_new()
         video = make_video(self.tmp / "IMG_4821.MOV", seconds=8, size="1280x720")
         self.page.set_input_files("#fileInput", str(video))
         advice = self.page.get_by_test_id("video-advice")
@@ -139,6 +216,7 @@ class WebUiTest(BrowserTestCase):
         self.assertIn("too few viewpoints", advice.inner_text())   # 8 s is flagged before processing
         self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
         self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)                     # follow it in the Studio
         # the stand-in tools are fast: the run may already be done at the next 2-second refresh
         self.page.wait_for_selector(".pill.running, .pill.done", timeout=30000)
         self.shot("run-progress")
@@ -279,16 +357,20 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.page.get_by_test_id("setup-pill").wait_for()
 
     def test_switch_to_portuguese_and_back(self):
-        self.open_studio()
+        self.open_new()
         self.assertEqual(self.page.text_content("[data-i18n='new.title']"), "New run")
         self.page.get_by_test_id("lang-select").select_option("pt")
         self.assertEqual(self.page.text_content("[data-i18n='new.title']"), "Nova execução")
         self.assertIn("3 voltas", self.page.get_by_test_id("tips-strip").inner_text())
         self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
+        self.assertEqual(self.page.text_content(".seg[data-name='keep'] button[data-v='chosen']"), "Só o que eu escolher")
         self.assertEqual(self.page.evaluate("document.documentElement.lang"), "pt-BR")
         self.page.reload()                                            # remembered
-        self.page.get_by_test_id("setup-pill").wait_for()
+        self.page.wait_for_function("document.getElementById('prevVideo').options.length > 0")
         self.assertEqual(self.page.inner_text("#startBtn"), "Iniciar")
+        self.page.get_by_test_id("nav-studio").click()
+        self.page.get_by_test_id("setup-pill").wait_for()
+        self.assertEqual(self.page.text_content("[data-testid=new-run]"), "Nova execução")
         self.page.wait_for_function("/ok|bad/.test(document.getElementById('setupPill').className)")
         self.assertIn("erramenta", self.page.text_content("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
         self.page.get_by_test_id("nav-guide").click()
@@ -298,11 +380,13 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.page.get_by_test_id("nav-studio").click()
         self.page.get_by_test_id("setup-pill").wait_for()
         self.page.get_by_test_id("lang-select").select_option("en")
-        self.assertEqual(self.page.inner_text("#startBtn"), "Start run")
+        self.assertEqual(self.page.text_content("[data-testid=new-run]"), "New run")
         self.assertEqual(self.errors, [])
 
     def test_upload_advice_is_translated(self):
-        self.open_studio("pt")
+        self.page.goto(self.url + "/new")
+        self.page.evaluate("localStorage.setItem('lang', 'pt')")
+        self.open_new()
         video = make_video(self.tmp / "curto.mov", seconds=5)
         self.page.set_input_files("#fileInput", str(video))
         advice = self.page.get_by_test_id("video-advice")
@@ -506,8 +590,9 @@ class CompareAndBackgroundUiTest(BrowserTestCase):
 
     def test_remove_background_from_library(self):
         from plyfile import write_room_scene
-        self.open_studio()
+        self.open_new()
         self.assertFalse(self.page.get_by_test_id("remove-bg-option").is_checked())   # opt-in
+        self.open_studio()
         self.page.set_input_files("#importInput", str(write_room_scene(self.tmp / "room.ply")))
         self.page.wait_for_selector(".tile >> text=room.ply")
         self.page.click(".tile[data-path$='room.ply'] [data-testid=isolate-button]")
@@ -546,8 +631,8 @@ class ThemeUiTest(BrowserTestCase):
         self.assertEqual(self.errors, [])
 
     def test_keyboard_focus_is_visible(self):
-        self.page.goto(self.url)
-        self.page.get_by_test_id("setup-pill").wait_for()
+        self.page.goto(self.url + "/new")
+        self.page.wait_for_selector("#dropZone")
         self.page.focus("#dropZone")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Shift+Tab")                              # keyboard focus, so :focus-visible applies

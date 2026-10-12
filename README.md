@@ -28,6 +28,7 @@ It wires together three open-source tools and handles the fiddly parts for you:
 - [Command line](#command-line)
 - [Removing background fog](#removing-background-fog)
 - [Removing the background](#removing-the-background)
+- [Choosing what to keep (beta)](#choosing-what-to-keep-beta)
 - [Comparing two splats](#comparing-two-splats)
 - [Putting a splat on your website](#putting-a-splat-on-your-website)
 - [Troubleshooting](#troubleshooting)
@@ -67,8 +68,9 @@ see what's installed.
 Your browser opens Splat Studio at <http://localhost:8765>. Then:
 
 1. Read the **Recording guide** (in the menu at the top) and film your object.
-2. Drop the video onto **New run**. Splat Studio checks it and warns you about anything likely to fail.
-3. Click **Start run** and watch the progress: frames → camera poses → training.
+2. Click **New run** and drop the video there. Splat Studio checks it and warns you about anything likely to fail.
+3. Pick the settings and click **Start run**. You're taken back to the **Studio**, where you
+   watch the progress: frames → camera poses → training.
 4. Click **View splat** to look at the result, and **Export website** to publish it.
 
 Your videos and results are kept in `~/SplatStudio` (change it with `--data-dir`).
@@ -99,6 +101,12 @@ Splat Studio helps you get it right with fewer attempts:
 <br clear="right">
 
 ## Using the app
+
+The app has two main pages. The **Studio** (`/`) shows your runs and your splat library.
+**New run** (`/new`) is where you choose a video and its settings: quality, detail, what to
+keep, and the options. Starting a run takes you back to the Studio to follow it.
+
+![New run: the video on the left, the settings on the right](docs/images/new-run.png)
 
 ### Runs
 
@@ -227,8 +235,45 @@ a product page, use **Remove background** (in the library, or the option on new 
 The object's very bottom edge, where it touches the table, may lose a thin band. If too much
 or too little is removed, `--radius 1.3` (or `0.8`) widens or narrows the search region.
 
-This works on the geometry of the trained splat. Removing the background from the video
-frames before training (segmentation masks) would give cleaner edges and is planned.
+This works on the geometry of the trained splat. For cleaner edges, or to remove a stand, a
+hand or a holder that touches the object, choose what to keep in the video frames before
+training (next section).
+
+## Choosing what to keep (beta)
+
+![Choosing what to keep: the vase is kept, the rest is dimmed](docs/images/keep.png)
+
+Sometimes something you don't want is in the video: the stand the object sits on, your hand,
+a clamp or a rod holding it. Geometry alone can't separate them from the object. Instead, you
+show Splat Studio what to keep on a frame or two, and only that is trained.
+
+1. Install the selection tool once: `./splat-studio setup --masking` (or **Install the
+   selection tool** on the page). It installs Meta's [SAM 2](https://github.com/facebookresearch/sam2)
+   in its own folder (`~/.splat-studio/sam2`, about 1 GB with PyTorch). It needs Python 3.10
+   or newer, which setup installs with Homebrew if needed. It uses the Mac's GPU.
+2. On **New run**, choose a video and set **What to keep** to **Only what I choose**, then click
+   **Choose what to keep**. On that page, **Prepare frames** extracts the frames.
+3. With **Keep**, click the object. With **Leave out** (or the `X` key), click the stand or
+   hand. The preview dims what's left out. Move to other frames (arrow keys) and add clicks
+   where the selection is wrong, for example where the holder appears from another side.
+4. **Apply to all frames** follows your selection through the whole video.
+5. **Use this selection** takes you back to **New run**, with the video and your settings as
+   you left them and the selection marked as ready. Set the rest and **Start run** there. The
+   page where you choose what to keep doesn't start runs itself.
+
+Each training image gets a mask (`dense/masks/`), and Brush trains what's outside it to be
+transparent (`--alpha-mode transparent`), so the stand or hand disappears instead of leaving
+a hole. The clicks and masks stay in `frames/<video>/masks/`, so a later run reuses them.
+On the command line:
+
+```bash
+./splat-studio mask frames/IMG_1234 --prompts clicks.json   # {"frame_00001.jpg": [[0.5, 0.5, 1], [0.5, 0.9, 0]]}
+./splat-studio run IMG_1234.MOV --masks                     # add --mask-mode ignore to only ignore the rest
+```
+
+Clicks are fractions of the frame (0–1); `1` keeps, `0` leaves out. This is a beta: runs made
+before this version need COLMAP again to use masks, and parts of the object hidden behind the
+holder in every frame stay missing, so film so that each part is seen at least once.
 
 ## Comparing two splats
 
@@ -277,6 +322,7 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 | The model has holes or blurry sides | Those angles weren't filmed, or their frames weren't placed. Add the missing loop (usually the high one). |
 | Foggy haze around the model | New runs already remove it. For imported splats use **Remove fog**; **Crop** in the viewer hides what's left. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
 | The table or room is still around the object | Use **Remove background** (see [Removing the background](#removing-the-background)). |
+| A stand, hand or holder is in the splat | Use **Choose what to keep** (see [Choosing what to keep](#choosing-what-to-keep-beta)). |
 | Floating specks around the model | Normal for splats. Fog removal takes out most of them; for fine control use [SuperSplat](https://superspl.at/editor). |
 | The model is upside down or sideways | **Flip** / **Tilt** / **Roll** in the viewer, then **Save view**. |
 | A tool is missing | Click the tools badge (top right) or run `./splat-studio check`, then `./splat-studio setup`. |
@@ -305,7 +351,8 @@ NVIDIA GPU: on a Mac, Docker can't use the Apple GPU.
 
 O Splat Studio transforma um vídeo de celular em um splat gaussiano 3D no seu próprio Mac e
 gera um site para mostrá-lo. A interface está em inglês e português: escolha o idioma no menu
-no canto superior direito.
+no canto superior direito. O **Estúdio** mostra suas execuções e a biblioteca de splats; em
+**Nova execução** você escolhe o vídeo e as configurações e inicia a execução.
 
 ```bash
 git clone https://github.com/gpspelle/splat-studio.git
@@ -320,7 +367,12 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Para mostrar só o objeto,
-sem mesa nem ambiente, use **Remover fundo**. Para ver dois splats lado a lado, clique em
+sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um apoio aparece no
+vídeo, em **Nova execução** mude **O que manter** para **Só o que eu escolher** (beta): instale a
+ferramenta de seleção uma vez com `./splat-studio setup --masking` (SAM 2, cerca de 1 GB),
+clique no objeto (**Manter**) e no que deve sair (**Deixar de fora**) em um ou dois quadros,
+clique em **Aplicar a todos os quadros** e depois em **Usar esta seleção**, que volta para
+Nova execução para você iniciar. Só o que você escolheu é treinado; o resto fica transparente. Para ver dois splats lado a lado, clique em
 **Comparar** em dois splats da biblioteca: as câmeras andam juntas, e a comparação pode ser
 exportada como site. A barra embaixo do nome de cada modelo gira só aquele modelo (**↺ 15°**,
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,

@@ -4,6 +4,8 @@
     splat-studio ui [--data-dir D] [--port N] [--no-browser]
     splat-studio run VIDEO [options]  whole pipeline in the terminal (see `run --help`)
     splat-studio setup                install missing tools and build Brush (may ask for a password)
+    splat-studio setup --masking      also install SAM 2 for "Choose what to keep" (~1 GB)
+    splat-studio mask FRAMES --prompts P.json   masks of the chosen object for every frame
     splat-studio check                show which tools are installed
     splat-studio frames | colmap ...  run a single stage
     splat-studio inspect MODEL.ply    explain fog / background in a trained splat
@@ -50,8 +52,14 @@ def main(argv: list[str] | None = None) -> None:
         from .pipeline import main as run_main
         return run_main(rest)
     if cmd == "setup":
+        if "--masking" in rest:
+            from .setup_deps import install_masking
+            return install_masking("--dry-run" in rest)
         from .pipeline import main as run_main
         return run_main(["--setup-only", *rest])
+    if cmd == "mask":
+        from .masks import main as mask_main
+        return mask_main(rest)
     if cmd == "check":
         from .setup_deps import check
         items = check()

@@ -326,6 +326,8 @@ def finalize(c: Colmap, model_dir: Path, n: int) -> Path:
     sparse0.mkdir(parents=True, exist_ok=True)
     for f in (dense / "sparse").glob("*.bin"):
         shutil.move(str(f), sparse0 / f.name)
+    # the distorted model the images were undistorted with (masks are undistorted the same way)
+    (dense / "source_model.txt").write_text(str(Path(model_dir).resolve()))
     return dense
 
 

@@ -244,3 +244,73 @@ class TimeLeftTest(ServerTestCase):
             time.sleep(0.2)
         self.assertTrue(r.get("eta_total"), r)
         self.wait_done(rt["id"])
+
+
+@needs_ffmpeg
+class ChooseWhatToKeepTest(ServerTestCase):
+    """Frames -> clicks -> masks for every frame -> a run that trains only the chosen object
+    (with the stand-in 'disc' segmentation instead of SAM 2)."""
+
+    def setUp(self):
+        super().setUp()
+        self.maskenv = mock_env({"SPLAT_STUDIO_MASK_BACKEND": "disc"})
+        self.maskenv.__enter__()
+
+    def tearDown(self):
+        self.maskenv.__exit__(None, None, None)
+        super().tearDown()
+
+    def test_select_mask_and_train(self):
+        r, _ = self.request("GET", "/keep")
+        self.assertEqual(r.status, 200)
+        up = json.loads(self.upload(make_video(self.tmp / "vase.mov", seconds=4))[1])
+        q = urlencode({"video": up["video"]})
+        _, info = self.json("GET", f"/api/frames?{q}")
+        self.assertEqual((info["frames"], info["masks_done"], info["backend"]), ([], False, "disc"))
+
+        _, job = self.json("POST", "/api/jobs", {"type": "frames", "video": up["video"], "frames": 24})
+        self.assertEqual(self.wait_done(job["id"])["status"], "done")
+        _, info = self.json("GET", f"/api/frames?{q}")
+        self.assertGreaterEqual(len(info["frames"]), 20)
+        first = info["frames"][0]
+
+        status, prev = self.json("POST", "/api/keep/preview", {"video": up["video"], "frame": first,
+                                                                "points": [[0.5, 0.5, 1], [0.9, 0.1, 0]]})
+        self.assertEqual(status, 200, prev)
+        r, png = self.request("GET", "/files/" + prev["mask"])
+        self.assertEqual((r.status, png[:4]), (200, b"\x89PNG"))
+        status, err = self.json("POST", "/api/keep/preview", {"video": up["video"], "frame": first,
+                                                               "points": [[0.9, 0.1, 0]]})
+        self.assertEqual((status, err["code"]), (400, "no_keep_point"))
+        status, err = self.json("POST", "/api/jobs", {"type": "mask", "video": up["video"], "prompts": {}})
+        self.assertEqual((status, err["code"]), (400, "no_keep_point"))
+
+        _, job = self.json("POST", "/api/jobs", {"type": "mask", "video": up["video"],
+                                                 "prompts": {first: [[0.5, 0.5, 1], [0.9, 0.1, 0]]}})
+        done = self.wait_done(job["id"])
+        self.assertEqual(done["status"], "done", done.get("error"))
+        self.assertTrue(done["masks"].endswith("frames/vase/masks"), done["masks"])
+        _, info = self.json("GET", f"/api/frames?{q}")
+        self.assertTrue(info["masks_done"])
+        self.assertEqual(info["prompts"], {first: [[0.5, 0.5, 1], [0.9, 0.1, 0]]})
+
+        _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
+                                                 "frames": 24, "masks": True})
+        done = self.wait_done(job["id"])
+        self.assertEqual(done["status"], "done", done.get("error"))
+        run = self.data.root / done["run_dir"]
+        dense = run / "dense"
+        self.assertEqual(len(list((dense / "masks").glob("*.png"))), len(list((dense / "images").glob("*.jpg"))))
+        summary = (run / "summary.txt").read_text()
+        self.assertIn("--alpha-mode transparent", summary)
+        self.assertIn("masks:", summary)
+
+    def test_runs_without_masks_are_unchanged(self):
+        up = json.loads(self.upload(make_video(self.tmp / "cup.mov", seconds=4))[1])
+        _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
+                                                 "frames": 24})
+        done = self.wait_done(job["id"])
+        self.assertEqual(done["status"], "done", done.get("error"))
+        run = self.data.root / done["run_dir"]
+        self.assertFalse((run / "dense" / "masks").exists())
+        self.assertNotIn("--alpha-mode", (run / "summary.txt").read_text())

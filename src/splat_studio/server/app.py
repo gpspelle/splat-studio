@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -34,6 +35,21 @@ from .. import __version__, setup_deps
 mimetypes.add_type("font/woff2", ".woff2")       # bundled fonts (not in every system's mime table)
 from .jobs import ApiError, Runner, validate_options
 from .library import SPLAT_EXT, STATIC_DIR, VIDEO_EXT, DataDir, export_compare, export_site, splat_title
+
+
+def frames_info(data: DataDir, video: str) -> dict:
+    """Frames of a video for the 'Choose what to keep' page, with any saved selection."""
+    from .. import masks as masksmod
+    v = data.safe_path(video)
+    if not v or not v.is_file() or v.suffix.lower() not in VIDEO_EXT:
+        return {"error": "video not found", "code": "video_missing"}
+    frames_dir = data.frames / data.frames_name(data.rel(v))
+    frames = masksmod.frame_list(frames_dir)
+    mdir = masksmod.masks_dir(frames_dir)
+    return {"video": data.rel(v), "name": v.name, "frames_dir": data.rel(frames_dir),
+            "frames": [f.name for f in frames], "size": list(masksmod.jpeg_size(frames[0])) if frames else None,
+            "masks_done": masksmod.has_masks(frames_dir), "masks_dir": data.rel(mdir),
+            "prompts": masksmod.load_prompts(frames_dir), "backend": masksmod.backend()}
 
 
 def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
@@ -158,6 +174,12 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 return self.send_file(static_dir / "viewer.html")
             if p == "/compare":
                 return self.send_file(static_dir / "compare.html")
+            if p == "/new":
+                return self.send_file(static_dir / "new.html")
+            if p == "/keep":
+                return self.send_file(static_dir / "keep.html")
+            if p == "/api/frames":
+                return self.send_json(frames_info(data, q.get("video", "")))
             if p == "/guide":
                 return self.send_file(static_dir / "guide.html")
             if p == "/history":
@@ -236,6 +258,24 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                 if dest:
                     self.send_json({"path": data.rel(dest), "name": dest.name})
                 return
+            if p == "/api/keep/preview":
+                body = self.read_json()
+                v = data.safe_path(body.get("video", ""))
+                if not v or not v.is_file():
+                    return self.send_json({"error": "video not found", "code": "video_missing"}, 400)
+                from .. import masks as masksmod
+                frames_dir = data.frames / data.frames_name(data.rel(v))
+                names = [f.name for f in masksmod.frame_list(frames_dir)]
+                frame = str(body.get("frame", ""))
+                pts = masksmod.normalise_prompts({frame: body.get("points") or []}, names).get(frame)
+                if not pts or not any(pt[2] == 1 for pt in pts):
+                    return self.send_json({"error": "click the object at least once", "code": "no_keep_point"}, 400)
+                out = masksmod.masks_dir(frames_dir) / "preview" / (Path(frame).stem + ".png")
+                try:
+                    masksmod.preview(frames_dir / frame, pts, out)
+                except (RuntimeError, OSError, ValueError) as e:
+                    return self.send_json({"error": str(e), "code": "mask_failed"}, 500)
+                return self.send_json({"mask": data.rel(out), "t": time.time()})
             if p == "/api/jobs":
                 body = self.read_json()
                 try:
@@ -255,7 +295,22 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                                                "code": "no_poses"}, 400)
                     job = runner.submit("retrain", run_dir=data.rel(rd), options=opts)
                 elif t == "setup":
-                    job = runner.submit("setup")
+                    job = runner.submit("setup", options={"masking": True} if body.get("masking") else {})
+                elif t in ("frames", "mask"):
+                    v = data.safe_path(body.get("video", ""))
+                    if not v or not v.is_file() or v.suffix.lower() not in VIDEO_EXT:
+                        return self.send_json({"error": "video not found", "code": "video_missing"}, 400)
+                    frames_dir = data.frames / data.frames_name(data.rel(v))
+                    o = {"frames_dir": data.rel(frames_dir), "frames": opts.get("frames", 250)}
+                    if t == "mask":
+                        from ..masks import frame_list, normalise_prompts
+                        prompts = normalise_prompts(body.get("prompts") or {}, [f.name for f in frame_list(frames_dir)])
+                        if not any(pt[2] == 1 for pts in prompts.values() for pt in pts):
+                            return self.send_json({"error": "click the object at least once", "code": "no_keep_point"}, 400)
+                        pf = data.jobs / f"prompts_{int(time.time() * 1000)}.json"
+                        pf.write_text(json.dumps(prompts))
+                        o["prompts_file"] = data.rel(pf)
+                    job = runner.submit(t, video=data.rel(v), options=o)
                 elif t in ("clean", "isolate"):
                     f = data.safe_path(body.get("splat", ""))
                     if not f or not f.is_file() or f.suffix.lower() != ".ply":

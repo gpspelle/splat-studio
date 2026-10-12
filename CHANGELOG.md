@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- **Choose what to keep (beta)** (`/keep`, from **What to keep → Only what I
+  choose** on New run). Click the object (**Keep**) and a stand, hand or holder (**Leave out**) on a frame or
+  two. Meta's SAM 2 follows that selection through every frame, and training keeps only the
+  chosen object: Brush trains what's outside the masks to be transparent. Install it with
+  `./splat-studio setup --masking` (its own environment, about 1 GB). New commands and options:
+  `./splat-studio mask FRAMES --prompts JSON`, `run --masks [--mask-mode transparent|ignore]`;
+  API `GET /api/frames`, `POST /api/keep/preview`, and job types `frames` and `mask`. Runs with
+  masks show a **your selection** tag. Runs made before this need COLMAP again to use masks.
 - **History page** (`/history`) for finished runs: grouped by day, with search by video name,
   a filter for finished, failed or stopped runs, and **Remove from list**, which deletes only
   the job record and log (`DELETE /api/jobs/<id>`), never splats or run folders.
@@ -22,6 +30,13 @@
   with error code `splat_busy`.
 
 ### Changed
+- **New run is its own page** (`/new`, **New run** in the menu and on the Studio). The Studio
+  (`/`) now shows only the runs and the library; starting a run goes back there. New run keeps
+  the video and settings while you go to Choose what to keep and back. **Train again** has its
+  own **Remove the background** option.
+- **What to keep** is a choice on New run, next to Quality and Detail: **Everything** or **Only
+  what I choose**. The Choose what to keep page no longer starts runs: **Use this selection**
+  returns to New run, where the rest of the settings are.
 - **The Studio's run list stays short.** Runs in progress keep the full card. Finished runs
   are one line (name, result, **View splat**, any error or warning) and open with **Details**.
   Only the finished runs from the last day are kept there (at least 3, at most 5); a link
