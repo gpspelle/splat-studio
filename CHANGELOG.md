@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- **Choose what to keep showed each preview one click late.** The selection tool's "ready"
+  line was taken as the answer to the first click, so every later click got the previous
+  click's mask, often from another frame, where it looked shifted or rotated. Replies are now
+  matched to their click, and clicks made at the same time no longer swap masks.
+
 ### Added
 - **Choose what to keep (beta)** (`/keep`, from **What to keep → Only what I
   choose** on New run). Click the object (**Keep**) and a stand, hand or holder (**Leave out**) on a frame or

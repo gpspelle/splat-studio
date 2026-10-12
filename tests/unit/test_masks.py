@@ -76,6 +76,56 @@ class HelpersTest(TempDirTestCase):
             self.assertIsNone(masks.backend())               # not installed (HOME is a temp folder)
 
 
+FAKE_SAM2 = """#!/usr/bin/env python3
+import json, random, sys, time
+print("loading model...", flush=True)                     # library chatter
+print(json.dumps({"ready": True, "device": "cpu"}), flush=True)
+for line in sys.stdin:
+    req = json.loads(line)
+    time.sleep(random.uniform(0, 0.03))
+    print(json.dumps({"id": req["id"], "out": req["out"]}), flush=True)
+"""
+
+
+class Sam2ServerTest(TempDirTestCase):
+    """Previews talk to one SAM 2 process; every click must get its own mask back."""
+
+    def setUp(self):
+        super().setUp()
+        fake = self.tmp / "fake-sam2-python"
+        fake.write_text(FAKE_SAM2.replace("#!/usr/bin/env python3", "#!" + sys.executable))
+        fake.chmod(0o755)
+        self.env = mock.patch.dict("os.environ", {"SPLAT_STUDIO_MASK_PYTHON": str(fake)})
+        self.env.start()
+        masks.Sam2Server._inst = None
+
+    def tearDown(self):
+        if masks.Sam2Server._inst:
+            masks.Sam2Server._inst.proc.kill()
+            masks.Sam2Server._inst.proc.wait()
+        masks.Sam2Server._inst = None
+        self.env.stop()
+        super().tearDown()
+
+    def test_ready_line_is_not_an_answer(self):
+        out = masks.Sam2Server.get().preview(self.tmp / "f1.jpg", [[0.5, 0.5, 1]], self.tmp / "p" / "f1.png")
+        self.assertEqual(out, self.tmp / "p" / "f1.png")
+        out = masks.Sam2Server.get().preview(self.tmp / "f2.jpg", [[0.5, 0.5, 1]], self.tmp / "p" / "f2.png")
+        self.assertEqual(out, self.tmp / "p" / "f2.png")         # not the previous frame's mask
+
+    def test_clicks_at_the_same_time_get_their_own_masks(self):
+        import threading
+        got = {}
+        def click(i):
+            got[i] = masks.Sam2Server.get().preview(self.tmp / f"f{i}.jpg", [[0.5, 0.5, 1]], self.tmp / f"m{i}.png")
+        threads = [threading.Thread(target=click, args=(i,)) for i in range(12)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join(10)
+        self.assertEqual(got, {i: self.tmp / f"m{i}.png" for i in range(12)})
+
+
 class MakeMasksTest(TempDirTestCase):
     def setUp(self):
         super().setUp()

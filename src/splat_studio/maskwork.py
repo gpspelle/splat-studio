@@ -127,11 +127,12 @@ def propagate(job_file: str) -> None:
 
 
 def serve(ckpt: str, config: str) -> None:
-    """One-frame previews: {"frame", "points", "out"} per line -> {"out"} or {"error"}."""
+    """One-frame previews: {"id", "frame", "points", "out"} per line -> {"id", "out"} or {"id", "error"}."""
     import torch
     pred = load_predictor(ckpt, config)
     print(json.dumps({"ready": True, "device": str(device())}), flush=True)
     for line in sys.stdin:
+        req = {}
         try:
             req = json.loads(line)
             frame, out = Path(req["frame"]), Path(req["out"])
@@ -143,9 +144,10 @@ def serve(ckpt: str, config: str) -> None:
                 out.parent.mkdir(parents=True, exist_ok=True)
                 save_mask(logits, out)
                 pred.reset_state(state)
-            print(json.dumps({"out": str(out)}), flush=True)
+            print(json.dumps({"id": req.get("id"), "out": str(out)}), flush=True)
         except Exception as e:                                # report and keep serving
-            print(json.dumps({"error": f"{type(e).__name__}: {e}"}), flush=True)
+            print(json.dumps({"id": req.get("id") if isinstance(req, dict) else None,
+                              "error": f"{type(e).__name__}: {e}"}), flush=True)
 
 
 if __name__ == "__main__":

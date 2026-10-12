@@ -253,12 +253,14 @@ function edited() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(previewNow, 250);
 }
+let previewSeq = 0;
 async function previewNow() {
-  const name = frameName(), pts = pointsOn(name);
+  const name = frameName(), pts = pointsOn(name), seq = ++previewSeq;
   if (!pts.some((p) => p[2] === 1) || !info.backend) { draw(); return; }
   $("clickStatus").textContent = t("keep.previewing");
   try {
     const d = await postJSON("/api/keep/preview", { video, frame: name, points: pts });
+    if (seq !== previewSeq) return;                  // a newer click is on its way: show that one
     loadMask(name, d.mask);
   } catch (err) { toast(err.message); }
   renderStatus();
