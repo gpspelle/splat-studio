@@ -2,11 +2,9 @@
 
 ## Unreleased
 
-### Fixed
-- **Choose what to keep showed each preview one click late.** The selection tool's "ready"
-  line was taken as the answer to the first click, so every later click got the previous
-  click's mask, often from another frame, where it looked shifted or rotated. Replies are now
-  matched to their click, and clicks made at the same time no longer swap masks.
+## 0.4.0 — 2026-10-12
+
+The first published release. It includes the design system that was numbered 0.4.0 but never released.
 
 ### Added
 - **Suggested objects** ([#15](https://github.com/gpspelle/splat-studio/issues/15), beta). **Suggest
@@ -66,6 +64,16 @@
   folder, frames and other splats stay. Files a queued or running job still uses are refused
   with error code `splat_busy`.
 
+- **Design system "Instrument"** (`static/design.css`, documented in `docs/design-system.md`):
+  colour, type, spacing, shape and motion tokens, plus buttons, segmented controls, checkboxes,
+  panels, status, progress, dialogs and the viewer HUD. Used by every page and exported website.
+- **Light and dark themes.** Follows the computer's setting, with a Theme menu (System / Light / Dark)
+  remembered per browser.
+- Bundled fonts: Inter and JetBrains Mono (SIL Open Font License); still nothing loads from the internet.
+- Accessibility: WCAG 2.2 AA contrast for all text (checked by `tests/unit/test_design.py`),
+  visible keyboard focus, 24px+ targets, keyboard-operable drop zone, reduced-motion support.
+- `/api/setup` also returns the app `version` (shown next to the name).
+
 ### Changed
 - **Library pictures show the object.** Runs trained on a selection use a frame where the
   selection is large and fully in view, cropped around it with the rest blurred and darkened
@@ -103,7 +111,15 @@
   (all runs of that video together), newest first, with imported files in their own group.
   Library items have a new `video` field (the video's name, or `null` for imports).
 
+- New look for the Studio page, viewer and comparison page. Element ids, test ids and all
+  behaviour are unchanged. Exported websites now also contain `design.css` and `fonts/`.
+
 ### Fixed
+- **Choose what to keep showed each preview one click late.** The selection tool's "ready"
+  line was taken as the answer to the first click, so every later click got the previous
+  click's mask, often from another frame, where it looked shifted or rotated. Replies are now
+  matched to their click, and clicks made at the same time no longer swap masks.
+
 - **Time left is measured, and covers the whole run.** The old figures only covered part of
   the run (COLMAP alone, or Brush's own guess during training), started from built-in M1
   defaults, averaged speed since the step began, and said "0s" while COLMAP was still
@@ -119,23 +135,6 @@
 - Jobs have new fields `eta_total` and `eta_note`; `eta` now holds this step's measured time
   left ("3 min"), and `eta_worst` is no longer filled. Each job also writes `timeline.jsonl`
   (progress with timestamps) next to its log, to check estimates against.
-
-## 0.4.0
-
-### Added
-- **Design system "Instrument"** (`static/design.css`, documented in `docs/design-system.md`):
-  colour, type, spacing, shape and motion tokens, plus buttons, segmented controls, checkboxes,
-  panels, status, progress, dialogs and the viewer HUD. Used by every page and exported website.
-- **Light and dark themes.** Follows the computer's setting, with a Theme menu (System / Light / Dark)
-  remembered per browser.
-- Bundled fonts: Inter and JetBrains Mono (SIL Open Font License); still nothing loads from the internet.
-- Accessibility: WCAG 2.2 AA contrast for all text (checked by `tests/unit/test_design.py`),
-  visible keyboard focus, 24px+ targets, keyboard-operable drop zone, reduced-motion support.
-- `/api/setup` also returns the app `version` (shown next to the name).
-
-### Changed
-- New look for the Studio page, viewer and comparison page. Element ids, test ids and all
-  behaviour are unchanged. Exported websites now also contain `design.css` and `fonts/`.
 
 ## 0.3.0
 

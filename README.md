@@ -51,6 +51,9 @@ cd splat-studio
 ./splat-studio setup
 ```
 
+Or download a stable version from [Releases](https://github.com/gpspelle/splat-studio/releases/latest)
+(the latest is v0.4.0), unzip it, and run `./splat-studio setup` inside.
+
 `setup` checks what's missing and installs it. It may open a macOS window to install the
 Xcode command-line tools, and ask for your Mac password to install Homebrew. Then it downloads
 and builds Brush, which takes 10–30 minutes, once. Run `./splat-studio check` at any time to
@@ -416,6 +419,8 @@ cd splat-studio
 ./splat-studio setup      # instala o que falta e compila o Brush (uma vez)
 ./splat-studio            # abre o app no navegador
 ```
+
+Versões estáveis ficam em [Releases](https://github.com/gpspelle/splat-studio/releases/latest).
 
 Para gravar bem: **uma gravação contínua com 3 voltas** ao redor do objeto (baixa, média, alta),
 andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× sem zoom; objeto fosco
