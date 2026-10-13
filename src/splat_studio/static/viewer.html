@@ -33,6 +33,13 @@
   .cov-map[hidden] { display: none; }
   .cov-map .hud-sub { white-space: normal; }
   .cov-map .warn { color: var(--signal); }
+  .cov-globe { position: relative; width: 100%; aspect-ratio: 1; }
+  .cov-globe canvas { display: block; width: 100% !important; height: 100% !important; }
+  /* the middle of the globe is your point of view */
+  .cov-globe::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    border: 2px solid var(--signal); border-radius: 50%; pointer-events: none; }
+  .cov-key { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cov-key i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
   @media (max-width: 640px) { .cov-map { width: 128px; top: calc(var(--s-2) + 60px); left: var(--s-2); } }
   .app-only { display: none !important; }
   body.app .app-only { display: flex !important; }
@@ -89,7 +96,8 @@
 
 <div id="covMap" class="cov-map hud-chip pad" hidden data-testid="cov-map">
   <div class="hud-sub"><b data-i18n="viewer.coverage">Coverage</b> <span id="covWho"></span></div>
-  <svg id="covSvg" viewBox="0 0 80 80" width="100%" role="img" data-i18n-aria-label="viewer.coverage.title"></svg>
+  <div class="cov-globe" id="covGlobe" role="img" data-i18n-aria-label="viewer.coverage.title"></div>
+  <div class="hud-sub cov-key"><span><i id="covKeyOk"></i><span data-i18n="viewer.coverage.filmed">filmed</span></span><span><i id="covKeyBad"></i><span data-i18n="viewer.coverage.missed">missed</span></span></div>
   <div class="hud-sub" id="covNote" data-testid="cov-note"></div>
 </div>
 
@@ -179,69 +187,99 @@ addEventListener("resize", () => {
 });
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); updateCoverage(); });
 
-// ---------------------------------------------------------------- coverage map (#26)
-// Where the cameras were around the object, seen from above (as on the run card), with a marker
-// for where you're looking from: a side with few cameras is usually where the model looks thin.
-let cov = null, covAz = null;
-const COV = { R: 30, c: 40 };
-const covPt = (az, r) => [COV.c + r * Math.cos(az * Math.PI / 180), COV.c - r * Math.sin(az * Math.PI / 180)];
-function drawCoverage() {
-  const c = cov.coverage, { R } = COV, els = c.elevations || [];
-  const lo = Math.min(...els), span = Math.max(1, Math.max(...els) - lo);
-  const dots = (c.azimuths || []).map((az, i) => { const [x, y] = covPt(az, R - 10 * ((els[i] ?? lo) - lo) / span);
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.4" style="fill:var(--hud-ink-2)"/>`; }).join("");
-  const g = c.gap || {};
-  let arc = "";
-  if ((g.degrees || 0) > 60) {
-    const [x1, y1] = covPt(g.from, R + 4), [x2, y2] = covPt(g.to, R + 4);
-    arc = `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${g.degrees > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round"/>`;
+// ---------------------------------------------------------------- coverage globe (#28)
+// Where the recording cameras were, as a small globe that turns with your view: each camera is a
+// dot, the surface is shaded by how close the nearest camera came (red where none did), and the
+// side facing you is the side of the model you're looking at. It uses the model's own coordinates
+// and orientation, so it follows dragging, auto-rotate, Flip and Tilt alike.
+let cov = null, covGlobe = null;
+const GAP_DEG = 30;                        // no camera within this angle: a side the cameras missed
+function cssColor(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return new THREE.Color(v || fallback);
+}
+function buildGlobe() {
+  const dirs = (cov.coverage.dirs || []).map((d) => new THREE.Vector3(...d).normalize());
+  const box = $("covGlobe");
+  if (covGlobe) { covGlobe.renderer.dispose(); box.innerHTML = ""; }
+  const size = Math.round(box.clientWidth || 140);
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  r.setPixelRatio(Math.min(devicePixelRatio, 2)); r.setSize(size, size, false);
+  box.appendChild(r.domElement);
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
+  const group = new THREE.Group(); sc.add(group);
+  // the HUD is always dark: the dark theme's status colours, whatever the page theme
+  const ok = new THREE.Color("#3ccf7d"), warn = new THREE.Color("#e0a43a"), bad = new THREE.Color("#ff6b5e");
+  $("covKeyOk").style.background = "#" + ok.getHexString(); $("covKeyBad").style.background = "#" + bad.getHexString();
+  // the surface: each point coloured by the angle to the nearest camera
+  const geo = new THREE.IcosahedronGeometry(1, 5), pos = geo.attributes.position, cols = new Float32Array(pos.count * 3);
+  const v = new THREE.Vector3(), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    let best = -1;
+    for (const d of dirs) { const dot = v.dot(d); if (dot > best) best = dot; }
+    const deg = Math.acos(Math.min(1, best)) * 180 / Math.PI;
+    if (deg <= 12) c.copy(ok); else if (deg <= GAP_DEG) c.copy(ok).lerp(warn, (deg - 12) / (GAP_DEG - 12)); else c.copy(warn).lerp(bad, Math.min(1, (deg - GAP_DEG) / 15));
+    cols.set([c.r, c.g, c.b], i * 3);
   }
-  $("covSvg").innerHTML = `<circle cx="${COV.c}" cy="${COV.c}" r="${R}" style="fill:none;stroke:var(--hud-rule)"/>${arc}${dots}
-    <circle cx="${COV.c}" cy="${COV.c}" r="2.5" style="fill:var(--hud-ink)"/>
-    <g id="covYou" data-testid="cov-you"><line id="covLine" style="stroke:var(--signal);stroke-width:1.2;stroke-dasharray:2 2"/>
-      <path id="covArrow" style="fill:var(--signal);stroke:var(--canvas);stroke-width:.8"/></g>`;
+  geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })));
+  // the cameras, just outside the surface
+  const pts = new THREE.BufferGeometry().setFromPoints(dirs.map((d) => d.clone().multiplyScalar(1.04)));
+  group.add(new THREE.Points(pts, new THREE.PointsMaterial({ color: cssColor("--hud-ink", "#efede7"), size: 2.2, sizeAttenuation: false })));
+  // an outline so the globe reads as a ball
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.001, 1)),
+    new THREE.LineBasicMaterial({ color: cssColor("--hud-ink-2", "#a8a49b"), transparent: true, opacity: 0.15 })));
+  covGlobe = { renderer: r, scene: sc, camera: cam, group, dirs };
   $("covWho").textContent = cov.object ? "· " + cov.object : "";
 }
-function viewAzimuth() {
-  const b = cov.coverage.basis; if (!b || !holder) return null;
-  const p = holder.worldToLocal(camera.position.clone()).toArray();         // the camera, in the model's own coordinates
-  const v = p.map((x, i) => x - b.target[i]), h = v.reduce((a, x, i) => a + x * b.up[i], 0);
-  const flat = v.map((x, i) => x - h * b.up[i]);
-  const d = (u) => flat.reduce((a, x, i) => a + x * u[i], 0);
-  return ((Math.atan2(d(b.e2), d(b.e1)) * 180 / Math.PI) + 360) % 360;
+const covTmp = { a: new THREE.Vector3(), b: new THREE.Vector3() };
+let covState = null;
+function viewDirection() {
+  // from the model's centre towards you, in the model's own coordinates
+  const p = holder.worldToLocal(covTmp.a.copy(camera.position));
+  const tgt = holder.worldToLocal(covTmp.b.copy(controls.target));
+  return p.sub(tgt).normalize();
 }
 function updateCoverage() {
-  if (!cov || $("covMap").hidden) return;
-  const az = viewAzimuth();
-  if (az == null || (covAz != null && Math.abs(((az - covAz + 540) % 360) - 180) < 0.5)) return;
-  covAz = az;
-  const { R } = COV, [x, y] = covPt(az, R + 9), [ix, iy] = covPt(az, R - 2);
-  const n = [(COV.c - x), (COV.c - y)], L = Math.hypot(...n) || 1, u = [n[0] / L, n[1] / L], s = [-u[1], u[0]];
-  $("covArrow").setAttribute("d", `M${(x + u[0] * 7).toFixed(1)} ${(y + u[1] * 7).toFixed(1)}L${(x + s[0] * 4).toFixed(1)} ${(y + s[1] * 4).toFixed(1)}L${(x - s[0] * 4).toFixed(1)} ${(y - s[1] * 4).toFixed(1)}Z`);
-  const line = $("covLine");
-  line.setAttribute("x1", ix.toFixed(1)); line.setAttribute("y1", iy.toFixed(1)); line.setAttribute("x2", COV.c); line.setAttribute("y2", COV.c);
-  const g = cov.coverage.gap || {}, inGap = (g.degrees || 0) > 60 && ((az - g.from + 360) % 360) < g.degrees;
-  $("covNote").className = "hud-sub" + (inGap ? " warn" : "");
-  $("covNote").textContent = inGap ? t("viewer.coverage.gap") : t("viewer.coverage.ok");
-  $("covMap").dataset.view = inGap ? "gap" : "ok";
+  if (!cov || !covGlobe || $("covMap").hidden) return;
+  const g = covGlobe;
+  // the globe turns like the model, and is seen from where you are
+  g.group.quaternion.copy(holder.quaternion);
+  g.camera.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(4.2);
+  g.camera.up.copy(camera.up); g.camera.lookAt(0, 0, 0);
+  g.renderer.render(g.scene, g.camera);
+  const d = viewDirection();
+  let best = -1;
+  for (const c of g.dirs) { const dot = d.dot(c); if (dot > best) best = dot; }
+  const deg = Math.round(Math.acos(Math.min(1, best)) * 180 / Math.PI);
+  const state = deg > GAP_DEG ? "gap" : "ok";
+  if (state !== covState?.state || deg !== covState?.deg) {
+    covState = { state, deg };
+    $("covNote").className = "hud-sub" + (state === "gap" ? " warn" : "");
+    $("covNote").textContent = state === "gap" ? t("viewer.coverage.gap") : t("viewer.coverage.ok");
+    $("covMap").dataset.view = state;
+  }
 }
 async function loadCoverage() {
   if (!appMode) return;
   const d = await fetch("/api/coverage?" + new URLSearchParams({ file: cfg.file })).then((r) => r.json()).catch(() => null);
-  if (!d || !d.coverage || !d.coverage.azimuths) return;
+  if (!d || !d.coverage || !(d.coverage.dirs || []).length) return;
   cov = d;
-  drawCoverage();
   $("covBtn").hidden = false;
   const on = store.get("viewer:coverage") !== false;
   $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
-  covAz = null; updateCoverage();
+  if (on) buildGlobe();
+  covState = null; updateCoverage();
 }
 $("covBtn").onclick = () => {
   const on = $("covMap").hidden;
   $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
-  store.set("viewer:coverage", on); covAz = null; updateCoverage();
+  store.set("viewer:coverage", on);
+  if (on && !covGlobe) buildGlobe();
+  covState = null; updateCoverage();
 };
-addEventListener("langchange", () => { covAz = null; updateCoverage(); });
+addEventListener("langchange", () => { covState = null; updateCoverage(); });
 
 // ---------------------------------------------------------------- loading
 async function fetchWithProgress(url) {
@@ -370,7 +408,7 @@ async function main() {
       camera.position.copy(controls.target).add(off); controls.update();
     },
     turntable: (opts) => recordTurntable(opts),
-    coverageView: () => (cov ? { az: covAz, view: $("covMap").dataset.view || null, object: cov.object } : null),
+    coverageView: () => (cov ? { view: $("covMap").dataset.view || null, nearest: covState?.deg ?? null, object: cov.object } : null),
   };
   updateStats();
   $("overlay").style.display = "none";

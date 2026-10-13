@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+- **The viewer's coverage is a 3D globe** ([#28](https://github.com/gpspelle/splat-studio/issues/28)).
+  The flat ring's marker drifted: it measured from a different centre than the viewer turns around,
+  used a different "up", and ignored height. The globe turns with the view (dragging, auto-rotate,
+  Flip, Tilt): cameras are dots, the surface is green near them and red where none came within 30°,
+  and the side facing you is the side you're looking at. `coverage.json` stores each camera's
+  direction from the centre (`dirs`); older runs are measured again when first opened.
+
 ### Added
 - **Coverage per object, and in the viewer** ([#26](https://github.com/gpspelle/splat-studio/issues/26)).
   With several objects, each gets its own coverage ring, measured around the object's own centre
