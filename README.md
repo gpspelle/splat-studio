@@ -228,7 +228,10 @@ measures it on a finished run. It times COLMAP with smaller features, fewer neig
 frames at regular steps, so one run shows how quality grows with time; then once more at a lower
 training resolution. It writes a table to `bench/report.md` in the run folder and never touches the
 run's own splats. `--only colmap` takes minutes; the Brush part takes about as long as two
-trainings. See [docs/how-it-works.md](docs/how-it-works.md#benchmark).
+trainings. Runs started in the app live in `~/SplatStudio/workspace/<video>/` (the video's file name
+without its extension; `ls ~/SplatStudio/workspace` lists them), so for those use
+`./splat-studio bench ~/SplatStudio/workspace/IMG_1234/latest`.
+See [docs/how-it-works.md](docs/how-it-works.md#benchmark).
 
 ## Removing background fog
 
@@ -482,6 +485,8 @@ Para saber quanto tempo cada configuração leva no seu computador, use
 imagens menores, menos quadros vizinhos e (no COLMAP 4 ou mais novo) o mapeador global, e treina com
 o Brush medindo a qualidade em quadros separados ao longo do treino, e de novo numa resolução menor.
 A tabela fica em `bench/report.md` na pasta da execução; os splats da execução não são alterados.
+Execuções iniciadas no app ficam em `~/SplatStudio/workspace/<vídeo>/` (o nome do arquivo do vídeo
+sem a extensão), por exemplo `./splat-studio bench ~/SplatStudio/workspace/IMG_1234/latest`.
 
 Execuções terminadas viram uma linha só no Estúdio (com o erro, se houver) e as mais antigas
 vão para a página **Histórico**, agrupadas por dia, com busca e filtro. **Tirar da lista** apaga
