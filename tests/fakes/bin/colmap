@@ -5,6 +5,7 @@ Prints the same kinds of progress lines as real COLMAP and writes the minimal ou
 the pipeline reads. Behaviour knobs (environment variables):
   FAKE_COLMAP_REGISTER  fraction of frames the mapper registers (default 1.0)
   FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
+  FAKE_COLMAP_GLOBAL    "0": pretend to be COLMAP 3.x (no global_mapper)
   FAKE_COLMAP_POSES     "full" or "gap": write real camera poses walking around the object
                         (all the way round, or skipping a 130-degree side); default: none
 """
@@ -16,6 +17,11 @@ import sys
 import time
 
 cmd, args = sys.argv[1], sys.argv[2:]
+if cmd == "help":
+    print("Usage:\n  colmap [command] [options]\n\nAvailable commands:\n  feature_extractor\n"
+          + ("  global_mapper\n" if os.environ.get("FAKE_COLMAP_GLOBAL", "1") == "1" else "")
+          + "  mapper\n  sequential_matcher")
+    sys.exit(0)
 
 
 def opt(k):
@@ -79,7 +85,7 @@ elif cmd == "exhaustive_matcher":
         for y in range(1, b + 1):
             print(f"I1011 pairing.cc:214] Processing block [{x}/{b}, {y}/{b}]", flush=True)
             time.sleep(DELAY)
-elif cmd == "mapper":
+elif cmd in ("mapper", "global_mapper"):
     names, out = images(), opt("--output_path")
     keep = names[: int(round(len(names) * REGISTER))]
     # a gap in the middle when not everything registers, like a real broken track
@@ -88,7 +94,8 @@ elif cmd == "mapper":
         mid = len(names) // 2
         keep = names[:mid - k // 2] + names[mid - k // 2 + k:]
     for i, _ in enumerate(keep, 1):
-        print(f"I1011 incremental_mapper.cc:620] Registering image #{i} ({i})", flush=True)
+        print(f"I1011 incremental_mapper.cc:620] Registering image #{i} ({i})" if cmd == "mapper"
+              else f"I1011 global_mapper.cc:88] Positioning image {i}", flush=True)
         time.sleep(DELAY)
     os.makedirs(os.path.join(out, "0"))
     open(os.path.join(out, "0", "registered.txt"), "w").write("\n".join(keep))

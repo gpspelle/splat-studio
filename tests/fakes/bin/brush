@@ -35,6 +35,7 @@ iters = int(opts.get("--total-train-iters", 30000))
 delay = float(os.environ.get("FAKE_BRUSH_DELAY", "0.01"))
 print("[INFO  brush_cli] Compute backend: Metal (fake)", flush=True)
 lines = int(os.environ.get("FAKE_BRUSH_LINES", "10"))
+evaluated = 0
 for k, step in enumerate(range(0, iters + 1, max(1, iters // lines))):
     done = int(40 * step / iters)
     if k % 2 == 0:                                   # Brush's stats spinner (redrawn in place)
@@ -42,6 +43,13 @@ for k, step in enumerate(range(0, iters + 1, max(1, iters // lines))):
               flush=True)
     print(f"\r[00:00:0{step * 9 // iters}] {'◍' * done}{'○' * (40 - done)} {step:>7}/{iters:<7} Steps "
           f"({iters / 6:.1f}/s, {(iters - step) / iters * 6:.0f}s remaining)", end="", flush=True)
+    if "--eval-every" in opts and "--eval-split-every" in opts:      # like Brush: at multiples, and at the end
+        every = int(opts["--eval-every"])
+        for e in [x for x in range(every, step + 1, every) if x > evaluated] + ([iters] if step == iters else []):
+            if e > evaluated:
+                print(f"\n[INFO  brush_cli] Eval iter {e}: PSNR {20 + 8 * e / iters:.4f}, ssim {0.6 + 0.3 * e / iters:.4f}",
+                      flush=True)
+                evaluated = e
     time.sleep(delay)
 print()
 out = src.parent / opts.get("--export-path", "./{dataset}_exports/").replace("{dataset}", src.name)

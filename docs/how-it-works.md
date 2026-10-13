@@ -236,3 +236,24 @@ Server-side advice and errors carry codes and parameters, so they're translated 
   pipeline, the HTTP API with real jobs, and the UI in a headless browser.
 
 Real COLMAP and Brush are not run in CI: that would need a GPU and a long time per test.
+
+## Benchmark
+
+`splat-studio bench RUN` (`splat_studio/bench.py`) measures settings on a finished run, on the
+computer it runs on, without changing the run's results:
+
+- **COLMAP**: five variants run from scratch on the run's prepared images (`RUN/images`), each in
+  `RUN/bench/colmap/<variant>/`: the current settings (1600 px, 8192 SIFT features, 15 neighbours,
+  incremental mapper), smaller features (1024 px, 4096), fewer pairs (8 neighbours), and the global
+  mapper (`colmap global_mapper`, COLMAP 4.0+; skipped on older versions). Variants with the same
+  features copy the extracted database instead of extracting again. Each reports seconds for
+  extraction, matching and mapping, frames placed in the largest model and its mean reprojection
+  error (`colmap model_analyzer`).
+- **Brush**: the run's own settings (`choose_brush_params`) plus `--eval-split-every 10` and
+  `--eval-every steps/6`, exporting to `RUN/bench/brush/`. Brush prints
+  `Eval iter N: PSNR x, ssim y` for the held-out frames; the time each line arrives gives a
+  quality-over-time curve from a single training. A second training at `--max-resolution 1024`
+  runs when the images are larger than that.
+
+Results go to `RUN/bench/results.json` and a Markdown table in `RUN/bench/report.md`.
+
