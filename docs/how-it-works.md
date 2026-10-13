@@ -60,7 +60,8 @@ neighbouring cameras over 60°, or a spread under 15° between the 10th and 90th
 heights, is a warning; the frames on either side of the gap give the moment in the video. The
 run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`. The basis
 (centre, up and two axes) and each camera's direction from the centre (`dirs`, model coordinates)
-are saved with it. The viewer draws a small globe in a second WebGL canvas: an icosphere whose
+are saved with it. The viewer draws a small globe in a second WebGL canvas: a solid icosphere (so the cameras and
+colours on the far side stay hidden) whose
 vertices are coloured by the angle to the nearest camera direction (green up to 12°, amber to 30°,
 red beyond), the cameras as points, all rotated by the model's orientation and seen from the main
 camera's direction. The note uses the same angle for your current view direction.

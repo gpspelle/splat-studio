@@ -232,9 +232,9 @@ function buildGlobe() {
     cols.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })));
-  // the cameras, just outside the surface
-  const pts = new THREE.BufferGeometry().setFromPoints(dirs.map((d) => d.clone().multiplyScalar(1.04)));
+  group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true })));
+  // the cameras, just above the surface: the solid ball hides the ones on the far side
+  const pts = new THREE.BufferGeometry().setFromPoints(dirs.map((d) => d.clone().multiplyScalar(1.012)));
   group.add(new THREE.Points(pts, new THREE.PointsMaterial({ color: cssColor("--hud-ink", "#efede7"), size: 2.2, sizeAttenuation: false })));
   // an outline so the globe reads as a ball
   group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.001, 1)),

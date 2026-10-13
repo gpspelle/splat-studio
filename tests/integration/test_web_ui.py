@@ -390,6 +390,12 @@ class WebUiTest(BrowserTestCase):
         self.page.get_by_test_id("cov-toggle").click()
         cmap.wait_for(state="visible")
         self.shot("viewer-coverage")
+        for _ in range(24):                                              # face the side nobody filmed
+            if self.page.evaluate("window.splatViewer.coverageView().view") == "gap":
+                break
+            self.page.evaluate("window.splatViewer.orbit(15)")
+            self.page.wait_for_timeout(60)
+        self.shot("viewer-coverage-gap")                                 # solid ball: no dots from the far side
         # a run from before the globe is measured again: a spinner meanwhile, then the globe (#30)
         import json, threading
         from unittest import mock

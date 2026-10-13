@@ -16,6 +16,8 @@
   it couldn't be measured.
 
 ### Changed
+- **The coverage globe is solid.** From the side nobody filmed, the camera dots on the far side no
+  longer show through the red.
 - **The viewer's coverage is a 3D globe** ([#28](https://github.com/gpspelle/splat-studio/issues/28)).
   The flat ring's marker drifted: it measured from a different centre than the viewer turns around,
   used a different "up", and ignored height. The globe turns with the view (dragging, auto-rotate,
