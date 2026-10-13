@@ -409,3 +409,41 @@ class CoverageTest(ServerTestCase):
         done = self.run_with("full")
         self.assertEqual([a["code"] for a in done["coverage_advice"]], ["run.coverage_ok"])
         self.assertNotIn("run.coverage_gap_at", [a["code"] for a in done["advice"]])
+
+    def test_older_runs_are_measured_in_the_background(self):
+        """A run saved before the globe is measured again without holding up the request (#30)."""
+        from unittest import mock
+        from splat_studio import coverage
+        from splat_studio.server import app
+        done = self.run_with("full")
+        f = self.data.root / done["run_dir"] / "coverage.json"
+        old = json.loads(f.read_text())
+        f.write_text(json.dumps({k: v for k, v in old.items() if k not in ("basis", "dirs")}))
+        go, real = threading.Event(), coverage.for_run
+
+        def slow(*a, **k):
+            go.wait(20)
+            return real(*a, **k)
+        url = "/api/coverage?" + urlencode({"file": done["splat"]})
+        with mock.patch.object(coverage, "for_run", slow), mock.patch.object(app, "COVERAGE_WAIT", 0.2):
+            t0 = time.time()
+            _, c = self.json("GET", url)
+            self.assertLess(time.time() - t0, 5)
+            self.assertEqual(c, {"coverage": None, "status": "computing"})
+            _, again = self.json("GET", url)                     # asking again doesn't start a second one
+            self.assertEqual(again["status"], "computing")
+            go.set()
+            for _ in range(50):
+                _, c = self.json("GET", url)
+                if c["coverage"]:
+                    break
+                time.sleep(0.1)
+        self.assertEqual(len(c["coverage"]["dirs"]), old["cameras"])
+        self.assertNotIn("status", c)
+        self.assertIn("dirs", json.loads(f.read_text()))         # saved: next time it's instant
+
+        # measuring that breaks says so, rather than leaving the viewer waiting
+        f.write_text("{}")
+        with mock.patch.object(coverage, "for_run", side_effect=ValueError("boom")):
+            _, c = self.json("GET", url)
+        self.assertEqual(c, {"coverage": None, "status": "failed"})

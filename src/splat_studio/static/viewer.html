@@ -34,6 +34,14 @@
   .cov-map .hud-sub { white-space: normal; }
   .cov-map .warn { color: var(--signal); }
   .cov-globe { position: relative; width: 100%; aspect-ratio: 1; }
+  .cov-wait { display: none; align-items: center; justify-content: center; gap: var(--s-2); width: 100%; aspect-ratio: 1; text-align: center; }
+  .cov-map[data-state="loading"] .cov-wait, .cov-map[data-state="failed"] .cov-wait { display: flex; flex-direction: column; }
+  .cov-map:not([data-state="ready"]) .cov-globe, .cov-map:not([data-state="ready"]) .cov-key { display: none; }
+  .cov-map[data-state="failed"] .spin { display: none; }
+  .spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--hud-ink-2) 35%, transparent);
+    border-top-color: var(--signal); animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
   .cov-globe canvas { display: block; width: 100% !important; height: 100% !important; }
   /* the middle of the globe is your point of view */
   .cov-globe::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
@@ -96,6 +104,7 @@
 
 <div id="covMap" class="cov-map hud-chip pad" hidden data-testid="cov-map">
   <div class="hud-sub"><b data-i18n="viewer.coverage">Coverage</b> <span id="covWho"></span></div>
+  <div class="cov-wait hud-sub" id="covWait" role="status" data-testid="cov-loading"><span class="spin" aria-hidden="true"></span><span id="covWaitText"></span></div>
   <div class="cov-globe" id="covGlobe" role="img" data-i18n-aria-label="viewer.coverage.title"></div>
   <div class="hud-sub cov-key"><span><i id="covKeyOk"></i><span data-i18n="viewer.coverage.filmed">filmed</span></span><span><i id="covKeyBad"></i><span data-i18n="viewer.coverage.missed">missed</span></span></div>
   <div class="hud-sub" id="covNote" data-testid="cov-note"></div>
@@ -261,25 +270,56 @@ function updateCoverage() {
     $("covMap").dataset.view = state;
   }
 }
-async function loadCoverage() {
-  if (!appMode) return;
-  const d = await fetch("/api/coverage?" + new URLSearchParams({ file: cfg.file })).then((r) => r.json()).catch(() => null);
-  if (!d || !d.coverage || !(d.coverage.dirs || []).length) return;
-  cov = d;
+// Older runs are measured again on first view, which can take a while with several objects:
+// the panel shows a spinner meanwhile and asks again until it's ready (#30).
+let covAsk = null;
+function askCoverage() {
+  return fetch("/api/coverage?" + new URLSearchParams({ file: cfg.file }))
+    .then((r) => (r.ok ? r.json() : { coverage: null, status: "failed" })).catch(() => ({ coverage: null, status: "failed" }));
+}
+function coverageState(state) {
+  $("covMap").dataset.state = state;
+  if (state === "loading") $("covWaitText").textContent = t("viewer.coverage.loading");
+  if (state === "failed") $("covWaitText").textContent = t("viewer.coverage.failed");
+  if (state !== "ready") { $("covNote").textContent = ""; $("covWho").textContent = ""; }
+}
+function showCoveragePanel() {
   $("covBtn").hidden = false;
   const on = store.get("viewer:coverage") !== false;
   $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
-  if (on) buildGlobe();
+  return on;
+}
+async function loadCoverage() {
+  if (!appMode) return;
+  let d = await (covAsk || askCoverage());
+  if (d.status === "computing") {
+    showCoveragePanel(); coverageState("loading");
+    while (d.status === "computing") {
+      await new Promise((r) => setTimeout(r, 1500));
+      d = await askCoverage();
+    }
+  }
+  if (!d.coverage || !(d.coverage.dirs || []).length) {
+    if (d.status === "failed" && !$("covBtn").hidden) coverageState("failed");
+    return;                                                   // nothing to show (no camera poses)
+  }
+  cov = d;
+  coverageState("ready");
+  if (showCoveragePanel()) buildGlobe();
   covState = null; updateCoverage();
 }
 $("covBtn").onclick = () => {
   const on = $("covMap").hidden;
   $("covMap").hidden = !on; $("covBtn").classList.toggle("on", on);
   store.set("viewer:coverage", on);
-  if (on && !covGlobe) buildGlobe();
+  if (on && cov && !covGlobe) buildGlobe();
   covState = null; updateCoverage();
 };
-addEventListener("langchange", () => { covState = null; updateCoverage(); });
+addEventListener("langchange", () => {
+  const st = $("covMap").dataset.state;
+  if (st && st !== "ready") coverageState(st);
+  covState = null; updateCoverage();
+});
 
 // ---------------------------------------------------------------- loading
 async function fetchWithProgress(url) {
@@ -378,6 +418,7 @@ function updateStats() {
 
 async function main() {
   cfg = await loadConfig();
+  if (appMode) covAsk = askCoverage();          // measuring may take a while: start alongside the splat
   document.title = cfg.title + " – Splat Viewer";
   $("title").removeAttribute("data-i18n");
   $("title").textContent = cfg.title;

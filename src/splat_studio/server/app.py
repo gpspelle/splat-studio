@@ -7,7 +7,8 @@ Routes
   GET  /api/jobs                 runs (UI jobs + command-line runs), newest first
   GET  /api/jobs/<id>/log        terminal log of a job
   GET  /api/splats               splat library          GET  /api/videos         uploaded videos (+ advice)
-  GET  /api/coverage?file=       where the cameras were, for a splat's run (its object's, for an object splat)
+  GET  /api/coverage?file=       where the cameras were, for a splat's run (its object's, for an object splat);
+                                 {status: computing} while an older run is measured again
   GET  /api/setup                dependency status      GET  /api/export?file=   viewer website (zip)
   GET  /compare?a=...&b=...      two splats side by side GET  /api/export-compare?a=&b=  comparison website (zip)
   POST /api/upload               raw video body, X-Filename header -> {video, advice}
@@ -56,8 +57,17 @@ def frames_info(data: DataDir, video: str) -> dict:
             "backend": masksmod.backend()}
 
 
-def coverage_for(data: DataDir, file: str) -> dict:
-    """Coverage of the run a splat came from; an object's own coverage for one object's splat."""
+_coverage_lock = threading.Lock()
+_coverage_jobs: dict[str, threading.Thread] = {}      # run folder -> the measuring in progress
+COVERAGE_WAIT = 1.5                                   # seconds a request waits before answering "computing"
+
+
+def coverage_for(data: DataDir, file: str, wait: float | None = None) -> dict:
+    """Coverage of the run a splat came from; an object's own coverage for one object's splat.
+
+    Runs made before the viewer's globe have to be measured again, which can take a while with
+    several objects. That happens in the background: if it isn't done within `wait` seconds the
+    answer is {"coverage": None, "status": "computing"} and the viewer asks again (#30)."""
     from .. import coverage
     from ..objects import slug
     f = data.library_splat(file)
@@ -65,11 +75,33 @@ def coverage_for(data: DataDir, file: str) -> dict:
     if not run:
         return {"coverage": None}
     rd = data.root / run
-    frames = data.frames / (data.frames_name(run_dir=run) or "")
-    split = any((rd / "splat").glob("*_part-*.ply"))           # several objects were chosen for this run
-    cov = coverage.load(rd, frames if split else None)
+    cov = coverage.saved(rd)
     if not cov:
-        return {"coverage": None}
+        if not coverage.has_poses(rd):
+            return {"coverage": None}
+        frames = data.frames / (data.frames_name(run_dir=run) or "")
+        split = any((rd / "splat").glob("*_part-*.ply"))       # several objects were chosen for this run
+        key = str(rd)
+        with _coverage_lock:
+            th = _coverage_jobs.get(key)
+            if th is None:
+                def work():
+                    try:
+                        coverage.load(rd, frames if split else None)
+                    except Exception as e:                      # noqa: BLE001 - reported as "failed" below
+                        if not os.environ.get("SPLAT_STUDIO_QUIET"):
+                            print(f"coverage of {run} failed: {e}", file=sys.stderr)
+                    finally:
+                        with _coverage_lock:
+                            _coverage_jobs.pop(key, None)
+                th = _coverage_jobs[key] = threading.Thread(target=work, daemon=True, name=f"coverage-{run}")
+                th.start()
+        th.join(COVERAGE_WAIT if wait is None else wait)
+        if th.is_alive():
+            return {"coverage": None, "status": "computing"}
+        cov = coverage.saved(rd)
+        if not cov:
+            return {"coverage": None, "status": "failed"}
     m = re.search(r"_part-(.+)$", f.stem)
     if m:
         for o in cov.get("objects", []):
