@@ -65,6 +65,12 @@ vertices are coloured by the angle to the nearest camera direction (green up to 
 red beyond), the cameras as points, all rotated by the model's orientation and seen from the main
 camera's direction. The note uses the same angle for your current view direction.
 
+Runs saved before `dirs` existed are measured again on first view. `GET /api/coverage` does that
+in a background thread (one per run) and waits up to 1.5 s; if it isn't done it answers
+`{"status": "computing"}`, and the viewer shows a spinner and asks again every 1.5 s until the
+coverage arrives (or `"status": "failed"`, shown as a short note). The viewer asks as soon as it
+knows the file, alongside loading the splat.
+
 With several objects, each object's centre is where the rays through its mask centres meet
 (least squares over ~90 sampled frames), and only the frames where its mask covers at least 0.2%
 of the frame count, so occlusion by another object shows up as a gap. All rings share one basis.

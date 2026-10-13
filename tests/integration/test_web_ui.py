@@ -390,6 +390,24 @@ class WebUiTest(BrowserTestCase):
         self.page.get_by_test_id("cov-toggle").click()
         cmap.wait_for(state="visible")
         self.shot("viewer-coverage")
+        # a run from before the globe is measured again: a spinner meanwhile, then the globe (#30)
+        import json, threading
+        from unittest import mock
+        from splat_studio import coverage
+        f = next(self.data.workspace.glob("*/run_*/coverage.json"))
+        f.write_text(json.dumps({k: v for k, v in json.loads(f.read_text()).items() if k != "dirs"}))
+        go, real = threading.Event(), coverage.for_run
+        with mock.patch.object(coverage, "for_run", lambda *a, **k: (go.wait(30), real(*a, **k))[1]):
+            self.page.reload()
+            wait = self.page.get_by_test_id("cov-loading")
+            wait.wait_for(state="visible", timeout=20000)
+            self.assertIn("Measuring coverage", wait.text_content())
+            self.assertIsNone(self.page.evaluate("window.splatViewer.coverageView()"))
+            self.shot("viewer-coverage-loading")
+            go.set()
+            self.page.wait_for_function("window.splatViewer.coverageView()?.view", timeout=20000)
+        self.assertTrue(wait.is_hidden())
+        self.assertTrue(self.page.locator("#covGlobe canvas").is_visible())
         self.assertEqual(self.errors, [])
 
     def test_batch_of_videos_and_saved_defaults(self):

@@ -197,16 +197,28 @@ def for_run(run_dir: Path, frames_dir: Path | None = None) -> dict | None:
     return None
 
 
+def has_poses(run_dir: Path) -> bool:
+    """Whether COLMAP placed cameras for this run (there's something to measure)."""
+    return any(p.exists() and p.stat().st_size > 8
+               for p in (Path(run_dir) / "dense" / "sparse" / "0" / "images.bin", Path(run_dir) / "sparse" / "0" / "images.bin"))
+
+
+def saved(run_dir: Path) -> dict | None:
+    """coverage.json of a run if it's up to date (has the basis and camera directions), else None."""
+    try:
+        cov = json.loads((Path(run_dir) / "coverage.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return cov if isinstance(cov, dict) and "basis" in cov and "dirs" in cov else None
+
+
 def load(run_dir: Path, frames_dir: Path | None = None) -> dict | None:
     """coverage.json of a run, measured now (and saved) for runs made before it existed or before
-    it had a basis."""
+    it had a basis. Measuring can take a while with several objects (their masks are read)."""
+    cov = saved(run_dir)
+    if cov:
+        return cov
     f = Path(run_dir) / "coverage.json"
-    try:
-        cov = json.loads(f.read_text())
-        if "basis" in cov and "dirs" in cov:
-            return cov
-    except (OSError, ValueError):
-        pass
     cov = for_run(run_dir, frames_dir)
     if cov:
         try:

@@ -188,7 +188,9 @@ camera is a dot, and the surface is green where cameras came close and red where
 side of the globe facing you, under the orange circle, is the side of the model you're looking
 at, so red there usually explains why that side looks thin or blurry; the note below says so too.
 It follows dragging, auto-rotate, Flip and Tilt. An object's splat shows that object's coverage.
-Click **Coverage** to hide or show it; the choice is remembered.
+Click **Coverage** to hide or show it; the choice is remembered. Runs made before the globe are
+measured again the first time you open them, which can take a little while with several objects;
+the panel shows *Measuring coverage…* meanwhile.
 
 **Turntable video** records the model turning a full circle from the current view, for posts,
 chats or product listings. Choose MP4 or GIF, 6 or 10 seconds, and square or wide. Every frame
@@ -442,7 +444,9 @@ Logo depois das posições de câmera, antes do treino, um **anel de cobertura**
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
 de uma altura só. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
 um pequeno globo que gira com a sua vista: verde onde as câmeras passaram, vermelho onde não
-passaram; o lado virado para você é o lado do modelo que você está olhando.
+passaram; o lado virado para você é o lado do modelo que você está olhando. Execuções feitas antes
+do globo são medidas de novo na primeira vez que você as abre (pode levar um pouco com vários
+objetos); enquanto isso o painel mostra *Medindo a cobertura…*.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. No visualizador, **Vídeo girando** grava o modelo dando

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+- **The viewer's coverage no longer appears late with no sign of life** ([#30](https://github.com/gpspelle/splat-studio/issues/30)).
+  Older runs are measured again on first view, which took long enough with several objects that the
+  request gave up and the panel stayed empty until a later visit. Measuring now happens in the
+  background; the panel shows a spinner and *Measuring coverage…* until it's ready, and says so if
+  it couldn't be measured.
+
 ### Changed
 - **The viewer's coverage is a 3D globe** ([#28](https://github.com/gpspelle/splat-studio/issues/28)).
   The flat ring's marker drifted: it measured from a different centre than the viewer turns around,
