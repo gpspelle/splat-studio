@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- **`splat-studio bench RUN`** ([#32](https://github.com/gpspelle/splat-studio/issues/32)): measures, on
+  your own computer and a finished run, how long COLMAP takes with smaller features, fewer matched
+  neighbours and the global mapper (COLMAP 4+), and how Brush's quality on held-out frames grows over
+  training time, also at a lower training resolution. Writes `bench/report.md` in the run folder.
+
 ### Fixed
 - **The viewer's coverage no longer appears late with no sign of life** ([#30](https://github.com/gpspelle/splat-studio/issues/30)).
   Older runs are measured again on first view, which took long enough with several objects that the

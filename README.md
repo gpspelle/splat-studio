@@ -222,6 +222,14 @@ colmap.log     COLMAP's full output
 You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`,
 and add `--remove-background` to `run` to also save a copy with only the object. `./splat-studio isolate NAME.ply` does the latter for any splat.
 
+**How long does each setting take on your computer?** `./splat-studio bench workspace/<video>/latest`
+measures it on a finished run. It times COLMAP with smaller features, fewer neighbouring frames and
+(with COLMAP 4 or newer) the faster global mapper, and trains once with Brush while scoring held-out
+frames at regular steps, so one run shows how quality grows with time; then once more at a lower
+training resolution. It writes a table to `bench/report.md` in the run folder and never touches the
+run's own splats. `--only colmap` takes minutes; the Brush part takes about as long as two
+trainings. See [docs/how-it-works.md](docs/how-it-works.md#benchmark).
+
 ## Removing background fog
 
 Splats of indoor scenes often look foggy: the room around the object was only seen from a
@@ -468,6 +476,12 @@ exportada como site. A barra embaixo do nome de cada modelo gira só aquele mode
 **↻ 15°**, **Virar**, **Inclinar 90°**, **Redefinir**). **Girar modelo** é um interruptor,
 ligado nos dois ao abrir: ligado, arrastar na vista gira o modelo; desligado, o modelo fica
 travado e arrastar não o gira. **Salvar vista** lembra como os dois estão girados.
+
+Para saber quanto tempo cada configuração leva no seu computador, use
+`./splat-studio bench workspace/<vídeo>/latest` numa execução terminada: ele cronometra o COLMAP com
+imagens menores, menos quadros vizinhos e (no COLMAP 4 ou mais novo) o mapeador global, e treina com
+o Brush medindo a qualidade em quadros separados ao longo do treino, e de novo numa resolução menor.
+A tabela fica em `bench/report.md` na pasta da execução; os splats da execução não são alterados.
 
 Execuções terminadas viram uma linha só no Estúdio (com o erro, se houver) e as mais antigas
 vão para a página **Histórico**, agrupadas por dia, com busca e filtro. **Tirar da lista** apaga
