@@ -371,6 +371,15 @@ class WebUiTest(BrowserTestCase):
             self.page.wait_for_timeout(60)
             views.add(self.page.evaluate("window.splatViewer.coverageView().view"))
         self.assertEqual(views, {"ok", "gap"})                          # some views face the side nobody filmed
+        # after Flip the globe turns with the model: the same views still face the same sides (#28)
+        step = ("(async () => { window.splatViewer.orbit(30); await new Promise((r) => requestAnimationFrame(() => "
+                "requestAnimationFrame(r))); return window.splatViewer.coverageView().nearest; })()")
+        before = [self.page.evaluate(step) for _ in range(12)]
+        self.assertGreater(len(set(before)), 3)                          # it follows the view
+        self.page.click("#flip")
+        self.page.click("#flip")                                         # flipped twice: back where it was
+        after = [self.page.evaluate(step) for _ in range(12)]
+        self.assertEqual(before, after)
         self.page.wait_for_function("window.splatViewer.coverageView().view === 'ok' || true")
         self.page.get_by_test_id("cov-toggle").click()                  # hide it, and it stays hidden
         self.assertTrue(cmap.is_hidden())

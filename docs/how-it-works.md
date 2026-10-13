@@ -59,8 +59,11 @@ gets an angle around the object and a height angle seen from it. The largest emp
 neighbouring cameras over 60°, or a spread under 15° between the 10th and 90th percentile
 heights, is a warning; the frames on either side of the gap give the moment in the video. The
 run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`. The basis
-(centre, up and two axes) is saved with it, so the viewer can turn its camera position, taken
-into the model's own coordinates, into the same angle and place a marker on the ring.
+(centre, up and two axes) and each camera's direction from the centre (`dirs`, model coordinates)
+are saved with it. The viewer draws a small globe in a second WebGL canvas: an icosphere whose
+vertices are coloured by the angle to the nearest camera direction (green up to 12°, amber to 30°,
+red beyond), the cameras as points, all rotated by the model's orientation and seen from the main
+camera's direction. The note uses the same angle for your current view direction.
 
 With several objects, each object's centre is where the rays through its mask centres meet
 (least squares over ~90 sampled frames), and only the frames where its mask covers at least 0.2%

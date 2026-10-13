@@ -183,10 +183,12 @@ sphere around the object (drag the slider to resize it). **Save view** remembers
 and crop, and both are included when you export a website. You can also import any `.ply`, `.spz`,
 `.splat` or `.ksplat` file into the library.
 
-**Coverage** (for models made by a run) shows a small map of where the cameras were, with a
-marker for the direction you're looking from. When you look at a side the cameras barely saw, it
-says so: that's usually why that side looks thin or blurry. An object's splat shows that object's
-coverage. Click **Coverage** to hide or show the map; the choice is remembered.
+**Coverage** (for models made by a run) is a small globe that turns with your view. Each recording
+camera is a dot, and the surface is green where cameras came close and red where none did. The
+side of the globe facing you, under the orange circle, is the side of the model you're looking
+at, so red there usually explains why that side looks thin or blurry; the note below says so too.
+It follows dragging, auto-rotate, Flip and Tilt. An object's splat shows that object's coverage.
+Click **Coverage** to hide or show it; the choice is remembered.
 
 **Turntable video** records the model turning a full circle from the current view, for posts,
 chats or product listings. Choose MP4 or GIF, 6 or 10 seconds, and square or wide. Every frame
@@ -439,8 +441,8 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
 de uma altura só. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
-um mapa pequeno das câmeras com uma marca de onde você está olhando, e avisa quando esse lado foi
-pouco filmado.
+um pequeno globo que gira com a sua vista: verde onde as câmeras passaram, vermelho onde não
+passaram; o lado virado para você é o lado do modelo que você está olhando.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
 visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. No visualizador, **Vídeo girando** grava o modelo dando

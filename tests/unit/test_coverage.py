@@ -21,6 +21,8 @@ class MeasureTest(unittest.TestCase):
         self.assertLess(c["gap"]["degrees"], 15)
         self.assertGreater(c["height"]["spread"], coverage.HEIGHT_WARN)
         self.assertEqual(coverage.problems(c), [])
+        self.assertEqual(len(c["dirs"]), 36)                              # each camera's direction, for the viewer's globe
+        self.assertTrue(all(abs(sum(x * x for x in d) - 1) < 0.01 for d in c["dirs"]))
 
     def test_one_side_missing(self):
         c = coverage.measure(ring(keep=lambda k: not 10 <= k < 22))       # 12 of 36 cameras gone: 130 degrees

@@ -82,11 +82,12 @@ def measure(images: list[dict], target=None, basis=None, only: set | None = None
         flat = tuple(v[i] - h * up[i] for i in range(3))
         az = math.degrees(math.atan2(_dot(flat, e2), _dot(flat, e1))) % 360
         el = math.degrees(math.atan2(h, math.sqrt(_dot(flat, flat)) or 1e-9))
-        rows.append((az, el, c["name"]))
+        n = math.sqrt(_dot(v, v)) or 1.0
+        rows.append((az, el, c["name"], tuple(round(x / n, 3) for x in v)))
     rows.sort()
     # the largest empty arc, wrapping around
     gap, start, end = -1.0, None, None
-    for i, (az, _el, name) in enumerate(rows):
+    for i, (az, _el, name, _d) in enumerate(rows):
         nxt = rows[(i + 1) % len(rows)]
         d = (nxt[0] - az) % 360 or (360.0 if len(rows) == 1 else 0.0)
         if d > gap:
@@ -99,7 +100,9 @@ def measure(images: list[dict], target=None, basis=None, only: set | None = None
             "gap": {"degrees": round(gap, 1), "from": round(start[0], 1), "to": round(end[0], 1),
                     "first": start[1], "last": end[1]},
             "height": {"low": round(q(0.1), 1), "high": round(q(0.9), 1), "spread": round(q(0.9) - q(0.1), 1)},
-            "basis": {"target": r6(target), "up": r6(up), "e1": r6(e1), "e2": r6(e2)}}
+            "basis": {"target": r6(target), "up": r6(up), "e1": r6(e1), "e2": r6(e2)},
+            # each camera's direction from the centre, in the model's own coordinates (the viewer's globe)
+            "dirs": [list(r[3]) for r in rows]}
 
 
 # ---------------------------------------------------------------- one ring per object
@@ -200,7 +203,7 @@ def load(run_dir: Path, frames_dir: Path | None = None) -> dict | None:
     f = Path(run_dir) / "coverage.json"
     try:
         cov = json.loads(f.read_text())
-        if "basis" in cov:
+        if "basis" in cov and "dirs" in cov:
             return cov
     except (OSError, ValueError):
         pass

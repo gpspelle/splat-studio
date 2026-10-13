@@ -402,6 +402,7 @@ class Runner:
             try:
                 saved = json.loads((self.data.root / j.run_dir / "coverage.json").read_text())
                 if "basis" in saved and (saved.get("objects") or not d.get("coverage")):
+                    saved = {**saved, "dirs": None, "objects": [{**o, "dirs": None} for o in saved.get("objects", [])]}
                     d["coverage"] = saved
             except (OSError, ValueError):
                 pass
