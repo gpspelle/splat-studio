@@ -52,6 +52,9 @@
   direction from the centre (`dirs`); older runs are measured again when first opened.
 
 ### Fixed
+- **A shrunk iPhone video is called what it is.** A video the iPhone shrank on the way (a website's
+  upload button, Messages, WhatsApp) said "Record in 4K" even when it was filmed in 4K; it now says
+  it's a shrunk copy and to AirDrop the original.
 - **The benchmark's quality curve was empty with real Brush** ([#42](https://github.com/gpspelle/splat-studio/issues/42)).
   Brush prints its held-out scores as log lines, hidden unless `RUST_LOG` allows them; `bench`,
   `trial` and `run --eval` now turn them on. The report also shows the training time on its own.

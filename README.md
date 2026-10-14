@@ -434,6 +434,7 @@ Large splats load slowly on phones. Keep **Quality** at Standard, or compress th
 
 | Problem | What to do |
 |---|---|
+| "This is a shrunk copy" or "Low resolution" on an iPhone video filmed in 4K | The phone shrank it on the way: its Photos picker does that when a website's upload button (including Splat Studio opened on the phone), Messages, WhatsApp or Mail sends a video. Open the video in Photos, **Share › AirDrop** to the Mac, and add it from the Mac. |
 | "Not good enough to train on" | The camera track broke too often. Check the advice on the run: it names the seconds where it broke. Re-film more slowly, in better light, on a textured surface. |
 | The model has holes or blurry sides | Those angles weren't filmed, or their frames weren't placed. Add the missing loop (usually the high one). |
 | Foggy haze around the model | New runs already remove it. For imported splats use **Remove fog**; **Crop** in the viewer hides what's left. `./splat-studio inspect` explains the cause. See [Removing background fog](#removing-background-fog). |
@@ -486,6 +487,10 @@ andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× se
 sobre uma superfície com textura; mantenha mais ou menos a mesma distância da superfície do objeto (em volta
 de um carro, um retângulo de cantos arredondados, não um círculo). O guia completo está no app (**Guia de
 gravação**), com seções para carros e objetos grandes e para pessoas.
+
+Passe o vídeo do iPhone para o Mac por **AirDrop** (no app Fotos, **Compartilhar › AirDrop**). Enviado
+pelo botão de upload de um site (inclusive o Splat Studio aberto no celular), pelo Mensagens, WhatsApp ou
+Mail, o iPhone reduz o vídeo (por exemplo para 320×568), e o app avisa que é uma cópia reduzida.
 
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado

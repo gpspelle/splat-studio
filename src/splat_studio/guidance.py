@@ -48,9 +48,11 @@ def parse_probe(data: dict) -> dict | None:
     except (ValueError, ZeroDivisionError):
         fps = 0.0
     duration = float(data.get("format", {}).get("duration") or video.get("duration") or 0)
+    tags = data.get("format", {}).get("tags") or {}
+    phone = tags.get("com.apple.quicktime.model", "") if tags.get("com.apple.quicktime.make") == "Apple" else ""
     return {"width": w, "height": h, "fps": round(fps, 2), "duration": duration,
             "codec": video.get("codec_name"), "hdr": video.get("color_transfer") in HDR_TRANSFERS,
-            "portrait": h > w}
+            "portrait": h > w, "phone": phone}
 
 
 def tip(level: str, code: str, text: str, **params) -> dict:
@@ -73,7 +75,15 @@ def video_advice(meta: dict | None) -> list[dict]:
     elif d > 600:
         tips.append(tip("info", "video.long", f"{fmt_timestamp(d)} is long. That works, since frames are sampled "
                         "evenly, but trim any parts that don't show the object.", d=fmt_timestamp(d)))
-    if long_side and long_side < 1920:
+    if long_side and long_side < 1280 and (meta.get("phone") or "").startswith("iPhone"):
+        # Every iPhone since the 6s films at least 1080p: this is a copy the phone shrank on the way
+        # (a website's upload button, Messages, WhatsApp, Mail all do), not what was recorded.
+        tips.append(tip("warn", "video.shrunk", f"This is a shrunk copy ({meta['width']}×{meta['height']}): the "
+                        f"{meta['phone']} recorded more than that. The iPhone shrinks videos sent through a "
+                        "website's upload button, Messages or WhatsApp. Send the original from Photos with "
+                        "AirDrop to the Mac, and add it from there.", w=meta["width"], h=meta["height"],
+                        phone=meta["phone"]))
+    elif long_side and long_side < 1920:
         tips.append(tip("warn", "video.low_res", f"Low resolution ({meta['width']}×{meta['height']}). Record in 4K "
                         "(or at least 1080p) for sharp detail.", w=meta["width"], h=meta["height"]))
     if meta["fps"] and meta["fps"] < 24:
