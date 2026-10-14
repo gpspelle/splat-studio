@@ -43,6 +43,27 @@ class VideoAdviceTest(unittest.TestCase):
         self.assertEqual(levels(tips).count("warn"), 3)
         self.assertNotIn("ok", levels(tips))
 
+    def test_iphone_video_shrunk_on_the_way_says_how_to_get_the_original(self):
+        tips = guidance.video_advice(meta(duration=75, width=320, height=568, fps=30, portrait=True,
+                                          phone="iPhone 16 Pro"))
+        (t,) = [t for t in tips if t["level"] == "warn"]
+        self.assertEqual(t["code"], "video.shrunk")
+        self.assertIn("iPhone 16 Pro", t["text"])
+        self.assertIn("AirDrop", t["text"])
+        # a 720p iPhone video is a real (if low) setting: the usual advice
+        tips = guidance.video_advice(meta(duration=75, width=1280, height=720, phone="iPhone 16 Pro"))
+        self.assertEqual([t["code"] for t in tips if t["level"] == "warn"], ["video.low_res"])
+
+    def test_probe_reads_the_phone_model(self):
+        data = {"streams": [{"codec_type": "video", "width": 568, "height": 320, "avg_frame_rate": "30/1",
+                             "side_data_list": [{"rotation": -90}]}],
+                "format": {"duration": "75.6", "tags": {"com.apple.quicktime.make": "Apple",
+                                                        "com.apple.quicktime.model": "iPhone 16 Pro"}}}
+        m = guidance.parse_probe(data)
+        self.assertEqual((m["width"], m["height"], m["phone"]), (320, 568, "iPhone 16 Pro"))
+        data["format"]["tags"] = {}
+        self.assertEqual(guidance.parse_probe(data)["phone"], "")
+
     def test_infos_keep_ok(self):
         tips = guidance.video_advice(meta(duration=45, hdr=True, portrait=True, width=2160, height=3840))
         self.assertEqual(levels(tips)[0], "ok")

@@ -64,6 +64,10 @@ break, pause between loops while still pointing at the object rather than stoppi
 Scrub through the video. Every moment should be sharp, with no jumps, flicker, or people
 walking through. Re-filming now takes a minute. Coming back later takes much longer.
 
+Send it to the Mac with **AirDrop** (Photos → Share → AirDrop). Sent through a website's upload
+button (including Splat Studio opened on the phone), Messages, WhatsApp or Mail, the iPhone shrinks
+it, for example to 320×568, and Splat Studio warns that it's a shrunk copy.
+
 ## 6. More tips
 
 - **Move smoothly**, as if the phone were on rails: steady speed, no sudden turns. Each frame
