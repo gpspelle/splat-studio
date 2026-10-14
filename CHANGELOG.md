@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- **iPhone captures** ([#40](https://github.com/gpspelle/splat-studio/issues/40)). `run` takes a
+  zip from the new [Splat Capture](https://github.com/gpspelle/splat-capture) iPhone app and trains
+  with the phone's own camera positions (ARKit) instead of running COLMAP: frames with unsteady
+  tracking are left out and the rest turned upright. `--poses refine` adds COLMAP's points and a
+  polish; `--poses colmap` ignores the phone's positions. `splat-studio trial CAPTURE.zip` compares
+  the three on the same frames (time, and quality on held-out frames).
 - **Recording guide: more tips, and sections for cars and people.** Why one take beats three
   clips, keeping a steady distance from the surface (a rounded rectangle around a car), detail
   passes, light, lens, clothes; cars (heights, parking, reflections, frames); people (ask first,

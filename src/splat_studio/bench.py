@@ -152,24 +152,31 @@ def bench_brush(run: Path, out: Path, brush: Path, quality: str, evals: int, low
              "--export-name": "bench_{iter}.ply"}
         cmd = [str(brush), str(dense)] + [str(x) for kv in p.items() for x in kv]
         say(f"  {name}: {steps} steps at up to {p['--max-resolution']}px")
-        curve, t0 = [], time.monotonic()
-        with open(out / "brush.log", "a") as log:
-            log.write(f"\n$ {' '.join(cmd)}\n")
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                    errors="replace", bufsize=1)
-            for line in proc.stdout:
-                log.write(line)
-                m = RE_EVAL.search(line)
-                if m:
-                    curve.append({"step": int(m.group(1)), "seconds": round(time.monotonic() - t0, 1),
-                                  "psnr": float(m.group(2)), "ssim": float(m.group(3))})
-                    say(f"    step {curve[-1]['step']:>6}  {fmt_time(curve[-1]['seconds']):>8}  "
-                        f"PSNR {curve[-1]['psnr']:.2f}  SSIM {curve[-1]['ssim']:.3f}")
-            proc.wait()
+        curve, total, code = train_scored(cmd, out / "brush.log")
         results.append({"variant": name, "steps": steps, "max_resolution": p["--max-resolution"],
-                        "total_s": round(time.monotonic() - t0, 1), "curve": curve,
-                        **({"error": f"brush exited with {proc.returncode}"} if proc.returncode else {})})
+                        "total_s": total, "curve": curve,
+                        **({"error": f"brush exited with {code}"} if code else {})})
     return results
+
+
+def train_scored(cmd: list[str], log_path: Path) -> tuple[list[dict], float, int]:
+    """Run a Brush command that scores held-out frames; (curve, seconds, exit code). The curve has
+    one {step, seconds, psnr, ssim} per evaluation, printed as it comes."""
+    curve, t0 = [], time.monotonic()
+    with open(log_path, "a") as log:
+        log.write(f"\n$ {' '.join(cmd)}\n")
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                errors="replace", bufsize=1)
+        for line in proc.stdout:
+            log.write(line)
+            m = RE_EVAL.search(line)
+            if m:
+                curve.append({"step": int(m.group(1)), "seconds": round(time.monotonic() - t0, 1),
+                              "psnr": float(m.group(2)), "ssim": float(m.group(3))})
+                say(f"    step {curve[-1]['step']:>6}  {fmt_time(curve[-1]['seconds']):>8}  "
+                    f"PSNR {curve[-1]['psnr']:.2f}  SSIM {curve[-1]['ssim']:.3f}")
+        proc.wait()
+    return curve, round(time.monotonic() - t0, 1), proc.returncode
 
 
 def report(run: Path, colmap_rows: list[dict], brush_rows: list[dict]) -> str:

@@ -3,6 +3,7 @@
     splat-studio                      open the web UI (same as `splat-studio ui`)
     splat-studio ui [--data-dir D] [--port N] [--no-browser]
     splat-studio run VIDEO [options]  whole pipeline in the terminal (see `run --help`)
+    splat-studio run CAPTURE.zip      an iPhone capture (Splat Capture): ARKit's camera positions, no COLMAP
     splat-studio setup                install missing tools and build Brush (may ask for a password)
     splat-studio setup --masking      also install SAM 2 for "Choose what to keep" (~1 GB)
     splat-studio mask FRAMES --prompts P.json   masks of the chosen object for every frame
@@ -14,6 +15,7 @@
     splat-studio split-objects MODEL.ply --run RUN   one splat per object chosen in "Choose what to keep"
     splat-studio coverage RUN         where the cameras were around the object (gaps, heights)
     splat-studio bench RUN            time vs quality of COLMAP and Brush settings on this computer
+    splat-studio trial CAPTURE.zip    iPhone capture: do ARKit's camera positions train as well as COLMAP's?
 """
 from __future__ import annotations
 
@@ -87,6 +89,9 @@ def main(argv: list[str] | None = None) -> None:
     if cmd == "bench":
         from .bench import main as bench_main
         return bench_main(rest)
+    if cmd == "trial":
+        from .trial import main as trial_main
+        return trial_main(rest)
     if cmd == "coverage":
         from .coverage import main as coverage_main
         return coverage_main(rest)

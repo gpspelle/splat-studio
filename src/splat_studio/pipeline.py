@@ -4,6 +4,7 @@
     splat-studio run IMG_1234.MOV --quality preview
     splat-studio run --train-only workspace/IMG_1234/latest --quality high     # re-train, skip COLMAP
     splat-studio run IMG_1234.MOV -- --sh-degree 1                              # extra Brush options
+    splat-studio run capture_2026-10-14_153012.zip       # an iPhone capture: ARKit's poses, no COLMAP
 
 Frames are extracted once per video (frames/<name>) and reused. Each run gets its own
 folder workspace/<name>/run_<date_time>/ with dense/ (COLMAP result), splat/ (the .ply
@@ -77,6 +78,72 @@ def frames_of_run(ws: Path) -> Path | None:
     return None
 
 
+def is_capture_arg(path: Path | None) -> bool:
+    if path is None or not path.exists():
+        return False
+    from .capture import is_capture
+    return is_capture(path)
+
+
+def import_capture(args) -> tuple[Path | None, Path]:
+    """Stages 1 and 2 for an iPhone capture: frames from its video, poses from ARKit (and, with
+    --poses refine or colmap, from COLMAP). Returns (run folder, frames folder)."""
+    from . import capture
+    from .colmap import Summary, WorkspaceError, claim_workspace, point_latest
+    src = Path(args.video)
+    name = (src.stem if src.is_file() else (capture.find_root(src) or src).name).replace(" ", "_")
+    frames = Path("frames") / name
+    say(f"==> 1/3 Frames: {frames}")                          # parsed by the web UI
+    if args.dry_run:
+        say(f"    (dry run: would read the capture {src}, pick about {args.frames} frames and use "
+            f"{'COLMAP' if args.poses == 'colmap' else 'ARKit'} camera positions)")
+        return None, frames
+    if args.re_extract:
+        (frames / "capture.json").unlink(missing_ok=True)
+    try:
+        plan = capture.prepare(src, frames, args.frames, args.max_size, Path("captures"))
+    except capture.CaptureError as e:
+        sys.exit(f"Couldn't read the capture: {e}")
+    if plan["reused"]:
+        say(f"    reusing {len(plan['frames'])} frames extracted earlier (use --re-extract to redo)")
+    else:
+        say(f"    {capture.describe(plan)}")
+        say(f"    Kept {len(plan['frames'])} frames")                # parsed by the web UI
+
+    ws = new_run_dir(Path("workspace") / name).resolve()
+    if args.poses == "colmap":
+        say(f"\n==> 2/3 Camera poses (COLMAP): {ws}")            # parsed by the web UI
+        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size), False) != 0:
+            sys.exit("COLMAP did not produce a usable model - see the messages above. Brush was not started.")
+        point_latest(ws)
+        append_summary(ws, capture.summary_lines(plan, src, frames)[1:] + [("poses", "COLMAP (ARKit's ignored)")])
+        return ws, frames
+
+    label = "ARKit" if args.poses == "arkit" else "ARKit, refined with COLMAP"
+    say(f"\n==> 2/3 Camera poses ({label}): {ws}")               # parsed by the web UI
+    try:
+        claim_workspace(ws)
+    except WorkspaceError as e:
+        sys.exit(str(e))
+    point_latest(ws)
+    summary = Summary(ws)
+    summary.add("started", f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S}")
+    for k, v in capture.summary_lines(plan, src, frames):
+        summary.add(k, v)
+    started = datetime.datetime.now()
+    made = capture.write_arkit_run(plan, frames, ws)
+    say(f"    {made['images']} cameras placed from ARKit, {made['arkit_points']} ARKit points"
+        + (f" (+{made['points'] - made['arkit_points']} to start from)" if made["points"] > made["arkit_points"] else ""))
+    if args.poses == "refine":
+        say("\n==> Refining with COLMAP: features, matching, triangulation, polish (lens kept as measured)")
+        made = capture.refine_run(plan, ws, args.max_size)
+        say(f"    {made['points']} points triangulated")
+    took = (datetime.datetime.now() - started).total_seconds()
+    summary.add("poses", f"{label}: {made['images']} frames, {made['points']} points in {took:.1f} s")
+    summary.add("result", f"OK - train on {ws / 'dense'}")
+    return ws, frames
+
+
 def split_brush_args(argv: list[str]) -> tuple[list[str], list[str]]:
     """Everything after a bare `--` goes to Brush unchanged."""
     if "--" in argv:
@@ -103,7 +170,8 @@ def brush_command(brush: Path | str, dense: Path, params: dict, quality: str, ev
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="splat-studio run", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("video", nargs="?", type=Path, help="video file (.mov / .mp4)")
+    ap.add_argument("video", nargs="?", type=Path,
+                    help="video file (.mov / .mp4), or an iPhone capture from Splat Capture (.zip or its folder)")
     ap.add_argument("--train-only", type=Path, metavar="RUN_DIR",
                     help="skip frames and COLMAP; re-train Brush on an existing run folder")
     ap.add_argument("--quality", choices=brushmod.QUALITY, default="standard")
@@ -114,6 +182,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--end", help="trim: end time, e.g. 1:45")
     ap.add_argument("--re-extract", action="store_true", help="extract frames again even if they exist")
     ap.add_argument("--max-size", type=int, default=1600, help="image size for COLMAP (default 1600)")
+    ap.add_argument("--poses", choices=["arkit", "refine", "colmap"], default="arkit",
+                    help="iPhone captures only: arkit = the phone's camera positions as they are (default); "
+                         "refine = plus COLMAP's points and a polish; colmap = ignore them, run COLMAP")
     ap.add_argument("--eval", action="store_true", help="hold out every 10th frame and report PSNR/SSIM")
     ap.add_argument("--no-train", action="store_true", help="stop after COLMAP")
     # Fog removal always runs; --clean is still accepted so older commands keep working.
@@ -162,6 +233,10 @@ def main(argv: list[str] | None = None) -> None:
         if not (ws / "dense" / "sparse" / "0").exists():
             sys.exit(f"{ws} has no dense/sparse/0 - run COLMAP for it first")
         frames = frames_of_run(ws)
+    elif is_capture_arg(args.video):
+        ws, frames = import_capture(args)
+        if ws is None:                                 # dry run: nothing more to show
+            return
     else:
         if not args.video.exists():
             sys.exit(f"video not found: {args.video}")

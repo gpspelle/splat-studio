@@ -69,7 +69,7 @@ class Job:
 # ---------------------------------------------------------------- output parsing
 
 RE_STAGE = re.compile(r"==> (\d)/3 (.+)")
-RE_WS = re.compile(r"==> 2/3 Camera poses \(COLMAP\): (.+)$")
+RE_WS = re.compile(r"==> 2/3 Camera poses \((?:COLMAP|ARKit[^)]*)\): (.+)$")
 RE_ATTEMPT = re.compile(r"==> Attempt (\d+)/(\d+): (.+)")
 RE_COLMAP_BAR = re.compile(r"^\s*(.+?)\s+[█░]+\s+(\d+)%\s+step left (\S+) \| total \S+ \| left (~?\S+)"
                            r"(?: \(worst case (~?\S+)\))?")
