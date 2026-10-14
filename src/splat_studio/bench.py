@@ -166,7 +166,7 @@ def train_scored(cmd: list[str], log_path: Path) -> tuple[list[dict], float, int
     with open(log_path, "a") as log:
         log.write(f"\n$ {' '.join(cmd)}\n")
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                errors="replace", bufsize=1)
+                                errors="replace", bufsize=1, env=brushmod.eval_env())
         for line in proc.stdout:
             log.write(line)
             m = RE_EVAL.search(line)
@@ -202,6 +202,9 @@ def report(run: Path, colmap_rows: list[dict], brush_rows: list[dict]) -> str:
                   "| Step | Time | PSNR | SSIM |", "|---|---|---|---|"]
         for c in r["curve"]:
             lines.append(f"| {c['step']} | {fmt_time(c['seconds'])} | {c['psnr']:.2f} | {c['ssim']:.3f} |")
+        lines.append(f"\nTraining took {fmt_time(r['total_s'])} for {r['steps']} steps.")
+        if not r["curve"]:
+            lines.append("Brush printed no quality scores, so there is no curve (see bench/brush.log).")
         if r.get("error"):
             lines.append(f"\n{r['error']}")
         lines.append("")

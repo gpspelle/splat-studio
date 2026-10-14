@@ -156,6 +156,17 @@ def ensure_brush(explicit: str | None = None, dry: bool = False) -> Path:
     return binary
 
 
+def eval_env(base: dict | None = None) -> dict:
+    """Environment for a Brush run that scores held-out frames. Brush prints `Eval iter N: PSNR x,
+    ssim y` through its logger, which shows only errors unless RUST_LOG asks for its info lines
+    (the progress-bar copy of the line is hidden when the output isn't a terminal)."""
+    env = dict(os.environ if base is None else base)
+    current = env.get("RUST_LOG", "")
+    if "brush_cli" not in current:
+        env["RUST_LOG"] = f"{current},brush_cli=info" if current else "brush_cli=info"
+    return env
+
+
 # ---------------------------------------------------------------- reading the reconstruction
 
 def model_stats(model_dir: Path) -> tuple[int | None, int | None]:

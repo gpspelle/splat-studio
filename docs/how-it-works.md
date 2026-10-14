@@ -313,7 +313,9 @@ computer it runs on, without changing the run's results:
 - **Brush**: the run's own settings (`choose_brush_params`) plus `--eval-split-every 10` and
   `--eval-every steps/6`, exporting to `RUN/bench/brush/`. Brush prints
   `Eval iter N: PSNR x, ssim y` for the held-out frames; the time each line arrives gives a
-  quality-over-time curve from a single training. A second training at `--max-resolution 1024`
+  quality-over-time curve from a single training. Brush prints these through its logger, which
+  hides info lines unless `RUST_LOG` allows them, so Brush runs that score frames get
+  `RUST_LOG=brush_cli=info` (`brush.eval_env`). A second training at `--max-resolution 1024`
   runs when the images are larger than that.
 
 Results go to `RUN/bench/results.json` and a Markdown table in `RUN/bench/report.md`.

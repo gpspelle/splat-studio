@@ -116,7 +116,7 @@ def arkit_pose(centre, target=(0.0, 0.0, 0.0), held: str = "portrait") -> list[f
 
 
 def make_capture(folder: Path, name: str = "capture_test", frames: int = 60, size=(320, 240), held="portrait",
-                 limited: int = 4, points: int = 400, zip_it: bool = True) -> Path:
+                 limited: int = 4, points: int = 400, zip_it: bool = True, meta: dict | None = None) -> Path:
     """A small Splat Capture package: frame N of video.mov is a flat grey of brightness 20 + 3N
     (so a test can tell which frame it got), the phone circles the origin at three heights, the
     first `limited` frames have limited tracking, and points.json holds a ball of points."""
@@ -146,7 +146,7 @@ def make_capture(folder: Path, name: str = "capture_test", frames: int = 60, siz
     (root / "meta.json").write_text(json.dumps({
         "format": "splat-capture", "version": 1, "app": "0.1.0", "device": "iPhone15,2", "system": "17.5",
         "started": "2026-10-14T13:30:12Z", "width": w, "height": h, "fps": 30, "frames": frames,
-        "duration": (frames - 1) / 30, "points": points, "lidar": False}))
+        "duration": (frames - 1) / 30, "points": points, "lidar": False, **(meta or {})}))
     if not zip_it:
         return root
     import zipfile

@@ -88,3 +88,11 @@ class FindBrushTest(TempDirTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvalEnvTest(unittest.TestCase):
+    def test_brush_info_lines_are_turned_on(self):
+        self.assertEqual(brush.eval_env({})["RUST_LOG"], "brush_cli=info")
+        self.assertEqual(brush.eval_env({"RUST_LOG": "wgpu=warn"})["RUST_LOG"], "wgpu=warn,brush_cli=info")
+        self.assertEqual(brush.eval_env({"RUST_LOG": "brush_cli=debug"})["RUST_LOG"], "brush_cli=debug")
+        self.assertEqual(brush.eval_env({"PATH": "/x"})["PATH"], "/x")
