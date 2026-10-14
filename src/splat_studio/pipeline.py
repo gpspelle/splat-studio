@@ -47,18 +47,19 @@ STOPPED_EXIT = 3        # exit code of a run stopped before training (--stop-on-
 def gap_problems(ws: Path) -> list[str]:
     """Sides nobody filmed, from the run's coverage.json: around the whole scene, and around each
     chosen object. Only a missing side counts: filming from one height is a warning, never a stop,
-    and the underside of something standing on a surface is never measured as missing."""
-    from .coverage import problems
+    the underside of something standing on a surface is never measured as missing, and a side
+    something stands in front of (a wall, another object) is excused (coverage.excuse_blocked)."""
+    from .coverage import open_gap, problems
     try:
         cov = json.loads((ws / "coverage.json").read_text())
     except (OSError, ValueError):
         return []
     out = []
     if "gap" in problems(cov):
-        out.append(f"{cov['gap']['degrees']:.0f} degrees around the object weren't filmed")
+        out.append(f"{open_gap(cov)['degrees']:.0f} degrees around the object weren't filmed")
     for o in cov.get("objects", []):
         if "gap" in problems(o):
-            out.append(f"{o['gap']['degrees']:.0f} degrees around {o['name']} weren't filmed")
+            out.append(f"{open_gap(o)['degrees']:.0f} degrees around {o['name']} weren't filmed")
     return out
 
 
@@ -208,6 +209,9 @@ def main(argv: list[str] | None = None) -> None:
             append_summary(ws, [("coverage", coverage.summary_line(cov))]
                            + [(f"coverage {o['name']}", coverage.summary_line(o)) for o in cov.get("objects", [])])
             for who, c in [("", cov)] + [(o["name"] + ": ", o) for o in cov.get("objects", [])]:
+                if coverage.blocked_degrees(c):
+                    say(f"    note: {who}{coverage.blocked_degrees(c):.0f} degrees couldn't be filmed (something "
+                        "stands there), so that side isn't counted as missing")
                 for p in coverage.problems(c):
                     say("    warning: " + who + {"gap": "one side was barely filmed (see the coverage ring)",
                                                  "height": "the cameras were all at about the same height"}[p])

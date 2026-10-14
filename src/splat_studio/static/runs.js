@@ -87,16 +87,15 @@
     const pt = (az, r) => [cx + r * Math.cos(az * Math.PI / 180), cy - r * Math.sin(az * Math.PI / 180)];
     const dots = (c.azimuths || []).map((az, i) => { const [x, y] = pt(az, R - 9 * ((els[i] ?? lo) - lo) / span);
       return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.8" style="fill:var(--ink-2)"/>`; }).join("");
-    const g = c.gap || {};
-    let arc = "";
-    if ((g.degrees || 0) > 60) {
-      const [x1, y1] = pt(g.from, R + 4), [x2, y2] = pt(g.to, R + 4);
-      arc = `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${g.degrees > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round"/>`;
-    }
+    const g = c.gap_open || c.gap || {};          // a side something stands in front of isn't a gap (#36)
+    const arcPath = (from, to, style) => { const d = (to - from + 360) % 360 || 360, [x1, y1] = pt(from, R + 4), [x2, y2] = pt(to, R + 4);
+      return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${R + 4} ${R + 4} 0 ${d > 180 ? 1 : 0} 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" style="${style}"/>`; };
+    let arc = (c.blocked || []).map(([a, z]) => arcPath(a, z, "fill:none;stroke:var(--ink-3);stroke-width:3;stroke-dasharray:2 3")).join("");
+    if ((g.degrees || 0) > 60) arc += arcPath(g.from, g.to, "fill:none;stroke:var(--bad);stroke-width:3;stroke-linecap:round");
     return `<svg viewBox="0 0 64 64" width="${size}" height="${size}" role="img" aria-label="${esc(label)}">
       <circle cx="${cx}" cy="${cy}" r="${R}" style="fill:none;stroke:var(--rule)"/><circle cx="${cx}" cy="${cy}" r="2.5" style="fill:var(--signal)"/>${arc}${dots}</svg>`;
   }
-  const facts = (c) => t("coverage.facts", { n: c.cameras, gap: Math.round((c.gap || {}).degrees || 0), h: Math.round((c.height || {}).spread || 0) });
+  const facts = (c) => t("coverage.facts", { n: c.cameras, gap: Math.round((c.gap_open || c.gap || {}).degrees || 0), h: Math.round((c.height || {}).spread || 0) });
   function coverageHTML(c, advice, withOk) {
     if (!c || !c.azimuths) return "";
     const tips = (advice || []).filter((a) => withOk || a.level !== "ok");
@@ -196,7 +195,7 @@
         <button class="small ghost" data-testid="run-details" aria-expanded="${isOpen}" onclick="runs.toggle('${esc(j.id)}')">${esc(t(isOpen ? "btn.less" : "btn.details"))}</button></div></div>
       <div class="more">
         ${p.tags ? `<div class="head">${p.tags}</div>` : ""}
-        ${stepper(j)}${coverageHTML(j.coverage, (j.coverage_advice || []).filter((a) => a.level === "ok"), true)}
+        ${stepper(j)}${coverageHTML(j.coverage, (j.coverage_advice || []).filter((a) => a.level !== "warn"), true)}
         ${(j.advice || []).length ? `<ul class="advice" data-testid="run-advice">${adviceHTML(j.advice)}</ul>` : ""}${p.guide}${p.noSplat}
         ${p.extra || p.canRetrain || removable ? `<div class="more-actions">${p.extra}
           ${p.canRetrain ? `<button class="small" onclick="runs.retrain('${esc(j.run_dir)}')">${esc(t("btn.trainAgain"))}</button>` : ""}

@@ -368,6 +368,45 @@ class WebUiTest(BrowserTestCase):
         done.locator("text=View splat").wait_for(timeout=10000)
         self.assertEqual(self.errors, [])
 
+    def test_a_side_nobody_could_film_is_grey_not_red(self):
+        """#36: with a wall on the unfilmed side, the run trains, the ring marks that side as blocked
+        (dashed grey, no red arc) and the viewer's globe says nobody could film it."""
+        os.environ["FAKE_COLMAP_POSES"] = "wall"
+        self.addCleanup(os.environ.pop, "FAKE_COLMAP_POSES", None)
+        self.open_new()
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "corner.mov", seconds=6, size="960x540")))
+        self.page.get_by_test_id("video-advice").wait_for(state="visible")
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click("#startBtn")                                        # stop-on-gaps is on: it must not stop
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        row = self.page.locator("[data-testid=run-done]").first
+        row.wait_for(timeout=180000)
+        self.assertEqual(self.page.get_by_test_id("run-stopped").count(), 0)
+        row.locator("[data-testid=run-details]").click()
+        ring = row.get_by_test_id("coverage").first
+        ring.wait_for()
+        self.assertGreaterEqual(ring.locator("path[style*='dasharray']").count(), 1)   # the blocked side
+        self.assertEqual(ring.locator("path[style*='--bad']").count(), 0)              # no missing side
+        self.assertIn("couldn't be filmed", ring.text_content())
+        self.shot("coverage-blocked", page=None)
+        row.locator("text=View splat").click()
+        self.page.wait_for_function("(document.getElementById('overlay') || {style: {}}).style.display === 'none'", timeout=60000)
+        self.page.get_by_test_id("cov-map").wait_for(state="visible", timeout=20000)
+        self.page.wait_for_function("window.splatViewer.coverageView()?.view", timeout=20000)
+        views = set()
+        for _ in range(24):
+            self.page.evaluate("window.splatViewer.orbit(15)")
+            self.page.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+            v = self.page.evaluate("window.splatViewer.coverageView().view")
+            views.add(v)
+            if v == "blocked":
+                self.assertIn("Nobody could film", self.page.get_by_test_id("cov-note").text_content())
+                self.shot("viewer-coverage-blocked")
+        self.assertIn("blocked", views)
+        self.assertNotIn("gap", views)
+        self.assertTrue(self.page.locator("#covKeyBlockedItem").is_visible())
+        self.assertEqual(self.errors, [])
+
     def test_coverage_ring_and_warning(self):
         os.environ["FAKE_COLMAP_POSES"] = "gap"                       # one side never filmed
         self.addCleanup(os.environ.pop, "FAKE_COLMAP_POSES", None)

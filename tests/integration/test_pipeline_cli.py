@@ -108,6 +108,22 @@ class PipelineTest(TempDirTestCase):
         self.assertEqual(gap.returncode, 0, gap.stdout[-2000:])
         self.assertIn("barely filmed", gap.stdout)
 
+    def test_a_side_blocked_by_a_wall_never_stops_the_run(self):
+        """#36: the same unfilmed side, with a wall standing there: nobody could have filmed it."""
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--stop-on-gaps",
+                              env=fake_tools_env(FAKE_COLMAP_POSES="wall"))
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
+        self.assertIn("couldn't be filmed (something stands there)", r.stdout)
+        self.assertNotIn("barely filmed", r.stdout)
+        self.assertNotIn("Stopped", r.stdout)
+        self.assertIn("3/3 Training", r.stdout)
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        import json
+        cov = json.loads((run / "coverage.json").read_text())
+        self.assertTrue(cov["blocked"])
+        self.assertLess(cov["gap_open"]["degrees"], 60)
+        self.assertGreater(cov["gap"]["degrees"], 120)
+
     def test_dry_run_and_no_train(self):
         dry = self.run_pipeline(self.video, "--dry-run")
         self.assertEqual(dry.returncode, 0, dry.stderr)

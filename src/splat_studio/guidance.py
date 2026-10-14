@@ -117,7 +117,7 @@ def track_break_times(breaks: list[dict], fps: float | None, start: float = 0.0)
 def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0.0) -> list[dict]:
     """Advice from where the cameras were around the object (coverage.measure). With several
     objects, each object's own coverage, named."""
-    from .coverage import problems
+    from .coverage import blocked_degrees, open_gap, problems
     if not cov:
         return []
     objs = cov.get("objects") or []
@@ -128,7 +128,7 @@ def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0
         pre = f"{name}: " if name else ""
         obj = "_obj" if name else ""
         if "gap" in found:
-            g = c["gap"]
+            g = open_gap(c)
             a, z = frame_time(g["first"], fps, start), frame_time(g["last"], fps, start)
             when = f"{fmt_timestamp(min(a, z))} and {fmt_timestamp(max(a, z))}" if a is not None and z is not None else ""
             where = f" (the video passes it between {when})" if when else ""
@@ -137,11 +137,17 @@ def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0
                     "Walk all the way around at the same distance, or that side will look thin or blurry.")
             tips.append(tip("warn", f"run.coverage{obj}_gap_at", text, deg=deg, when=when, **params) if when
                         else tip("warn", f"run.coverage{obj}_gap", text, deg=deg, **params))
+        blocked = blocked_degrees(c)
+        if blocked:
+            deg = f"{blocked:.0f}"
+            tips.append(tip("info", f"run.coverage{obj}_blocked", f"{pre}{deg}° around the object couldn't be filmed: "
+                            "something stands there (a wall or another object), so that side isn't counted as missing.",
+                            deg=deg, **params))
         if "height" in found:
             tips.append(tip("warn", f"run.coverage{obj}_height", f"{pre}The cameras were all at about the same height, "
                             "so the top and bottom of the object will be soft. Film three loops: low, eye level, then high.",
                             **params))
-    if not any(t["level"] == "warn" for t in tips):
+    if not any(t["level"] == "warn" for t in tips) and not any(t["code"].endswith("_blocked") for t in tips):
         tips.append(tip("ok", "run.coverage_ok", "The cameras went all the way around the object, at several heights."))
     return tips
 
@@ -163,7 +169,7 @@ def run_advice(job: dict) -> list[dict]:
         c = job["isolated"]
         tips.append(tip("ok", "run.isolated", f"Background removed: kept {c['kept']:,} of {c['total']:,} splats. "
                         "The original is kept next to it.", kept=f"{c['kept']:,}", total=f"{c['total']:,}"))
-    tips += [t for t in job.get("coverage_advice") or [] if t["level"] != "ok"]
+    tips += [t for t in job.get("coverage_advice") or [] if t["level"] == "warn"]   # the rest sits by the ring
     status, error = job.get("status"), (job.get("error") or "")
     ratio = registered_ratio(job.get("registered"))
     breaks = job.get("track_breaks") or []

@@ -104,7 +104,10 @@ Splat Studio helps you get it right with fewer attempts:
   tick *Train even if a side wasn't filmed*), so you can film it again instead of waiting for a
   thin, blurry model; the run keeps its camera poses and **Train anyway** trains them with the same
   settings. Only a missing side stops a run: one height is a warning, and the bottom of something
-  standing on a surface (under a car, under a vase) never counts as missing.
+  standing on a surface (under a car, under a vase) never counts as missing. Neither does a side
+  **nobody could film**: when COLMAP's 3D points show something standing there (the object is
+  against a wall, in a corner, next to another car), that side is drawn dashed grey on the ring
+  and grey on the viewer's globe, with a note instead of a warning.
   `./splat-studio coverage workspace/<video>/latest` prints the same numbers. With several objects,
   each object gets its own ring, measured around that object and counting only the frames where
   it's visible, so a side hidden behind another object shows up too.
@@ -461,7 +464,9 @@ câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se 
 de uma altura só. Se um lado ficou sem filmar, a execução **para antes do treino** (a menos que você
 marque *Treinar mesmo se um lado não foi filmado*), para você filmar de novo em vez de esperar; as
 posições de câmera ficam guardadas e **Treinar assim mesmo** treina com as mesmas configurações. A parte
-de baixo de algo apoiado numa superfície (embaixo de um carro) nunca conta como faltando. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
+de baixo de algo apoiado numa superfície (embaixo de um carro) nunca conta como faltando, nem um lado
+que **ninguém conseguiria filmar** porque há algo ali (uma parede, um canto, outro carro): ele aparece
+tracejado em cinza no anel e em cinza no globo do visualizador. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
 um pequeno globo que gira com a sua vista: verde onde as câmeras passaram, vermelho onde não
 passaram; o lado virado para você é o lado do modelo que você está olhando. Execuções feitas antes
 do globo são medidas de novo na primeira vez que você as abre (pode levar um pouco com vários
