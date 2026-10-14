@@ -341,6 +341,33 @@ class WebUiTest(BrowserTestCase):
         self.assertEqual(self.page.inner_text("#title"), "table · standard · red ball")
         self.assertEqual(self.errors, [])
 
+    def test_a_missing_side_stops_before_training(self):
+        """#34: by default a run stops after the coverage check when a side wasn't filmed, says so, and
+        Train anyway trains it from the same camera poses."""
+        os.environ["FAKE_COLMAP_POSES"] = "gap"
+        self.addCleanup(os.environ.pop, "FAKE_COLMAP_POSES", None)
+        self.open_new()
+        self.assertFalse(self.page.get_by_test_id("train-gaps-option").is_checked())   # off: stop and tell
+        self.page.set_input_files("#fileInput", str(make_video(self.tmp / "side.mov", seconds=6, size="960x540")))
+        self.page.get_by_test_id("video-advice").wait_for(state="visible")
+        self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.click("#startBtn")
+        self.page.wait_for_url(self.url + "/", timeout=10000)
+        stopped = self.page.get_by_test_id("run-stopped")
+        stopped.wait_for(timeout=180000)
+        self.assertIn("wasn't filmed", stopped.text_content())
+        row = self.page.locator("[data-testid=run-done]").filter(has=stopped)
+        self.assertEqual(row.locator(".pill").text_content().strip(), "stopped")
+        self.assertIn("barely filmed", row.locator("[data-testid=run-warnings]").text_content())
+        self.assertEqual(row.get_by_test_id("coverage").first.locator("path").count(), 1)   # the ring shows the gap
+        self.assertEqual(row.locator("text=View splat").count(), 0)
+        self.shot("run-stopped", page=None)
+        self.page.get_by_test_id("train-anyway").click()
+        done = self.page.locator("[data-testid=run-done]").filter(has_text="Re-train").first
+        done.wait_for(timeout=180000)
+        done.locator("text=View splat").wait_for(timeout=10000)
+        self.assertEqual(self.errors, [])
+
     def test_coverage_ring_and_warning(self):
         os.environ["FAKE_COLMAP_POSES"] = "gap"                       # one side never filmed
         self.addCleanup(os.environ.pop, "FAKE_COLMAP_POSES", None)
@@ -348,6 +375,7 @@ class WebUiTest(BrowserTestCase):
         self.page.set_input_files("#fileInput", str(make_video(self.tmp / "side.mov", seconds=6, size="960x540")))
         self.page.get_by_test_id("video-advice").wait_for(state="visible")
         self.page.click('.seg[data-name="quality"] button[data-v="preview"]')
+        self.page.get_by_test_id("train-gaps-option").check()          # train even with a side missing (#34)
         self.page.click("#startBtn")
         self.page.wait_for_url(self.url + "/", timeout=10000)
         row = self.page.locator("[data-testid=run-done]").first

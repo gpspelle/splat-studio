@@ -57,7 +57,15 @@ Right after COLMAP, before training: "up" is the average of the cameras' own up 
 the object is the point the cameras' viewing rays pass closest to (least squares). Each camera
 gets an angle around the object and a height angle seen from it. The largest empty arc between
 neighbouring cameras over 60°, or a spread under 15° between the 10th and 90th percentile
-heights, is a warning; the frames on either side of the gap give the moment in the video. The
+heights, is a warning; the frames on either side of the gap give the moment in the video.
+With `run --stop-on-gaps` (the New run page passes it unless *Train even if a side wasn't filmed*
+is ticked), a gap over 60° around the scene, or around any chosen object, stops the run after the
+masks are prepared and before Brush: it prints `Stopped: coverage`, adds a `stopped:` line to
+`summary.txt` and exits with code 3; the web UI shows the run as *stopped* with **Train anyway**,
+which queues a `retrain` job (`--train-only`, the run's own settings, and `--masks --split-objects`
+when it had several objects; `frames_of_run` finds their frames from the summary). Height is never
+a reason to stop, and only angles around the object are measured, so an unfilmable underside
+never stops a run. The
 run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`. The basis
 (centre, up and two axes) and each camera's direction from the centre (`dirs`, model coordinates)
 are saved with it. The viewer draws a small globe in a second WebGL canvas: a solid icosphere (so the cameras and

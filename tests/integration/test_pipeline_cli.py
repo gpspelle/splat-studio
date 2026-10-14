@@ -83,6 +83,31 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("Brush was not started", r.stderr)
         self.assertNotIn("3/3 Training", r.stdout)
 
+    def test_stop_on_gaps_stops_before_training_and_train_only_finishes_it(self):
+        """#34: a side nobody filmed stops the run before Brush; the poses stay and --train-only trains them."""
+        env = fake_tools_env(FAKE_COLMAP_POSES="gap")
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--stop-on-gaps", env=env)
+        self.assertEqual(r.returncode, 3, r.stdout[-2000:] + r.stderr[-2000:])
+        self.assertIn("Stopped before training:", r.stdout)
+        self.assertIn("degrees around the object weren't filmed", r.stdout)
+        self.assertIn("Stopped: coverage", r.stdout)
+        self.assertNotIn("3/3 Training", r.stdout)
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        self.assertFalse(list((run / "splat").glob("*.ply")) if (run / "splat").exists() else [])
+        self.assertIn("stopped:", (run / "summary.txt").read_text())
+        self.assertIn(f"--train-only", r.stdout)
+        t = self.run_pipeline("--train-only", run, "--quality", "preview", env=env)
+        self.assertEqual(t.returncode, 0, t.stdout[-2000:] + t.stderr[-2000:])
+        self.assertTrue(list((run / "splat").glob("preview_*.ply")))
+        # filmed all the way round: the same option trains as usual; without it, gaps never stop a run
+        full = self.run_pipeline(self.video, "--quality", "preview", "--stop-on-gaps",
+                                 env=fake_tools_env(FAKE_COLMAP_POSES="full"))
+        self.assertEqual(full.returncode, 0, full.stdout[-2000:])
+        self.assertIn("3/3 Training", full.stdout)
+        gap = self.run_pipeline(self.video, "--quality", "preview", env=env)
+        self.assertEqual(gap.returncode, 0, gap.stdout[-2000:])
+        self.assertIn("barely filmed", gap.stdout)
+
     def test_dry_run_and_no_train(self):
         dry = self.run_pipeline(self.video, "--dry-run")
         self.assertEqual(dry.returncode, 0, dry.stderr)

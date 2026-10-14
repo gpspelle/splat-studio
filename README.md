@@ -100,7 +100,11 @@ Splat Studio helps you get it right with fewer attempts:
 - **Right after the camera poses**, before training, it checks where the cameras were around
   the object. A **coverage ring** on the run (seen from above, one dot per camera) shows any side
   you skipped in red. A gap over 60°, or cameras all at one height, gives a warning that names
-  the moment in the video, so you can stop the run and film that side.
+  the moment in the video. **A side nobody filmed stops the run before training** (unless you
+  tick *Train even if a side wasn't filmed*), so you can film it again instead of waiting for a
+  thin, blurry model; the run keeps its camera poses and **Train anyway** trains them with the same
+  settings. Only a missing side stops a run: one height is a warning, and the bottom of something
+  standing on a surface (under a car, under a vase) never counts as missing.
   `./splat-studio coverage workspace/<video>/latest` prints the same numbers. With several objects,
   each object gets its own ring, measured around that object and counting only the frames where
   it's visible, so a side hidden behind another object shows up too.
@@ -169,6 +173,7 @@ choice is remembered in your browser; the first time, it follows your browser's 
 | Quality | Preview · Standard · High | Preview is ~4× faster, good for checking a capture. High takes longer and gives finer detail. |
 | Detail | Auto · Low · Normal · High | Auto judges it from how much texture the footage has. |
 | Remove the background | on/off (off) | Also saves a copy with only the object: no table, floor or room. The original is always kept. |
+| Train even if a side wasn't filmed | on/off (off) | Off: a run whose camera positions show a side nobody filmed stops before training, with **Train anyway** to continue. On: it trains anyway and only warns. In the terminal: `run --stop-on-gaps`. |
 | Measure quality | on/off | Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number. |
 | Advanced | frames, trim start/end, extra Brush options | e.g. trim the first seconds while you were pressing record. |
 
@@ -453,7 +458,10 @@ sobre uma superfície com textura. O guia completo está no app (**Guia de grava
 
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
-de uma altura só. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
+de uma altura só. Se um lado ficou sem filmar, a execução **para antes do treino** (a menos que você
+marque *Treinar mesmo se um lado não foi filmado*), para você filmar de novo em vez de esperar; as
+posições de câmera ficam guardadas e **Treinar assim mesmo** treina com as mesmas configurações. A parte
+de baixo de algo apoiado numa superfície (embaixo de um carro) nunca conta como faltando. Com vários objetos, cada um tem o seu anel. No visualizador, **Cobertura** mostra
 um pequeno globo que gira com a sua vista: verde onde as câmeras passaram, vermelho onde não
 passaram; o lado virado para você é o lado do modelo que você está olhando. Execuções feitas antes
 do globo são medidas de novo na primeira vez que você as abre (pode levar um pouco com vários

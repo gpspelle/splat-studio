@@ -63,7 +63,7 @@ window.theme.mount();
 window.i18n.apply();
 window.addEventListener("langchange", render);
 
-const STATUS = { done: ["done"], failed: ["failed", "interrupted"], stopped: ["cancelled"] };
+const STATUS = { done: ["done"], failed: ["failed", "interrupted"], stopped: ["cancelled", "stopped"] };
 const filterOn = () => document.querySelector('.seg[data-name="status"] button.on').dataset.v;
 document.querySelector('.seg[data-name="status"]').addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;

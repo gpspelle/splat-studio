@@ -41,6 +41,41 @@ def append_summary(ws: Path, lines: list[tuple[str, str]]) -> None:
             f.write(f"{k + ':':<22} {v}\n")
 
 
+STOPPED_EXIT = 3        # exit code of a run stopped before training (--stop-on-gaps)
+
+
+def gap_problems(ws: Path) -> list[str]:
+    """Sides nobody filmed, from the run's coverage.json: around the whole scene, and around each
+    chosen object. Only a missing side counts: filming from one height is a warning, never a stop,
+    and the underside of something standing on a surface is never measured as missing."""
+    from .coverage import problems
+    try:
+        cov = json.loads((ws / "coverage.json").read_text())
+    except (OSError, ValueError):
+        return []
+    out = []
+    if "gap" in problems(cov):
+        out.append(f"{cov['gap']['degrees']:.0f} degrees around the object weren't filmed")
+    for o in cov.get("objects", []):
+        if "gap" in problems(o):
+            out.append(f"{o['gap']['degrees']:.0f} degrees around {o['name']} weren't filmed")
+    return out
+
+
+def frames_of_run(ws: Path) -> Path | None:
+    """The frames folder a run was made from (its summary's `frames:` line), or None."""
+    try:
+        line = next(l for l in (ws / "summary.txt").read_text().splitlines() if l.startswith("frames:"))
+    except (OSError, StopIteration):
+        return None
+    rel = Path(line.split(":", 1)[1].strip().rsplit(" (", 1)[0])
+    for base in (Path.cwd(), ws.parent.parent.parent):         # the run's cwd: the data folder
+        d = rel if rel.is_absolute() else base / rel
+        if d.is_dir():
+            return d
+    return None
+
+
 def split_brush_args(argv: list[str]) -> tuple[list[str], list[str]]:
     """Everything after a bare `--` goes to Brush unchanged."""
     if "--" in argv:
@@ -94,6 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--mask-mode", choices=["transparent", "ignore"], default="transparent",
                     help="transparent: everything not chosen is left out of the splat (default); "
                          "ignore: it is just not used for training")
+    ap.add_argument("--stop-on-gaps", action="store_true",
+                    help="stop before training when a side of the object (or of a chosen object) wasn't filmed; "
+                         "train it later with --train-only RUN_DIR")
     ap.add_argument("--viewer", action="store_true", help="open the Brush window while training")
     ap.add_argument("--brush", help="path to the brush binary")
     ap.add_argument("--dry-run", action="store_true", help="print the commands without running them")
@@ -122,6 +160,7 @@ def main(argv: list[str] | None = None) -> None:
         ws = args.train_only.resolve()
         if not (ws / "dense" / "sparse" / "0").exists():
             sys.exit(f"{ws} has no dense/sparse/0 - run COLMAP for it first")
+        frames = frames_of_run(ws)
     else:
         if not args.video.exists():
             sys.exit(f"video not found: {args.video}")
@@ -190,6 +229,17 @@ def main(argv: list[str] | None = None) -> None:
         from .thumbs import make as make_thumb
         make_thumb(frames, masksmod.masks_dir(frames), ws / "thumbs" / "run.jpg")   # the library shows the object
 
+    # ------------------------------------------------ 2c: stop here if a side wasn't filmed (#34)
+    if args.stop_on_gaps and not args.train_only and not args.dry_run:
+        missing = gap_problems(ws)
+        if missing:
+            say("\n==> Stopped before training: " + "; ".join(missing))
+            say("    The camera positions are kept. Film the missing side and start a new run, or train anyway:")
+            say(f"    splat-studio run --train-only {os.path.relpath(ws)} --quality {args.quality}")
+            say("Stopped: coverage")                                  # parsed by the web UI
+            append_summary(ws, [("stopped", "before training, a side wasn't filmed: " + "; ".join(missing))])
+            sys.exit(STOPPED_EXIT)
+
     # ------------------------------------------------ 3: Brush
     if args.no_train:
         say(f"\n==> Stopping before training (--no-train). Train later with:\n"
@@ -242,7 +292,7 @@ def main(argv: list[str] | None = None) -> None:
                 append_summary(ws, [("object splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])
             except (PlyError, OSError, ValueError) as e:
                 say(f"    couldn't remove the background: {e}")
-        if args.split_objects and args.masks and not args.train_only:
+        if args.split_objects and args.masks and frames is not None:
             say("\n==> Splitting the objects (the original is kept)")
             from .objects import split
             from .splats import PlyError

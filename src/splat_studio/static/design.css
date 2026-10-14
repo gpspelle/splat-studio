@@ -221,7 +221,11 @@ details[open] > summary::before { content: "−"; }
 .pill.done::before, .status.ok::before { background: var(--ok); }
 .pill.failed, .pill.interrupted, .status.bad { color: var(--bad); }
 .pill.failed::before, .pill.interrupted::before, .status.bad::before { background: var(--bad); }
-.pill.cancelled::before, .pill.unknown::before { background: var(--warn); }
+.pill.cancelled::before, .pill.unknown::before, .pill.stopped::before { background: var(--warn); }
+.run-stopped { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: var(--radius);
+  display: grid; gap: 4px; font: var(--text-sm); color: var(--ink-2); }
+.run-stopped b { color: var(--ink); font-weight: 600; }
+.run-stopped .row { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-top: 6px; }
 .tag { font: var(--text-label); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2);
   border: var(--hairline) solid var(--rule-soft); padding: 2px 6px; border-radius: var(--radius); }
 /* progress: a ruled track with a solid ink fill and a signal tip */
