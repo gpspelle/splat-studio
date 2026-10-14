@@ -59,7 +59,8 @@ walking through. Re-filming now takes a minute. Coming back later takes much lon
   and warns you before you spend time processing.
 - **Right after the camera poses**, before training, a coverage ring shows where the cameras were
   around the object. A side you skipped, or filming from only one height, gives a warning with
-  the moment in the video. Stop the run and film that side again rather than wait for training.
+  the moment in the video. A side nobody filmed stops the run before training, so you can film
+  it again rather than wait; **Train anyway** continues with the same camera positions.
 - **After a run**, if the camera track broke, it tells you **at which seconds of the video**
   (for example "around 0:42–0:51"). Look at those moments: usually a fast turn, motion blur,
   something passing in front, or the object leaving the frame. Re-film just that more slowly.

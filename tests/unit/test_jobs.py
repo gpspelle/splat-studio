@@ -53,6 +53,22 @@ class ParseLineTest(unittest.TestCase):
         self.assertTrue(j.object_splat.endswith("_object.ply"))           # background removal is told apart
         self.assertEqual(validate_options({"masks": True, "split_objects": True}), {"masks": True, "split_objects": True})
 
+    def test_stopping_before_training_when_a_side_is_missing(self):
+        """#34: the run can stop itself after the coverage check; training it later keeps the settings."""
+        cmd = build_cmd(job(video="v.mov", options={"stop_on_gaps": True}))
+        self.assertIn("--stop-on-gaps", cmd)
+        self.assertNotIn("--stop-on-gaps", build_cmd(job(video="v.mov", options={})))      # off unless asked
+        retrain = build_cmd(job(type="retrain", run_dir="workspace/v/run_1",
+                                options={"stop_on_gaps": True, "masks": True, "split_objects": True}))
+        self.assertNotIn("--stop-on-gaps", retrain)                                        # "train anyway"
+        self.assertEqual(retrain[-2:], ["--masks", "--split-objects"])
+        self.assertEqual(validate_options({"stop_on_gaps": True}), {"stop_on_gaps": True})
+        j = job(video="v.mov")
+        parse_line(j, "==> Stopped before training: 166 degrees around the object weren't filmed")
+        self.assertIsNone(j.stopped)
+        parse_line(j, "Stopped: coverage")
+        self.assertEqual(j.stopped, "coverage")
+
     def test_fog_removal_is_not_an_option(self):
         self.assertEqual(validate_options({"clean": True}), {})            # old clients: ignored, it always runs
         self.assertNotIn("--clean", build_cmd(job(video="v.mov", options={"clean": True})))

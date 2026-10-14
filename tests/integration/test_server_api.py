@@ -405,6 +405,27 @@ class CoverageTest(ServerTestCase):
         self.assertIsNone(none["coverage"])
         self.assertIn("coverage", (self.data.root / done["run_dir"] / "summary.txt").read_text())
 
+    def test_a_missing_side_can_stop_the_run_before_training(self):
+        """#34: with stop_on_gaps the run stops after the coverage check, and training it later works."""
+        with mock_env({"FAKE_COLMAP_POSES": "gap"}):
+            up = json.loads(self.upload(make_video(self.tmp / "gap2.mov", seconds=4))[1])
+            _, job = self.json("POST", "/api/jobs", {"type": "video", "video": up["video"], "quality": "preview",
+                                                     "frames": 24, "stop_on_gaps": True})
+            done = self.wait_done(job["id"])
+            self.assertEqual(done["status"], "stopped", done.get("error"))
+            self.assertEqual(done["stopped"], "coverage")
+            self.assertIsNone(done["error"])
+            self.assertFalse(done["splat"])
+            self.assertIn("run.coverage_gap_at", [a["code"] for a in done["advice"]])
+            self.assertIn("--stop-on-gaps", done["cmd"])
+            # "Train anyway": train the run it stopped, from its camera poses
+            _, again = self.json("POST", "/api/jobs", {"type": "retrain", "run_dir": done["run_dir"],
+                                                       "quality": "preview"})
+            trained = self.wait_done(again["id"])
+        self.assertEqual(trained["status"], "done", trained.get("error"))
+        self.assertTrue(trained["splat"])
+        self.assertNotIn("--stop-on-gaps", trained["cmd"])
+
     def test_all_the_way_round_is_fine(self):
         done = self.run_with("full")
         self.assertEqual([a["code"] for a in done["coverage_advice"]], ["run.coverage_ok"])

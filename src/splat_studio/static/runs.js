@@ -143,6 +143,11 @@
     const guide = (j.advice || []).some((a) => a.level === "warn") ? `<div class="meta" style="margin-top:6px"><a class="link" href="/guide">${esc(t("btn.guide"))}</a></div>` : "";
     return { running, qd, tags, timing, facts, view, extra, canRetrain, kv, guide, objs,
              err: j.error && j.status !== "done" ? `<div class="err">${esc(j.error)}</div>` : "",
+             // stopped itself before training (#34): say why, and offer to train with what there is
+             stopped: j.status === "stopped" ? `<div class="run-stopped" data-testid="run-stopped"><b>${esc(t("run.stopped.title"))}</b>
+               <span>${esc(t("run.stopped.help"))}</span>
+               <div class="row"><button class="small primary" data-testid="train-anyway" onclick="runs.trainAnyway('${esc(j.id)}')">${esc(t("btn.trainAnyway"))}</button>
+               <a class="btn small ghost" href="/guide">${esc(t("btn.guide"))}</a></div></div>` : "",
              noSplat: j.status === "done" && j.type === "video" && !j.splat ? `<div class="meta">${esc(t("run.noSplat"))}</div>` : "",
              thumb: `<div class="thumb" style="${j.thumb ? `background-image:url('${fileUrl(j.thumb)}')` : ""}"></div>`,
              head: `<div class="head"><span class="name" title="${esc(runTitle(j))}">${esc(runTitle(j))}</span>
@@ -185,6 +190,7 @@
         ${p.head}</div>
         <div class="meta">${esc(p.timing)}${p.facts ? " · " + esc(p.facts) : ""}</div>
         ${p.objs}${p.err}${!isOpen && warn.length ? `<ul class="advice" data-testid="run-warnings">${adviceHTML(warn)}</ul>` : ""}
+        ${p.stopped}${p.stopped && !isOpen ? coverageHTML(j.coverage, [], false) : ""}
       </div>
       <div class="actions"><div class="row">${p.view}
         <button class="small ghost" data-testid="run-details" aria-expanded="${isOpen}" onclick="runs.toggle('${esc(j.id)}')">${esc(t(isOpen ? "btn.less" : "btn.details"))}</button></div></div>
@@ -202,7 +208,9 @@
 
   const html = (j, opts = {}) => isActive(j) ? activeHTML(j) : doneHTML(j, opts);
 
+  const byId = new Map();             // the rows on screen, for buttons that need a run's settings
   function render(el, list, opts = {}) {
+    list.forEach((j) => byId.set(j.id, j));
     const logs = {}; el.querySelectorAll("pre.log").forEach((p) => logs[p.id] = [p.textContent, p.scrollTop]);
     el.innerHTML = list.map((j) => html(j, opts)).join("");
     for (const [id, [txt, s]] of Object.entries(logs)) { const p = document.getElementById(id); if (p) { p.textContent = txt; p.scrollTop = s; } }
@@ -221,6 +229,17 @@
     if (open.has(id)) loadLog(id);
   }
   function stop(id) { hooks.stop && hooks.stop(id); }
+  // a run stopped for coverage: train from its camera poses with the settings it was started with
+  async function trainAnyway(id) {
+    const j = byId.get(id); if (!j) return;
+    const o = j.options || {};
+    const body = { type: "retrain", run_dir: j.run_dir, quality: o.quality, detail: o.detail, eval: o.eval,
+                   remove_background: o.remove_background, masks: o.masks, split_objects: o.split_objects, brush_args: o.brush_args };
+    const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then((x) => x.json()).catch(() => ({ error: t("err.network") }));
+    if (r.error) { (window.toast || alert)(r.code && window.i18n.has("err." + r.code) ? t("err." + r.code) : r.error); return; }
+    hooks.changed && hooks.changed(true);
+  }
   function retrain(dir) { hooks.retrain ? hooks.retrain(dir) : (location.href = "/?" + new URLSearchParams({ retrain: dir })); }
   // drops the record and its log from the list; splats and run folders stay on disk
   async function remove(id) {
@@ -230,6 +249,6 @@
     hooks.changed && hooks.changed(true);
   }
 
-  window.runs = { split, render, html, isActive, endedAt, open, hooks, toggle, stop, retrain, remove, loadLog,
+  window.runs = { split, render, html, isActive, endedAt, open, hooks, toggle, stop, retrain, trainAnyway, remove, loadLog,
                   esc, viewerUrl, fileUrl, ago, dur, tr, splatTitle, runTitle, adviceHTML, RECENT_MIN, RECENT_MAX };
 })();

@@ -34,7 +34,7 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts", "coverage"]
+              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts", "coverage", "stopped"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -83,6 +83,7 @@ RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
 RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
 RE_COVERAGE = re.compile(r"^Coverage: (\{.*\})\s*$")
+RE_STOPPED = re.compile(r"^Stopped: (coverage)\s*$")      # the run stopped itself before training (#34)
 RE_PART_COPY = re.compile(r"Part copy \((.*)\): (.+\.ply)")
 RE_STAGE_SPLIT = re.compile(r"==> Splitting the objects")
 RE_STAGE_ISOLATE = re.compile(r"==> Removing the background")
@@ -121,6 +122,10 @@ def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -
     t = time.time() if now is None else now
     clock = job_clock(job)
     clock.line(t, line)
+    m = RE_STOPPED.search(line.strip())
+    if m:
+        job.stopped = m.group(1)
+        return
     m = RE_STAGE.search(line)
     if m:
         job.stage = int(m.group(1))
@@ -271,6 +276,10 @@ def build_cmd(job: Job) -> list[str]:
         args.append("--masks")
         if o.get("split_objects"):
             args.append("--split-objects")
+    if o.get("masks") and o.get("split_objects") and job.type == "retrain":
+        args += ["--masks", "--split-objects"]         # training a stopped run: still one splat per object
+    if o.get("stop_on_gaps") and job.type == "video":
+        args.append("--stop-on-gaps")
     extra = (o.get("brush_args") or "").split()
     if extra:
         args += ["--", *extra]
@@ -287,7 +296,7 @@ class ApiError(ValueError):
 
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
-                                     "brush_args", "remove_background", "masks", "split_objects")
+                                     "brush_args", "remove_background", "masks", "split_objects", "stop_on_gaps")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")
@@ -408,7 +417,7 @@ class Runner:
                 pass
         # coverage warnings matter most while the run is still going: before training ends
         d["coverage_advice"] = guidance.coverage_advice(d.get("coverage"), info.get("fps"), info.get("start", 0.0))
-        d["advice"] = guidance.run_advice(d) if j.status in ("done", "failed") else []
+        d["advice"] = guidance.run_advice(d) if j.status in ("done", "failed", "stopped") else []
         return d
 
     def all_views(self) -> list[dict]:
@@ -480,6 +489,9 @@ class Runner:
         job.finished = time.time()
         if job.cancel_requested:
             job.status = "cancelled"
+        elif job.stopped:                                  # stopped itself before training: not a failure
+            job.status, job.error = "stopped", None
+            job.eta = job.eta_total = job.eta_note = None
         elif job.returncode == 0:
             job.status, job.error, job.step_pct = "done", None, 100
             job_clock(job).end_phase(job.finished)          # remember how long the last part took

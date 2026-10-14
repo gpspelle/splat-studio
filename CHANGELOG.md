@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **Runs stop before training when a side wasn't filmed** ([#34](https://github.com/gpspelle/splat-studio/issues/34)).
+  The coverage check right after the camera poses now ends the run there, instead of after a full
+  training, unless *Train even if a side wasn't filmed* is ticked on New run. The run keeps its
+  camera poses: **Train anyway** trains it with the same settings. Filming from one height stays a
+  warning, and an unfilmable underside never stops a run. Terminal: `run --stop-on-gaps`.
 - **`splat-studio bench RUN`** ([#32](https://github.com/gpspelle/splat-studio/issues/32)): measures, on
   your own computer and a finished run, how long COLMAP takes with smaller features, fewer matched
   neighbours and the global mapper (COLMAP 4+), and how Brush's quality on held-out frames grows over

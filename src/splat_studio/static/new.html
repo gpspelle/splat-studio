@@ -130,6 +130,7 @@
           </div>
         </div>
         <label class="check"><input type="checkbox" id="removeBg" data-testid="remove-bg-option"> <span><span data-i18n="removeBg.label">Remove the background</span><br><span class="meta" data-i18n="removeBg.help">Also saves a copy with only the object, without the table, floor or room.</span></span></label>
+        <label class="check"><input type="checkbox" id="trainGaps" data-testid="train-gaps-option"> <span><span data-i18n="trainGaps.label">Train even if a side wasn't filmed</span><br><span class="meta" data-i18n="trainGaps.help">Off: if the camera positions show a side of the object nobody filmed, the run stops before training, so you can film it again instead of waiting. The bottom of something standing on a surface never counts as missing.</span></span></label>
         <label class="check"><input type="checkbox" id="eval"> <span><span data-i18n="eval.label">Measure quality</span><br><span class="meta" data-i18n="eval.help">Sets aside every 10th frame for testing and reports PSNR and SSIM, so you can compare runs.</span></span></label>
         <details class="adv" id="adv">
           <summary data-i18n="adv.title">Advanced</summary>
@@ -180,7 +181,7 @@ const draft = {
   set(v) { try { sessionStorage.setItem(DRAFT, JSON.stringify(v)); } catch {} },
   clear() { try { sessionStorage.removeItem(DRAFT); } catch {} },
 };
-const CHECKS = ["removeBg", "eval", "reextract"], FIELDS = ["frames", "start", "end", "brushArgs"];
+const CHECKS = ["removeBg", "trainGaps", "eval", "reextract"], FIELDS = ["frames", "start", "end", "brushArgs"];
 function saveDraft() {
   const d = { videos: picked.map((p) => p.path), quality: seg("quality"), detail: seg("detail"), keep: seg("keep"), adv: $("adv").open };
   CHECKS.forEach((k) => (d[k] = $(k).checked));
@@ -292,11 +293,11 @@ const defaults = {
 function applySettings(d) {
   if (d.quality) setSeg("quality", d.quality);
   if (d.detail) setSeg("detail", d.detail);
-  ["removeBg", "eval", "reextract"].forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
+  ["removeBg", "trainGaps", "eval", "reextract"].forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
   ["frames", "brushArgs"].forEach((k) => { if (d[k] != null) $(k).value = d[k]; });
 }
 $("saveDefaults").onclick = () => {
-  const ok = defaults.set({ quality: seg("quality"), detail: seg("detail"), removeBg: $("removeBg").checked,
+  const ok = defaults.set({ quality: seg("quality"), detail: seg("detail"), removeBg: $("removeBg").checked, trainGaps: $("trainGaps").checked,
     eval: $("eval").checked, reextract: $("reextract").checked, frames: $("frames").value, brushArgs: $("brushArgs").value });
   $("defaultsStatus").textContent = ok ? t("defaults.saved") : "";
 };
@@ -345,6 +346,7 @@ $("startBtn").onclick = async () => {
   const one = picked.length === 1;
   const body = { type: "video", quality: seg("quality"), detail: seg("detail"),
     eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    stop_on_gaps: !$("trainGaps").checked,
     start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim(),
     masks: one && choosing() && selectionReady(), split_objects: one && seg("keep") === "several" && selectionReady() };
   $("startBtn").disabled = true;
