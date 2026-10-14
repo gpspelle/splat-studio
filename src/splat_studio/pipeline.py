@@ -29,11 +29,11 @@ from .common import child_env, module_cmd, say
 from .setup_deps import ensure_dependencies
 
 
-def run(cmd: list, dry: bool) -> int:
+def run(cmd: list, dry: bool, env: dict | None = None) -> int:
     say("\n$ " + " ".join(shlex.quote(str(c)) for c in cmd))
     if dry:
         return 0
-    return subprocess.run([str(c) for c in cmd], env=child_env()).returncode
+    return subprocess.run([str(c) for c in cmd], env=env or child_env()).returncode
 
 
 def append_summary(ws: Path, lines: list[tuple[str, str]]) -> None:
@@ -341,7 +341,7 @@ def main(argv: list[str] | None = None) -> None:
     if not args.dry_run:
         append_summary(ws, [("brush settings", why), ("brush command", " ".join(shlex.quote(str(c)) for c in cmd))])
     started = datetime.datetime.now()
-    if run(cmd, args.dry_run) != 0:
+    if run(cmd, args.dry_run, brushmod.eval_env(child_env()) if args.eval else None) != 0:
         sys.exit("Brush failed - see its output above.")
     if args.dry_run:
         return

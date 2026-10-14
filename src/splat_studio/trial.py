@@ -75,7 +75,10 @@ def verdict(rows: list[dict]) -> str:
 def report(name: str, plan: dict, rows: list[dict], params_from: str) -> str:
     lines = [f"# Trial: {name}", "",
              f"{capture.describe(plan)}. Brush settings from the {params_from} run, the same for all; every "
-             "10th frame held out and scored. Around 0.5 dB is hard to see.", "",
+             "10th frame held out and scored. Around 0.5 dB is hard to see.", ""]
+    if capture.phone_check(plan["meta"]):
+        lines += [f"The phone's own check: {capture.phone_check(plan['meta'])}.", ""]
+    lines += [
              "| Camera positions | Frames placed | Points | Placing cameras | Training | PSNR | SSIM | vs COLMAP |",
              "|---|---|---|---|---|---|---|---|"]
     base = next((r for r in rows if r["key"] == "colmap" and r.get("psnr") is not None), None)

@@ -53,6 +53,18 @@ class RunCaptureTest(TempDirTestCase):
         self.assertIn("COLMAP (ARKit's ignored)", (ws / "summary.txt").read_text())
         self.assertIn("Done. Splat: ", r.stdout)
 
+    def test_name_and_phone_check_reach_the_summary(self):
+        self.zip = make_capture(self.tmp / "Downloads", name="vase-window_2026-10-14_160000", frames=60,
+                                meta={"name": "vase window", "cameraLocked": True,
+                                      "quality": {"unsteady": 0.05, "blurry": 0.1, "gap": 20.0, "heights": 31.0}})
+        r = run_module("pipeline", [self.zip, "--frames", "20", "--quality", "preview"], cwd=self.tmp, timeout=240)
+        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+        self.assertIn('"vase window": 20 frames', r.stdout)
+        summary = (self.tmp / "workspace" / "vase-window_2026-10-14_160000" / "latest" / "summary.txt").read_text()
+        self.assertIn('"vase window"', summary)
+        self.assertIn("focus and exposure locked", summary)
+        self.assertRegex(summary, r"phone check:\s+340 degrees around, heights over 31 degrees, 5% unsteady, 10% blurry")
+
     def test_dry_run_reads_nothing(self):
         r = run_module("pipeline", [self.zip, "--dry-run"], cwd=self.tmp, timeout=60)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

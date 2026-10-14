@@ -454,13 +454,36 @@ def summary_lines(plan: dict, package: Path, frames_dir: Path) -> list[tuple[str
     m = plan["meta"]
     turned = {0: "", 1: ", turned a quarter clockwise", 2: ", turned upside down",
               3: ", turned a quarter anticlockwise"}[plan["turns"]]
-    return [("frames", f"{frames_dir} ({len(plan['frames'])} jpg)"),
-            ("capture", f"{package.name}: {m.get('device', '?')}, {m.get('frames', plan['rows'])} frames, "
-                        f"{m.get('duration', 0):.0f} s, {m.get('width')}x{m.get('height')}{turned}"),
-            ("left out", f"{plan['left_out']} frames where tracking was limited")]
+    named = f" \"{m['name']}\"" if m.get("name") else ""
+    out = [("frames", f"{frames_dir} ({len(plan['frames'])} jpg)"),
+           ("capture", f"{package.name}{named}: {m.get('device', '?')}, {m.get('frames', plan['rows'])} frames, "
+                       f"{m.get('duration', 0):.0f} s, {m.get('width')}x{m.get('height')}{turned}"
+                       + (", focus and exposure locked" if m.get("cameraLocked") else "")),
+           ("left out", f"{plan['left_out']} frames where tracking was limited")]
+    if phone_check(m):
+        out.append(("phone check", phone_check(m)))
+    return out
+
+
+def phone_check(meta: dict) -> str:
+    """The app's own check of the recording (meta.json `quality`), in one line; '' if absent."""
+    q = meta.get("quality")
+    if not isinstance(q, dict):
+        return ""
+    parts = []
+    if q.get("gap") is not None:
+        parts.append(f"{360 - q['gap']:.0f} degrees around")
+    if q.get("heights") is not None:
+        parts.append(f"heights over {q['heights']:.0f} degrees")
+    if q.get("unsteady") is not None:
+        parts.append(f"{q['unsteady']:.0%} unsteady")
+    if q.get("blurry") is not None:
+        parts.append(f"{q['blurry']:.0%} blurry")
+    return ", ".join(parts)
 
 
 def describe(plan: dict) -> str:
     c = plan["camera"]
-    return (f"{len(plan['frames'])} frames of {plan['rows']} ({plan['left_out']} with limited tracking left out), "
+    named = f"\"{plan['meta']['name']}\": " if plan["meta"].get("name") else ""
+    return (f"{named}{len(plan['frames'])} frames of {plan['rows']} ({plan['left_out']} with limited tracking left out), "
             f"{c['width']}x{c['height']}, {len(plan['points'])} ARKit points")

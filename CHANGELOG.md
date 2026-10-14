@@ -8,7 +8,8 @@
   with the phone's own camera positions (ARKit) instead of running COLMAP: frames with unsteady
   tracking are left out and the rest turned upright. `--poses refine` adds COLMAP's points and a
   polish; `--poses colmap` ignores the phone's positions. `splat-studio trial CAPTURE.zip` compares
-  the three on the same frames (time, and quality on held-out frames).
+  the three on the same frames (time, and quality on held-out frames). The recording's name, whether
+  the camera was locked, and the phone's own check of it go into the run summary and the trial report.
 - **Recording guide: more tips, and sections for cars and people.** Why one take beats three
   clips, keeping a steady distance from the surface (a rounded rectangle around a car), detail
   passes, light, lens, clothes; cars (heights, parking, reflections, frames); people (ask first,
@@ -46,6 +47,9 @@
   direction from the centre (`dirs`); older runs are measured again when first opened.
 
 ### Fixed
+- **The benchmark's quality curve was empty with real Brush** ([#42](https://github.com/gpspelle/splat-studio/issues/42)).
+  Brush prints its held-out scores as log lines, hidden unless `RUST_LOG` allows them; `bench`,
+  `trial` and `run --eval` now turn them on. The report also shows the training time on its own.
 - **Long objects like cars no longer count as their own obstacle** in the "nobody could film this
   side" check (#36): the object is told apart from what stands around it, and the distance you
   stood is judged per direction, so a skipped end of a car still stops the run.
