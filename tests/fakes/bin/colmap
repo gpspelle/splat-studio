@@ -7,7 +7,8 @@ the pipeline reads. Behaviour knobs (environment variables):
   FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
   FAKE_COLMAP_GLOBAL    "0": pretend to be COLMAP 3.x (no global_mapper)
   FAKE_COLMAP_POSES     "full" or "gap": write real camera poses walking around the object
-                        (all the way round, or skipping a 130-degree side); default: none
+                        (all the way round, or skipping a 130-degree side); "wall": the same gap,
+                        with a wall standing on that side (in points3D.bin); default: none
 """
 import glob
 import math
@@ -45,10 +46,10 @@ def write_poses(path, names, kind):
     import struct
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     from plyfile import _rot_to_quat
-    span = 230.0 if kind == "gap" else 360.0
+    span = 230.0 if kind in ("gap", "wall") else 360.0
     out = bytearray(struct.pack("<Q", len(names)))
     for i, name in enumerate(names):
-        a = math.radians(span * i / max(1, len(names)) if kind == "gap" else 360.0 * i / max(1, len(names)))
+        a = math.radians(span * i / max(1, len(names)))
         h = (-0.4, 0.0, 0.5)[i % 3]
         c = (3 * math.cos(a), -h, 3 * math.sin(a))
         z = [-v for v in c]
@@ -60,6 +61,26 @@ def write_poses(path, names, kind):
         R = [x, y, z]
         t = [-sum(R[r][k] * c[k] for k in range(3)) for r in range(3)]
         out += struct.pack("<I7dI", i + 1, *_rot_to_quat(R), *t, 1) + name.encode() + b"\0" + struct.pack("<Q", 0)
+    open(path, "wb").write(bytes(out))
+
+
+def write_points(path, wall):
+    """points3D.bin: the object (a small cluster at the origin), the floor under it, and with
+    wall=True a wall 2 units away on the side the cameras skipped (230-360 degrees)."""
+    import random
+    import struct
+    rnd = random.Random(1)
+    pts = [(rnd.uniform(-.4, .4), rnd.uniform(-.4, .4), rnd.uniform(-.4, .4)) for _ in range(300)]
+    pts += [(rnd.uniform(-4, 4), 0.5, rnd.uniform(-4, 4)) for _ in range(600)]           # floor (y down)
+    if wall:
+        mid = math.radians(295)
+        n, t = (math.cos(mid), math.sin(mid)), (-math.sin(mid), math.cos(mid))
+        for _ in range(800):
+            s, h = rnd.uniform(-3, 3), rnd.uniform(-1.5, 0.5)
+            pts.append((2.2 * n[0] + s * t[0], h, 2.2 * n[1] + s * t[1]))
+    out = bytearray(struct.pack("<Q", len(pts)))
+    for i, (x, y, z) in enumerate(pts):
+        out += struct.pack("<Q3d3BdQ", i + 1, x, y, z, 128, 128, 128, 0.5, 0)
     open(path, "wb").write(bytes(out))
 
 
@@ -129,6 +150,7 @@ elif cmd == "image_undistorter":
         open(os.path.join(out, "sparse", f"{b}.bin"), "w").close()
     if os.environ.get("FAKE_COLMAP_POSES"):
         write_poses(os.path.join(out, "sparse", "images.bin"), reg, os.environ["FAKE_COLMAP_POSES"])
+        write_points(os.path.join(out, "sparse", "points3D.bin"), os.environ["FAKE_COLMAP_POSES"] == "wall")
     open(os.path.join(out, "sparse", "registered.txt"), "w").write("\n".join(reg))
 else:
     sys.exit(f"fake colmap: unknown command {cmd}")

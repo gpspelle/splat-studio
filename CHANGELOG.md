@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **Sides nobody could film don't count as missing** ([#36](https://github.com/gpspelle/splat-studio/issues/36)).
+  When COLMAP's 3D points show something standing where you'd have had to film from (the object
+  is against a wall, in a corner, next to another car), that side no longer warns or stops the run.
+  It shows dashed grey on the ring and grey on the viewer's globe, with a note.
 - **Runs stop before training when a side wasn't filmed** ([#34](https://github.com/gpspelle/splat-studio/issues/34)).
   The coverage check right after the camera poses now ends the run there, instead of after a full
   training, unless *Train even if a side wasn't filmed* is ticked on New run. The run keeps its

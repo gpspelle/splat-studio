@@ -39,6 +39,79 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(coverage.problems(None), [])
 
 
+def wall(cov, dist, width=4.0, low=-0.5, high=1.5, n=800, spread=None):
+    """Points of a flat wall standing `dist` from the object, facing it, in the middle of its gap."""
+    import math
+    import random
+    b, g = cov["basis"], cov["gap"]
+    m = math.radians(g["from"] + g["degrees"] / 2)
+    t, up, e1, e2 = (b[k] for k in ("target", "up", "e1", "e2"))
+    d = [math.cos(m) * e1[i] + math.sin(m) * e2[i] for i in range(3)]
+    side = [math.cos(m + math.pi / 2) * e1[i] + math.sin(m + math.pi / 2) * e2[i] for i in range(3)]
+    rnd = random.Random(3)
+    out = []
+    for _ in range(n):
+        s, h = rnd.uniform(-width / 2, width / 2), rnd.uniform(low, high)
+        out.append(tuple(t[i] + dist * d[i] + s * side[i] + h * up[i] for i in range(3)))
+    return out
+
+
+class BlockedSideTest(unittest.TestCase):
+    """#36: a side something stands in front of (a wall) can't be filmed, so it isn't a gap."""
+
+    def gap(self):
+        return coverage.measure(ring(keep=lambda k: not 10 <= k < 22))   # 130 degrees nobody filmed
+
+    def test_a_wall_close_by_excuses_the_side(self):
+        c = self.gap()
+        self.assertAlmostEqual(c["distance"], 3.0, delta=0.1)              # how far people stood
+        coverage.excuse_blocked(c, wall(c, 2.2))
+        self.assertTrue(c["blocked"])
+        self.assertGreater(coverage.blocked_degrees(c), 60)
+        self.assertLess(coverage.open_gap(c)["degrees"], coverage.GAP_WARN)
+        self.assertEqual(coverage.problems(c), [])
+        self.assertAlmostEqual(c["gap"]["degrees"], 130, delta=2)         # the raw gap is kept
+        codes = [t["code"] for t in guidance.coverage_advice(c)]
+        self.assertEqual(codes, ["run.coverage_blocked"])                 # no warning, and not "all the way round"
+        self.assertIn("blocked", coverage.summary_line(c))
+
+    def test_what_does_not_block(self):
+        for name, pts in [
+            ("floor", [(x / 4, 0.75, z / 4) for x in range(-16, 17) for z in range(-16, 17)]),   # flat, under it
+            ("far wall", None),                                           # you could have walked there
+            ("low step", "low"),                                          # too short to stand in the way
+            ("nothing", [])]:
+            c = self.gap()
+            if pts is None:
+                pts = wall(c, 6.0)
+            elif pts == "low":
+                pts = wall(c, 2.2, low=-0.9, high=-0.8)
+            coverage.excuse_blocked(c, pts)
+            self.assertEqual(coverage.problems(c), ["gap"], name)
+            self.assertFalse(c.get("blocked"), name)
+
+    def test_a_wall_over_part_of_the_gap_leaves_the_rest(self):
+        c = self.gap()
+        coverage.excuse_blocked(c, wall(c, 2.2, width=1.0))               # narrow: covers a slice only
+        self.assertTrue(c["blocked"])
+        self.assertLess(coverage.open_gap(c)["degrees"], c["gap"]["degrees"])
+        g = coverage.open_gap(c)
+        if g["degrees"] > coverage.GAP_WARN:
+            self.assertEqual(coverage.problems(c), ["gap"])
+            self.assertIsNone(g["first"])                                 # the open part ends at the wall, not at a frame
+
+    def test_points3d_round_trip(self):
+        import struct
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "points3D.bin"
+            body = struct.pack("<Q", 2) + struct.pack("<Q3d3BdQ", 1, 1.0, 2.0, 3.0, 9, 9, 9, 0.5, 2) + struct.pack("<4I", 1, 0, 2, 5) \
+                + struct.pack("<Q3d3BdQ", 2, -1.0, 0.5, 0.25, 1, 1, 1, 0.1, 0)
+            f.write_bytes(body)
+            self.assertEqual(coverage.read_points3d(f), [(1.0, 2.0, 3.0), (-1.0, 0.5, 0.25)])
+            f.write_bytes(b"")
+            self.assertEqual(coverage.read_points3d(f), [])
+
+
 @needs_ffmpeg
 class PerObjectTest(TempDirTestCase):
     """Three balls in a row; the green one is hidden from a third of the cameras."""

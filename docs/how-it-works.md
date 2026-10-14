@@ -65,7 +65,18 @@ masks are prepared and before Brush: it prints `Stopped: coverage`, adds a `stop
 which queues a `retrain` job (`--train-only`, the run's own settings, and `--masks --split-objects`
 when it had several objects; `frames_of_run` finds their frames from the summary). Height is never
 a reason to stop, and only angles around the object are measured, so an unfilmable underside
-never stops a run. The
+never stops a run.
+
+Sides nobody could film are excused (`excuse_blocked`). COLMAP's `points3D.bin` (next to the
+cameras) is split into 10° directions around "up"; a direction is *blocked* when it has no camera
+within 10° and at least max(12, points/1000) points stand 0.6–1.3× the median camera distance away
+(where a person filming would be), within one camera distance above or below the centre, with a
+10th–90th percentile height span of at least 0.25× that distance. Flat floors and table tops never
+qualify, nor does a wall farther away than people stood. Neighbouring blocked directions become
+`blocked` arcs; `gap_open` is the largest gap once they count as covered, and `problems()` (the
+warning and the stop) uses it. The raw `gap` is kept. The run card draws blocked arcs dashed grey,
+and the viewer colours globe points with no camera nearby grey instead of red when their direction
+is blocked (note: "Nobody could film this side"). The
 run prints `Coverage: {json}` (the UI draws the ring from it) and saves `coverage.json`. The basis
 (centre, up and two axes) and each camera's direction from the centre (`dirs`, model coordinates)
 are saved with it. The viewer draws a small globe in a second WebGL canvas: a solid icosphere (so the cameras and
