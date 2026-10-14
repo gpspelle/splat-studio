@@ -550,6 +550,9 @@ class WebUiTest(BrowserTestCase):
         self.assertEqual(self.page.evaluate("location.pathname"), "/guide")
         self.assertEqual(self.page.get_attribute("[data-testid=nav-guide]", "aria-current"), "page")
         self.assertIn("Lock focus and exposure", guide.inner_text())
+        self.assertIn("rounded rectangle", self.page.get_by_test_id("guide-cars").inner_text())
+        self.assertIn("completely still", self.page.get_by_test_id("guide-people").inner_text())
+        self.assertIn("Why one take", guide.inner_text())
         self.shot("guide", full_page=True)
         self.page.get_by_test_id("nav-library").click()
         self.page.get_by_test_id("setup-pill").wait_for()
@@ -724,6 +727,8 @@ class LanguageAndFogUiTest(BrowserTestCase):
         self.assertIn("erramenta", self.page.text_content("#setupPill"))        # "Ferramentas prontas" / "Falta 1 ferramenta"
         self.page.get_by_test_id("nav-guide").click()
         self.assertIn("Trave foco e exposição", self.page.get_by_test_id("guide").inner_text())
+        self.assertIn("Carros e outros objetos grandes", self.page.get_by_test_id("guide-cars").inner_text())
+        self.assertIn("Pessoas", self.page.get_by_test_id("guide-people").inner_text())
         self.assertEqual(self.page.inner_text("[data-testid=nav-guide]"), "Guia de gravação")
         self.shot("guide-pt")
         self.page.get_by_test_id("nav-studio").click()

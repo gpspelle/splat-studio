@@ -72,7 +72,14 @@ cameras) is split into 10° directions around "up"; a direction is *blocked* whe
 within 10° and at least max(12, points/1000) points stand 0.6–1.3× the median camera distance away
 (where a person filming would be), within one camera distance above or below the centre, with a
 10th–90th percentile height span of at least 0.25× that distance. Flat floors and table tops never
-qualify, nor does a wall farther away than people stood. Neighbouring blocked directions become
+qualify, nor does a wall farther away than people stood. "How far people stood" is per
+direction (`local_distance`, interpolated between the cameras on either side, from each camera's
+`flat` distance), because around a long object the ends are further from the centre than the
+sides. The object never blocks itself: in a top-view grid (cells 0.04× the camera distance) the
+cells whose points span some height are "standing"; the standing cells connected to the one
+nearest the centre (within half the camera distance, growing across one-cell holes) are the
+object, however long, and only standing cells apart from it can block. When no object outline is
+found, blocking points must be at least 0.6× the camera distance away instead. Neighbouring blocked directions become
 `blocked` arcs; `gap_open` is the largest gap once they count as covered, and `problems()` (the
 warning and the stop) uses it. The raw `gap` is kept. The run card draws blocked arcs dashed grey,
 and the viewer colours globe points with no camera nearby grey instead of red when their direction

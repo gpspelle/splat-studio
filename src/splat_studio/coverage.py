@@ -31,9 +31,11 @@ from .splats import look_at_point
 
 GAP_WARN = 60.0          # degrees around the object with no camera
 HEIGHT_WARN = 15.0       # degrees between the low and high cameras
-# A direction is blocked when something stands where a person filming would be: between these
-# multiples of the usual camera distance, reaching at least BLOCK_TALL x that distance up.
+# A direction is blocked when something other than the object stands where a person filming would
+# be: closer than BLOCK_FAR x the camera distance in that direction (BLOCK_NEAR x when the object's
+# own outline can't be told apart), reaching at least BLOCK_TALL x that distance up.
 BLOCK_NEAR, BLOCK_FAR, BLOCK_TALL = 0.6, 1.3, 0.25
+CELL = 0.04              # top-view grid cell, x the camera distance: telling the object from what's around it
 BLOCK_BIN = 10           # degrees per direction tested
 
 
@@ -94,11 +96,11 @@ def measure(images: list[dict], target=None, basis=None, only: set | None = None
         az = math.degrees(math.atan2(_dot(flat, e2), _dot(flat, e1))) % 360
         el = math.degrees(math.atan2(h, math.sqrt(_dot(flat, flat)) or 1e-9))
         n = math.sqrt(_dot(v, v)) or 1.0
-        rows.append((az, el, c["name"], tuple(round(x / n, 3) for x in v)))
+        rows.append((az, el, c["name"], tuple(round(x / n, 3) for x in v), math.sqrt(_dot(flat, flat))))
     rows.sort()
     # the largest empty arc, wrapping around
     gap, start, end = -1.0, None, None
-    for i, (az, _el, name, _d) in enumerate(rows):
+    for i, (az, _el, name, _d, _f) in enumerate(rows):
         nxt = rows[(i + 1) % len(rows)]
         d = (nxt[0] - az) % 360 or (360.0 if len(rows) == 1 else 0.0)
         if d > gap:
@@ -117,7 +119,10 @@ def measure(images: list[dict], target=None, basis=None, only: set | None = None
             "distance": round(flat[len(flat) // 2], 6),
             "basis": {"target": r6(target), "up": r6(up), "e1": r6(e1), "e2": r6(e2)},
             # each camera's direction from the centre, in the model's own coordinates (the viewer's globe)
-            "dirs": [list(r[3]) for r in rows]}
+            "dirs": [list(r[3]) for r in rows],
+            # each camera's distance from the centre along the ground: around a long object (a car)
+            # people stand further away at the ends than at the sides
+            "flat": [round(r[4], 4) for r in rows]}
 
 
 # ---------------------------------------------------------------- one ring per object
@@ -212,22 +217,77 @@ def _largest_gap(az: list[float]) -> tuple[float, float, float]:
     return best
 
 
+def local_distance(cov: dict, theta: float) -> float:
+    """How far from the centre people stood in direction theta (degrees), from the nearest camera
+    on each side: walking around a long object, the ends are further from its centre than the sides."""
+    az, fl = cov.get("azimuths") or [], cov.get("flat") or []
+    if len(az) != len(fl) or not az:
+        return cov["distance"]
+    pairs = sorted(zip(az, fl))
+    before = max((p for p in pairs if p[0] <= theta), default=pairs[-1])
+    after = min((p for p in pairs if p[0] >= theta), default=pairs[0])
+    span = (after[0] - before[0]) % 360
+    w = ((theta - before[0]) % 360) / span if span else 0.0
+    return before[1] + (after[1] - before[1]) * w
+
+
+def _object_cells(flat_pts: list[tuple], dist: float) -> tuple[set, set, float] | None:
+    """Top view of what stands up (cells with points spanning some height; floors and table tops are
+    flat and drop out), and the connected part at the centre: the object itself, however long."""
+    cell = CELL * dist
+    grid: dict[tuple, list] = {}
+    for x, y, h in flat_pts:
+        grid.setdefault((math.floor(x / cell), math.floor(y / cell)), []).append(h)
+    solid = {k for k, hs in grid.items() if len(hs) >= 3 and max(hs) - min(hs) >= 1.5 * cell}
+    if not solid:
+        return None
+    near = min(solid, key=lambda k: math.hypot(k[0] + 0.5, k[1] + 0.5))
+    if math.hypot(near[0] + 0.5, near[1] + 0.5) * cell > 0.5 * dist:   # a car seen from above is a ring
+        return None
+    grown = solid | {(i + di, j + dj) for i, j in solid for di in (-1, 0, 1) for dj in (-1, 0, 1)}
+    seen, todo = {near}, [near]                   # flood fill across small holes in the point cloud
+    while todo:
+        i, j = todo.pop()
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                k = (i + di, j + dj)
+                if k in grown and k not in seen:
+                    seen.add(k)
+                    todo.append(k)
+    return {k for k in solid if k in seen}, solid, cell
+
+
 def excuse_blocked(cov: dict, points: list[tuple]) -> dict:
     """Add 'blocked' (arcs [from, to] in degrees that nobody could have filmed from, because
     something stands there) and 'gap_open' (the largest gap left once those are excused) to a
-    coverage dict. Floors and table tops never block: they're flat, and blocking needs height."""
+    coverage dict. Floors and table tops never block: they're flat, and blocking needs height. The
+    object itself never blocks either, however far its ends reach (a car's bumper): it is the
+    part of the top view connected to the centre, and only what stands apart from it counts."""
     b, dist = cov.get("basis"), cov.get("distance")
     if not b or not dist or not points:
         return cov
     t, up, e1, e2 = (tuple(b[k]) for k in ("target", "up", "e1", "e2"))
     nb = 360 // BLOCK_BIN
-    heights: list[list[float]] = [[] for _ in range(nb)]
+    flat_pts = []
     for p in points:
         v = (p[0] - t[0], p[1] - t[1], p[2] - t[2])
-        h, x, y = _dot(v, up), _dot(v, e1), _dot(v, e2)
+        h = _dot(v, up)
+        if -dist <= h <= dist:
+            flat_pts.append((_dot(v, e1), _dot(v, e2), h))
+    obj = _object_cells(flat_pts, dist)
+    far = [local_distance(cov, i * BLOCK_BIN + BLOCK_BIN / 2) for i in range(nb)]   # per direction
+    heights: list[list[float]] = [[] for _ in range(nb)]
+    for x, y, h in flat_pts:
+        i = int(math.degrees(math.atan2(y, x)) % 360 // BLOCK_BIN) % nb
         d = math.hypot(x, y)
-        if BLOCK_NEAR * dist <= d <= BLOCK_FAR * dist and -dist <= h <= dist:
-            heights[int(math.degrees(math.atan2(y, x)) % 360 // BLOCK_BIN) % nb].append(h)
+        if obj:                                         # only what stands up, apart from the object
+            cells, solid, cell = obj
+            k = (math.floor(x / cell), math.floor(y / cell))
+            if k in cells or k not in solid or not (0.2 * far[i] <= d <= BLOCK_FAR * far[i]):
+                continue
+        elif not (BLOCK_NEAR * far[i] <= d <= BLOCK_FAR * far[i]):
+            continue
+        heights[i].append(h)
     need = max(12, len(points) // 1000)
     az = cov["azimuths"]
     empty = lambda c: all(min(abs(c - a) % 360, 360 - abs(c - a) % 360) > BLOCK_BIN for a in az)
@@ -236,7 +296,7 @@ def excuse_blocked(cov: dict, points: list[tuple]) -> dict:
         if len(hs) >= need:
             hs.sort()
             tall = hs[int(0.9 * (len(hs) - 1))] - hs[int(0.1 * (len(hs) - 1))]
-            if tall >= BLOCK_TALL * dist and empty(i * BLOCK_BIN + BLOCK_BIN / 2):
+            if tall >= BLOCK_TALL * far[i] and empty(i * BLOCK_BIN + BLOCK_BIN / 2):
                 blocked.append(i)
     arcs: list[list[float]] = []
     for i in blocked:                                   # neighbouring directions -> one arc

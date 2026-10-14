@@ -10,7 +10,7 @@ continuous take**. Almost every failed run comes down to breaking one of those t
 
 ## 1. Pick the spot
 
-- Room to walk all the way around the object, at a steady 1–2 m distance.
+- Room to walk all the way around the object, a steady 1–2 m from its surface.
 - Put it on a **textured surface**: a rug, newspaper, patterned cloth. COLMAP (the step that
   works out where the camera was) tracks texture, and a plain white table gives it nothing.
 - **Matte objects work best.** Glass, mirrors, chrome and very glossy paint show reflections
@@ -44,14 +44,70 @@ continuous take**. Almost every failed run comes down to breaking one of those t
 - Start recording and **don't stop** until you're done.
 - Walk one full circle at each height. End each loop where it started, then rise gently
   into the next one. The overlap between loops is what joins them into one model.
+- Keep about the same distance from the object's **surface**, not from its centre. Around a
+  long object, walk a rounded rectangle rather than a circle.
 - Walk **slowly**, about 2–3 seconds per step. At corners, turn your body; don't swing the phone.
-- Keep the **whole object in frame**, filling about half to two-thirds of it.
+- Keep the **whole object in frame**, filling about half to two-thirds of it. If it's too big
+  to fit (a car up close), filming part of it is fine as long as you move slowly.
 - Total length: **1½–4 minutes**. Splat Studio picks about 250 frames evenly from the whole video.
+
+**Why one take, and not three separate videos?** Splat Studio follows the camera from each
+frame to the next (COLMAP's sequential matching), so one continuous video links every loop to the
+others through the moments where you rise from one height to the next. Three separate clips have
+no such link: they would have to be joined by comparing every frame of one with every frame of
+the others, which is slower, and fails when the views from different heights look too different.
+Today each video is its own run, so three clips would give three separate models. If you need a
+break, pause between loops while still pointing at the object rather than stopping the recording.
 
 ## 5. Check before you leave
 
 Scrub through the video. Every moment should be sharp, with no jumps, flicker, or people
 walking through. Re-filming now takes a minute. Coming back later takes much longer.
+
+## 6. More tips
+
+- **Move smoothly**, as if the phone were on rails: steady speed, no sudden turns. Each frame
+  should show most of what the previous one showed.
+- **Wipe the lens** first. A fingerprint smear softens every frame.
+- Keep windows and bright lamps **behind you**, not behind the object: backlight darkens it and
+  causes flare.
+- Small objects: raise them on a box under a patterned cloth, so the low loop can look slightly up.
+- For details that matter (a logo, a wheel, a face), finish with a slow close pass in the same
+  take: move in gradually, then back out. Never jump closer.
+- Plain surroundings? Lay a few magazines or a patterned cloth around the object.
+- Outdoors, film on an overcast day or in open shade, and be quick: passing clouds change the light.
+- Near shiny objects, wear plain, dark clothes: your reflection moves with you.
+
+## 7. Cars and other large objects
+
+- Walk a **rounded rectangle** that follows the body 1.5–2 m from the paint, not a circle around
+  the car's centre. Coverage is measured in angles around the car, so the shape of the walk
+  doesn't count against you.
+- Three loops: crouched at wheel height, at eye level, then as high as you can (arms raised, a
+  step stool or a selfie stick) to see the roof.
+- Park with about 2 m free all around, away from other cars, on dry asphalt or paving. A side
+  against a wall is recognised from the 3D points (it won't stop the run), but it can't be rebuilt.
+- Paint, windows and chrome act like mirrors: **overcast light** helps more than anything else.
+  Expect the windows to come out hazy.
+- Allow 3–5 minutes, and raise **Frames** (New run → Advanced) to about 400.
+- The underside can't be filmed and never counts as missing. Wheels need a slow close pass in the
+  same take; the interior seen through the windows usually stays soft.
+
+## 8. People
+
+- **Ask first.** A 3D model of someone is personal: get their OK before filming and before sharing it.
+- The person has to stay **completely still**. Sitting is far easier than standing; rest the
+  hands on the knees or an armrest instead of holding them up.
+- Give them a point at eye height to look at, and a relaxed expression they can hold. Blinking is
+  fine; moving the eyes or the head isn't.
+- Keep it **short**, 45–90 seconds: two loops for someone seated (chest height, then just above
+  the head), plus a low loop for a full standing body.
+- Move steadily, a little faster than for an object: less time means less movement. Never turn
+  the person on a swivel chair (the background must stay still around them).
+- Matte, patterned clothes help; plain black, plain white, shiny or sequinned fabric is hard. Take
+  off glasses and tie back loose hair: flyaway strands come out blurry.
+- Soft light from several sides, so the face has no hard shadows.
+- Choose **What to keep → One object** to keep only the person and drop the chair.
 
 ## What Splat Studio tells you
 
