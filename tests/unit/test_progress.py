@@ -30,6 +30,12 @@ class ParseProgressTest(unittest.TestCase):
         self.assertAlmostEqual(parse_progress("Registering image #42 (25)", "map", 100), 0.25)
         self.assertAlmostEqual(parse_progress("Registering image #9 (num_reg_frames=50)", "map", 100), 0.5)
         self.assertIsNone(parse_progress("Processed file [1/2]", "map", 100))   # counters ignored for map
+        # the global mapper reports stages and bundle adjustment rounds, not images
+        self.assertEqual(parse_progress("Running global positioning", "map_global", 100), 0.2)
+        self.assertAlmostEqual(parse_progress("I1 x.cc:1] Global bundle adjustment iteration 2 / 3", "map_global", 100),
+                               0.5 + 0.35 / 3)
+        self.assertEqual(parse_progress("I1 x.cc:1] Reconstruction done in 4.2 seconds", "map_global", 100), 1.0)
+        self.assertIsNone(parse_progress("Registering image #4 (4)", "map_global", 100))
 
     def test_unrelated_lines(self):
         self.assertIsNone(parse_progress("Bundle adjustment report", "match", 10))

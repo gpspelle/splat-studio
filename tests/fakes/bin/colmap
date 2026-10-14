@@ -6,6 +6,7 @@ the pipeline reads. Behaviour knobs (environment variables):
   FAKE_COLMAP_REGISTER  fraction of frames the mapper registers (default 1.0)
   FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
   FAKE_COLMAP_GLOBAL    "0": pretend to be COLMAP 3.x (no global_mapper)
+  FAKE_COLMAP_GLOBAL_REGISTER  like FAKE_COLMAP_REGISTER, for the global mapper only
   FAKE_COLMAP_FAIL      a command name: that command fails
   FAKE_COLMAP_POSES     "full" or "gap": write real camera poses walking around the object
                         (all the way round, or skipping a 130-degree side); "wall": the same gap,
@@ -120,16 +121,27 @@ elif cmd == "exhaustive_matcher":
             time.sleep(DELAY)
 elif cmd in ("mapper", "global_mapper"):
     names, out = images(), opt("--output_path")
-    keep = names[: int(round(len(names) * REGISTER))]
+    reg = float(os.environ.get("FAKE_COLMAP_GLOBAL_REGISTER", REGISTER)) if cmd == "global_mapper" else REGISTER
+    keep = names[: int(round(len(names) * reg))]
     # a gap in the middle when not everything registers, like a real broken track
-    if REGISTER < 1.0:
+    if reg < 1.0:
         k = len(names) - len(keep)
         mid = len(names) // 2
         keep = names[:mid - k // 2] + names[mid - k // 2 + k:]
-    for i, _ in enumerate(keep, 1):
-        print(f"I1011 incremental_mapper.cc:620] Registering image #{i} ({i})" if cmd == "mapper"
-              else f"I1011 global_mapper.cc:88] Positioning image {i}", flush=True)
-        time.sleep(DELAY)
+    if cmd == "mapper":
+        for i, _ in enumerate(keep, 1):
+            print(f"I1011 incremental_mapper.cc:620] Registering image #{i} ({i})", flush=True)
+            time.sleep(DELAY)
+    else:                                      # COLMAP 4's global mapper reports stages, not images
+        for line in ["==============================\nRunning rotation averaging\n==============================",
+                     "I1011 global_mapper.cc:563] Rotation averaging done in 0.4 seconds",
+                     "Running track establishment", "Running global positioning",
+                     "Running iterative bundle adjustment"] + \
+                    [f"I1011 global_mapper.cc:395] Global bundle adjustment iteration {k} / 3" for k in (1, 2, 3)] + \
+                    ["Running iterative retriangulation and refinement",
+                     "I1011 global_pipeline.cc:156] Reconstruction done in 1.2 seconds"]:
+            print(line, flush=True)
+            time.sleep(DELAY * 10)
     os.makedirs(os.path.join(out, "0"))
     open(os.path.join(out, "0", "registered.txt"), "w").write("\n".join(keep))
     os.makedirs(os.path.join(out, "1"))                      # a tiny second model, as real COLMAP often makes

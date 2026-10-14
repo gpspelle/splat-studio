@@ -31,6 +31,7 @@ PRIOR_RATES = {
     "match": 0.04 / (DEFAULT_FEATURES / 1000) ** 2,
     "match_exhaustive": 0.04 / (DEFAULT_FEATURES / 1000) ** 2,
     "map": 0.6 / 250 ** 0.5,
+    "map_global": 0.6 / 250 ** 0.5 * 0.35,     # 44 s vs 2m03s on a 250-frame walkaround (#44)
     "undistort": 0.15,
 }
 MAP_EXPONENT = _MAP_EXP
@@ -51,6 +52,12 @@ RE_BLOCK2 = re.compile(r"(?:Processing|Matching) block \[(\d+)/(\d+),\s*(\d+)/(\
 RE_REGISTER = re.compile(r"Registering image #\d+\s*\([^)]*?(\d+)\)")
 RE_COUNTER = re.compile(r"\[(\d+)/(\d+)\]")
 RE_FEATURES = re.compile(r"Features:\s*(\d+)")
+RE_GLOBAL_BA = re.compile(r"Global bundle adjustment iteration (\d+) / (\d+)")
+# The global mapper reports stages, not images: (text, fraction of the step done when it appears),
+# weighted roughly by how long each stage takes.
+GLOBAL_STAGES = [("Running rotation averaging", 0.02), ("Running track establishment", 0.12),
+                 ("Running global positioning", 0.2), ("Running iterative bundle adjustment", 0.5),
+                 ("Running iterative retriangulation", 0.85), ("Reconstruction done", 1.0)]
 
 
 def parse_progress(line: str, kind: str | None, n_images: int) -> float | None:
@@ -59,6 +66,14 @@ def parse_progress(line: str, kind: str | None, n_images: int) -> float | None:
     if m:
         a, n, b, n2 = map(int, m.groups())
         return ((a - 1) * n2 + b) / (n * n2)
+    if kind == "map_global":
+        m = RE_GLOBAL_BA.search(line)          # bundle adjustment: iteration k of n
+        if m and int(m.group(2)) > 0:
+            return 0.5 + 0.35 * (int(m.group(1)) - 1) / int(m.group(2))
+        for text, frac in GLOBAL_STAGES:
+            if text in line:
+                return frac
+        return None
     if kind == "map":
         m = RE_REGISTER.search(line)           # mapper: number of registered images so far
         if m and n_images:
@@ -118,7 +133,7 @@ class Progress:
         if kind.startswith("match"):
             feats = self.features or DEFAULT_FEATURES
             return units * (feats / 1000) ** 2
-        if kind == "map":
+        if kind in ("map", "map_global"):
             return units ** MAP_EXPONENT
         return units
 

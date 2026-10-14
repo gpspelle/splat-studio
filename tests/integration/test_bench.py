@@ -22,7 +22,7 @@ class BenchTest(TempDirTestCase):
         self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
         res = json.loads((self.run_dir / "bench" / "results.json").read_text())
         names = [c["variant"] for c in res["colmap"]]
-        self.assertEqual(names, ["current", "smaller features", "smaller + fewer pairs", "global mapper",
+        self.assertEqual(names, ["incremental", "smaller features", "smaller + fewer pairs", "global (default)",
                                  "smaller + global"])
         for c in res["colmap"]:
             self.assertNotIn("error", c)
@@ -37,7 +37,7 @@ class BenchTest(TempDirTestCase):
         self.assertEqual(steps[-1], b["steps"])
         self.assertGreaterEqual(len(steps), 3)
         report = (self.run_dir / "bench" / "report.md").read_text()
-        self.assertIn("| current |", report)
+        self.assertIn("| incremental |", report)
         self.assertIn("x faster", report)
         self.assertIn("PSNR", report)
         # the run's own splats are untouched; the benchmark's exports live under bench/

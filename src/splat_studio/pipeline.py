@@ -113,7 +113,8 @@ def import_capture(args) -> tuple[Path | None, Path]:
     ws = new_run_dir(Path("workspace") / name).resolve()
     if args.poses == "colmap":
         say(f"\n==> 2/3 Camera poses (COLMAP): {ws}")            # parsed by the web UI
-        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size), False) != 0:
+        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size,
+                          "--mapper", args.mapper), False) != 0:
             sys.exit("COLMAP did not produce a usable model - see the messages above. Brush was not started.")
         point_latest(ws)
         append_summary(ws, capture.summary_lines(plan, src, frames)[1:] + [("poses", "COLMAP (ARKit's ignored)")])
@@ -182,6 +183,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--end", help="trim: end time, e.g. 1:45")
     ap.add_argument("--re-extract", action="store_true", help="extract frames again even if they exist")
     ap.add_argument("--max-size", type=int, default=1600, help="image size for COLMAP (default 1600)")
+    ap.add_argument("--mapper", choices=["auto", "global", "incremental"], default="auto",
+                    help="COLMAP mapper: auto = the global mapper when COLMAP has it (4.0+, faster), "
+                         "else incremental (default)")
     ap.add_argument("--poses", choices=["arkit", "refine", "colmap"], default="arkit",
                     help="iPhone captures only: arkit = the phone's camera positions as they are (default); "
                          "refine = plus COLMAP's points and a polish; colmap = ignore them, run COLMAP")
@@ -259,7 +263,8 @@ def main(argv: list[str] | None = None) -> None:
 
         ws = new_run_dir(Path("workspace") / name).resolve()
         say(f"\n==> 2/3 Camera poses (COLMAP): {ws}")          # parsed by the web UI
-        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size), args.dry_run) != 0:
+        if run(module_cmd("colmap", frames, ws, "--step", 1, "--max-size", args.max_size,
+                          "--mapper", args.mapper), args.dry_run) != 0:
             sys.exit("COLMAP did not produce a usable model - see the messages above. Brush was not started.")
         if not args.dry_run:
             latest = ws.parent / "latest"
