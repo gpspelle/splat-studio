@@ -246,6 +246,22 @@ without its extension; `ls ~/SplatStudio/workspace` lists them), so for those us
 `./splat-studio bench ~/SplatStudio/workspace/IMG_1234/latest`.
 See [docs/how-it-works.md](docs/how-it-works.md#benchmark).
 
+**iPhone captures (trial).** [Splat Capture](https://github.com/gpspelle/splat-capture) is an iPhone
+app that records the video together with where the phone was for every frame (ARKit), and saves one
+`capture_<date>.zip` you AirDrop to the Mac. Give that zip to `run` instead of a video and COLMAP is
+skipped: the frames are taken from the capture (leaving out frames where tracking was unsteady),
+turned upright, and trained with the phone's camera positions. `--poses refine` adds COLMAP's own
+points and a polish of the positions (minutes); `--poses colmap` ignores the phone's positions.
+`./splat-studio trial capture_<date>.zip` answers the question this is for: it places the cameras all
+three ways from the same frames, trains each with the same settings, and reports the time and the
+quality of each in `workspace/<capture>/trial_<date_time>/report.md`. The app only takes videos for
+now; captures are a command-line feature.
+
+```bash
+./splat-studio run ~/Downloads/capture_2026-10-14_153012.zip       # ARKit's positions, no COLMAP
+./splat-studio trial ~/Downloads/capture_2026-10-14_153012.zip     # ARKit vs COLMAP, same frames
+```
+
 ## Removing background fog
 
 Splats of indoor scenes often look foggy: the room around the object was only seen from a
@@ -507,6 +523,17 @@ o Brush medindo a qualidade em quadros separados ao longo do treino, e de novo n
 A tabela fica em `bench/report.md` na pasta da execução; os splats da execução não são alterados.
 Execuções iniciadas no app ficam em `~/SplatStudio/workspace/<vídeo>/` (o nome do arquivo do vídeo
 sem a extensão), por exemplo `./splat-studio bench ~/SplatStudio/workspace/IMG_1234/latest`.
+
+**Capturas do iPhone (teste).** O [Splat Capture](https://github.com/gpspelle/splat-capture) é um app
+de iPhone que grava o vídeo junto com a posição do celular em cada quadro (ARKit) e salva um
+`capture_<data>.zip` que você manda para o Mac por AirDrop. Passe esse zip para o `run` no lugar de um
+vídeo e o COLMAP é pulado: os quadros saem da captura (sem os quadros em que o rastreamento oscilou),
+são virados para cima e treinados com as posições da câmera do celular. `--poses refine` acrescenta os
+pontos do próprio COLMAP e um ajuste fino das posições (minutos); `--poses colmap` ignora as posições
+do celular. `./splat-studio trial capture_<data>.zip` responde a pergunta que motiva isso: ele calcula
+as câmeras dos três jeitos com os mesmos quadros, treina cada um com as mesmas configurações e mostra o
+tempo e a qualidade de cada um em `workspace/<captura>/trial_<data_hora>/report.md`. Por enquanto o app
+só aceita vídeos; capturas funcionam pela linha de comando.
 
 Execuções terminadas viram uma linha só no Estúdio (com o erro, se houver) e as mais antigas
 vão para a página **Histórico**, agrupadas por dia, com busca e filtro. **Tirar da lista** apaga

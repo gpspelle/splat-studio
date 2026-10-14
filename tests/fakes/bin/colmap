@@ -6,6 +6,7 @@ the pipeline reads. Behaviour knobs (environment variables):
   FAKE_COLMAP_REGISTER  fraction of frames the mapper registers (default 1.0)
   FAKE_COLMAP_DELAY     seconds per progress line (default 0.001)
   FAKE_COLMAP_GLOBAL    "0": pretend to be COLMAP 3.x (no global_mapper)
+  FAKE_COLMAP_FAIL      a command name: that command fails
   FAKE_COLMAP_POSES     "full" or "gap": write real camera poses walking around the object
                         (all the way round, or skipping a 130-degree side); "wall": the same gap,
                         with a wall standing on that side (in points3D.bin); default: none
@@ -19,9 +20,9 @@ import time
 
 cmd, args = sys.argv[1], sys.argv[2:]
 if cmd == "help":
-    print("Usage:\n  colmap [command] [options]\n\nAvailable commands:\n  feature_extractor\n"
+    print("Usage:\n  colmap [command] [options]\n\nAvailable commands:\n  bundle_adjuster\n  feature_extractor\n"
           + ("  global_mapper\n" if os.environ.get("FAKE_COLMAP_GLOBAL", "1") == "1" else "")
-          + "  mapper\n  sequential_matcher")
+          + "  mapper\n  point_triangulator\n  sequential_matcher")
     sys.exit(0)
 
 
@@ -33,6 +34,9 @@ if "-h" in args:
     print("  --SiftExtraction.use_gpu arg (=1)")
     sys.exit(0)
 DELAY = float(os.environ.get("FAKE_COLMAP_DELAY", "0.001"))
+if os.environ.get("FAKE_COLMAP_FAIL") == cmd:
+    print(f"E1011 {cmd}: failed (FAKE_COLMAP_FAIL)", flush=True)
+    sys.exit(1)
 REGISTER = float(os.environ.get("FAKE_COLMAP_REGISTER", "1.0"))
 
 
@@ -85,7 +89,15 @@ def write_points(path, wall):
 
 
 if cmd == "feature_extractor":
-    open(opt("--database_path"), "w").close()
+    import sqlite3
+    db = opt("--database_path")
+    if os.path.exists(db):
+        os.unlink(db)
+    with sqlite3.connect(db) as con:          # like COLMAP: ids from 1, in file name order
+        con.execute("CREATE TABLE cameras (camera_id INTEGER PRIMARY KEY, model INTEGER, params TEXT)")
+        con.execute("CREATE TABLE images (image_id INTEGER PRIMARY KEY, name TEXT, camera_id INTEGER)")
+        con.execute("INSERT INTO cameras VALUES (1, 1, ?)", (opt("--ImageReader.camera_params") or "",))
+        con.executemany("INSERT INTO images VALUES (?, ?, 1)", [(i + 1, nm) for i, nm in enumerate(images())])
     n = len(images())
     for i in range(1, n + 1):
         print(f"I1011 feature_extraction.cc:257] Processed file [{i}/{n}]")
@@ -122,6 +134,35 @@ elif cmd in ("mapper", "global_mapper"):
     open(os.path.join(out, "0", "registered.txt"), "w").write("\n".join(keep))
     os.makedirs(os.path.join(out, "1"))                      # a tiny second model, as real COLMAP often makes
     open(os.path.join(out, "1", "registered.txt"), "w").write("\n".join(names[:3]))
+elif cmd == "point_triangulator":
+    import sqlite3
+    src, out = opt("--input_path"), opt("--output_path")
+    with sqlite3.connect(opt("--database_path")) as con:
+        db_ids = {name: iid for iid, name in con.execute("SELECT image_id, name FROM images")}
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import struct
+    data = open(os.path.join(src, "images.bin"), "rb").read()
+    n, = struct.unpack_from("<Q", data, 0)
+    o = 8
+    for _ in range(n):                         # the model's image ids must be the database's
+        iid, = struct.unpack_from("<I", data, o)
+        o += struct.calcsize("<I7dI")
+        end = data.index(b"\0", o)
+        name = data[o:end].decode()
+        o = end + 1 + 8
+        if db_ids.get(name) != iid:
+            sys.exit(f"E1011 point_triangulator: image {name} has id {iid} in the model, {db_ids.get(name)} in the database")
+    for i in range(1, n + 1):
+        print(f"I1011 point_triangulator.cc:90] Triangulating image #{i} ({i})", flush=True)
+        time.sleep(DELAY)
+    for b in ("cameras.bin", "images.bin"):
+        shutil.copy(os.path.join(src, b), os.path.join(out, b))
+    write_points(os.path.join(out, "points3D.bin"), False)
+elif cmd == "bundle_adjuster":
+    src, out = opt("--input_path"), opt("--output_path")
+    print("I1011 bundle_adjustment.cc:40] Bundle adjustment report", flush=True)
+    for b in ("cameras.bin", "images.bin", "points3D.bin"):
+        shutil.copy(os.path.join(src, b), os.path.join(out, b))
 elif cmd == "model_converter":
     reg = open(os.path.join(opt("--input_path"), "registered.txt")).read().split()
     with open(os.path.join(opt("--output_path"), "images.txt"), "w") as f:

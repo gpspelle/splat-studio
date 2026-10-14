@@ -161,7 +161,11 @@ def ensure_brush(explicit: str | None = None, dry: bool = False) -> Path:
 def model_stats(model_dir: Path) -> tuple[int | None, int | None]:
     """(registered images, sparse points) from `colmap model_analyzer`."""
     r = subprocess.run(["colmap", "model_analyzer", "--path", str(model_dir)], capture_output=True, text=True)
-    return parse_model_stats(r.stdout + r.stderr)
+    n_img, n_pts = parse_model_stats(r.stdout + r.stderr)
+    if not n_img and not n_pts:                     # no answer: read the counts from the model files
+        from .capture import model_counts
+        n_img, n_pts = (v or None for v in model_counts(model_dir))
+    return n_img, n_pts
 
 
 def parse_model_stats(text: str) -> tuple[int | None, int | None]:

@@ -264,6 +264,40 @@ Server-side advice and errors carry codes and parameters, so they're translated 
 
 Real COLMAP and Brush are not run in CI: that would need a GPU and a long time per test.
 
+## iPhone captures (`splat_studio/capture.py`, `trial.py`)
+
+[Splat Capture](https://github.com/gpspelle/splat-capture) saves `capture_<date>.zip` with
+`video.mov` (the sensor's landscape image, no rotation tag), `frames.jsonl` (per video frame: a
+camera-to-world pose, row-major in ARKit's axes, `K = [fx, fy, cx, cy]` and the tracking state),
+`points.json` (ARKit's feature points with colours) and `meta.json`. The format is specified in
+that repository's `docs/capture-format.md`.
+
+`run CAPTURE.zip` replaces stages 1 and 2:
+
+1. The zip is extracted once to `captures/<name>/`.
+2. About `--frames` frames are chosen evenly from those with `tracking: normal` (all frames when
+   fewer than 30% are). ffmpeg picks them by frame number (`select=eq(n,…)`), scales them to
+   `--max-size` and turns them upright into `frames/<name>/`; `frames/<name>/capture.json` keeps
+   the plan, so a second run reuses the frames.
+3. Each pose becomes a COLMAP camera: flip the camera's y and z (ARKit looks along −z with y up),
+   then apply the same quarter turns as the image (new x = −old y, new y = old x; `fx`/`fy` swap,
+   `cx' = h − cy`, `cy' = cx`). The number of turns is the one that puts world up (ARKit's +y) at
+   the top of most frames. One PINHOLE camera with the median intrinsics.
+4. `images/`, `sparse/0` (`cameras.bin`, `images.bin` without 2D points, `points3D.bin` from ARKit's
+   points, topped up to 200 with a ball of grey points if there are fewer) and `dense/` (the same,
+   no undistortion needed) are written, so coverage, masks and Brush work unchanged.
+
+`--poses refine` then runs COLMAP feature extraction (PINHOLE with ARKit's lens), sequential
+matching, `point_triangulator` with the poses fixed (the model is rewritten with the database's
+image ids, read with `sqlite3`) and `bundle_adjuster` with the lens fixed. `--poses colmap` runs
+stage 2 as for a video on the extracted frames.
+
+`trial CAPTURE.zip` does all three into `workspace/<name>/trial_<date_time>/{arkit,refine,colmap}`
+(not `run_*`, so the library ignores them), trains each with the same Brush settings (chosen from
+the COLMAP result) plus `--eval-split-every 10`, and writes `results.json` and `report.md`: time to
+place the cameras, training time, PSNR/SSIM on the held-out frames, and a one-line verdict
+(within 0.5 dB counts as the same).
+
 ## Benchmark
 
 `splat-studio bench RUN` (`splat_studio/bench.py`) measures settings on a finished run, on the
