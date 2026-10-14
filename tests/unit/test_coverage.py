@@ -112,6 +112,81 @@ class BlockedSideTest(unittest.TestCase):
             self.assertEqual(coverage.read_points3d(f), [])
 
 
+def car_walk(skip=lambda deg: False, L=2.3, W=0.9, standoff=1.5):
+    """Cameras walking a rounded rectangle around a car (half-length L, half-width W), three loops
+    at three heights, always `standoff` from the body, looking at its middle; z is up."""
+    import math
+    def norm(v):
+        n = math.sqrt(sum(x * x for x in v)); return [x / n for x in v]
+    def cross(a, b):
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    ims, k = [], 0
+    for z in (0.5, 1.2, 1.9):
+        for step in range(72):
+            deg = step * 5
+            if skip(deg):
+                continue
+            c_, s_ = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+            pos = [(L + standoff) * math.copysign(abs(c_) ** 0.5, c_), (W + standoff) * math.copysign(abs(s_) ** 0.5, s_), z]
+            f = norm([0 - pos[0], 0 - pos[1], 0.7 - pos[2]])
+            right = norm(cross(f, [0, 0, 1]))
+            down = cross(f, right)
+            R = [right, down, f]
+            ims.append({"name": f"frame_{k:04d}.jpg", "R": R, "t": [-sum(R[r][i] * pos[i] for i in range(3)) for r in range(3)]})
+            k += 1
+    return ims
+
+
+def car_points(L=2.3, W=0.9, H=1.4, wall_y=None):
+    """The car's body (points on its sides, ends and roof), the ground, and maybe a wall along +y."""
+    import random
+    rnd = random.Random(5)
+    pts = []
+    for _ in range(3000):
+        face = rnd.randrange(5)
+        x, y, z = rnd.uniform(-L, L), rnd.uniform(-W, W), rnd.uniform(0.2, H)
+        if face == 0: x = L
+        elif face == 1: x = -L
+        elif face == 2: y = W
+        elif face == 3: y = -W
+        else: z = H
+        pts.append((x, y, z))
+    pts += [(rnd.uniform(-7, 7), rnd.uniform(-7, 7), 0.0) for _ in range(3000)]       # the ground: flat
+    if wall_y is not None:
+        pts += [(rnd.uniform(-4, 4), wall_y, rnd.uniform(0, 2.5)) for _ in range(1500)]
+    return pts
+
+
+class LongObjectTest(unittest.TestCase):
+    """Around a car people walk a rounded rectangle, further from its centre at the ends."""
+
+    def test_the_car_itself_never_blocks_a_side_you_skipped(self):
+        c = coverage.measure(car_walk(skip=lambda d: d <= 50 or d >= 310))           # the nose, never filmed
+        self.assertGreater(max(c["flat"]) / min(c["flat"]), 1.4)                    # ends further than sides
+        coverage.excuse_blocked(c, car_points())
+        self.assertFalse(c["blocked"])                                               # its bumper isn't a wall
+        self.assertEqual(coverage.problems(c), ["gap"])
+
+    def test_a_wall_beside_the_car_does(self):
+        c = coverage.measure(car_walk(skip=lambda d: 50 <= d <= 130))                # the side along the wall
+        coverage.excuse_blocked(c, car_points(wall_y=0.9 + 0.8))
+        self.assertTrue(c["blocked"])
+        self.assertEqual(coverage.problems(c), [])
+
+    def test_a_far_wall_beside_the_car_does_not(self):
+        c = coverage.measure(car_walk(skip=lambda d: 50 <= d <= 130))
+        coverage.excuse_blocked(c, car_points(wall_y=0.9 + 6.0))                     # room to walk there
+        self.assertEqual(coverage.problems(c), ["gap"])
+
+    def test_distance_in_a_direction_follows_the_walk(self):
+        c = coverage.measure(car_walk())
+        g = coverage.local_distance
+        ends = (g(c, c["azimuths"][0]), g(c, (c["azimuths"][0] + 180) % 360))
+        self.assertGreater(min(max(c["flat"]), 10) , 0)
+        self.assertLess(abs(g(c, 0.0) - g(c, 0.0)), 1e-9)
+        self.assertTrue(all(min(c["flat"]) - 1e-6 <= d <= max(c["flat"]) + 1e-6 for d in ends))
+
+
 @needs_ffmpeg
 class PerObjectTest(TempDirTestCase):
     """Three balls in a row; the green one is hidden from a third of the cameras."""

@@ -88,6 +88,9 @@ The quality of the video decides almost everything. In short:
   1× lens and never zoom.
 - **A matte object on a textured surface**, with nothing moving in the scene. Avoid glass,
   chrome, plain white tables and turntables.
+- **Keep a steady distance from the object's surface**: around a car, walk a rounded rectangle,
+  not a circle. The guide has sections for [cars and large objects](docs/capture-guide.md#7-cars-and-other-large-objects)
+  and for [people](docs/capture-guide.md#8-people).
 
 <img src="docs/images/upload-checks.png" width="380" align="right" alt="Checks on an uploaded video">
 
@@ -107,7 +110,9 @@ Splat Studio helps you get it right with fewer attempts:
   standing on a surface (under a car, under a vase) never counts as missing. Neither does a side
   **nobody could film**: when COLMAP's 3D points show something standing there (the object is
   against a wall, in a corner, next to another car), that side is drawn dashed grey on the ring
-  and grey on the viewer's globe, with a note instead of a warning.
+  and grey on the viewer's globe, with a note instead of a warning. The object itself never
+  counts as something in the way, however long it is (a car's bumper), and the distance
+  you stood is judged per direction, so a rounded-rectangle walk around a car is fine.
   `./splat-studio coverage workspace/<video>/latest` prints the same numbers. With several objects,
   each object gets its own ring, measured around that object and counting only the frames where
   it's visible, so a side hidden behind another object shows up too.
@@ -457,7 +462,9 @@ Versões estáveis ficam em [Releases](https://github.com/gpspelle/splat-studio/
 
 Para gravar bem: **uma gravação contínua com 3 voltas** ao redor do objeto (baixa, média, alta),
 andando devagar; luz suave e uniforme; foco e exposição travados; lente 1× sem zoom; objeto fosco
-sobre uma superfície com textura. O guia completo está no app (**Guia de gravação**).
+sobre uma superfície com textura; mantenha mais ou menos a mesma distância da superfície do objeto (em volta
+de um carro, um retângulo de cantos arredondados, não um círculo). O guia completo está no app (**Guia de
+gravação**), com seções para carros e objetos grandes e para pessoas.
 
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado

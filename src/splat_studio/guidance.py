@@ -134,7 +134,8 @@ def coverage_advice(cov: dict | None, fps: float | None = None, start: float = 0
             where = f" (the video passes it between {when})" if when else ""
             deg = f"{g['degrees']:.0f}"
             text = (f"{pre}One side of the object was barely filmed: no camera in a {deg}° arc around it{where}. "
-                    "Walk all the way around at the same distance, or that side will look thin or blurry.")
+                    "Walk all the way around, keeping about the same distance from the object's surface, "
+                    "or that side will look thin or blurry.")
             tips.append(tip("warn", f"run.coverage{obj}_gap_at", text, deg=deg, when=when, **params) if when
                         else tip("warn", f"run.coverage{obj}_gap", text, deg=deg, **params))
         blocked = blocked_degrees(c)

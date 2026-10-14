@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Added
+- **Recording guide: more tips, and sections for cars and people.** Why one take beats three
+  clips, keeping a steady distance from the surface (a rounded rectangle around a car), detail
+  passes, light, lens, clothes; cars (heights, parking, reflections, frames); people (ask first,
+  staying still, length, clothes, hair, glasses). Coverage advice now says to keep the distance
+  from the object's surface.
+- **Coverage per object, and in the viewer** ([#26](https://github.com/gpspelle/splat-studio/issues/26)).
+  With several objects, each gets its own coverage ring, measured around the object's own centre
+  (where the rays through its mask centres meet) and counting only the frames where it's visible;
+  warnings name the object. The viewer shows a small, toggleable coverage map with a marker for
+  the direction you're viewing from, and says when that side was barely filmed. Object splats
+  show their object's coverage. `GET /api/coverage?file=`; `coverage.json` now has a basis, and
+  older runs are measured on demand.
 - **Sides nobody could film don't count as missing** ([#36](https://github.com/gpspelle/splat-studio/issues/36)).
   When COLMAP's 3D points show something standing where you'd have had to film from (the object
   is against a wall, in a corner, next to another car), that side no longer warns or stops the run.
@@ -17,13 +29,6 @@
   neighbours and the global mapper (COLMAP 4+), and how Brush's quality on held-out frames grows over
   training time, also at a lower training resolution. Writes `bench/report.md` in the run folder.
 
-### Fixed
-- **The viewer's coverage no longer appears late with no sign of life** ([#30](https://github.com/gpspelle/splat-studio/issues/30)).
-  Older runs are measured again on first view, which took long enough with several objects that the
-  request gave up and the panel stayed empty until a later visit. Measuring now happens in the
-  background; the panel shows a spinner and *Measuring coverage…* until it's ready, and says so if
-  it couldn't be measured.
-
 ### Changed
 - **The coverage globe is solid.** From the side nobody filmed, the camera dots on the far side no
   longer show through the red.
@@ -34,16 +39,15 @@
   and the side facing you is the side you're looking at. `coverage.json` stores each camera's
   direction from the centre (`dirs`); older runs are measured again when first opened.
 
-### Added
-- **Coverage per object, and in the viewer** ([#26](https://github.com/gpspelle/splat-studio/issues/26)).
-  With several objects, each gets its own coverage ring, measured around the object's own centre
-  (where the rays through its mask centres meet) and counting only the frames where it's visible;
-  warnings name the object. The viewer shows a small, toggleable coverage map with a marker for
-  the direction you're viewing from, and says when that side was barely filmed. Object splats
-  show their object's coverage. `GET /api/coverage?file=`; `coverage.json` now has a basis, and
-  older runs are measured on demand.
-
 ### Fixed
+- **Long objects like cars no longer count as their own obstacle** in the "nobody could film this
+  side" check (#36): the object is told apart from what stands around it, and the distance you
+  stood is judged per direction, so a skipped end of a car still stops the run.
+- **The viewer's coverage no longer appears late with no sign of life** ([#30](https://github.com/gpspelle/splat-studio/issues/30)).
+  Older runs are measured again on first view, which took long enough with several objects that the
+  request gave up and the panel stayed empty until a later visit. Measuring now happens in the
+  background; the panel shows a spinner and *Measuring coverage…* until it's ready, and says so if
+  it couldn't be measured.
 - **Suggest objects split one object in two, and recomputed on hide/show**
   ([#24](https://github.com/gpspelle/splat-studio/issues/24)). Larger masks now come first, so a
   whole object wins over its parts; Shift-click adds a suggestion to the selected object. Hiding and
