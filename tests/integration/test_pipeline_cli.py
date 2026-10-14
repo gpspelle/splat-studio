@@ -25,6 +25,34 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("--total-train-iters", summary)
         self.assertIn("splat:", summary)
 
+    def test_global_mapper_first_incremental_as_fallback(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--no-train")
+        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+        self.assertIn("with COLMAP's global mapper", r.stdout)
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        log, summary = (run / "colmap.log").read_text(), (run / "summary.txt").read_text()
+        self.assertIn("$ colmap global_mapper", log)
+        self.assertNotIn("$ colmap mapper", log)
+        self.assertRegex(summary, r"mapper:\s+global")
+        self.assertRegex(summary, r"attempt 1:\s+sequential matching, global mapper: ")
+        # the global mapper loses the track: the relaxed fallback uses the incremental mapper
+        env = fake_tools_env(FAKE_COLMAP_GLOBAL_REGISTER="0.5")
+        r = self.run_pipeline(self.video, "--quality", "preview", "--no-train", env=env)
+        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        summary = (run / "summary.txt").read_text()
+        self.assertRegex(summary, r"attempt 1:\s+sequential matching, global mapper: .* \(50%\)")
+        self.assertRegex(summary, r"attempt 2:\s+wider overlap \+ loop closure, relaxed mapper: .* \(100%\)")
+        self.assertIn("$ colmap mapper", (run / "colmap.log").read_text())
+
+    def test_incremental_mapper_when_asked_or_on_older_colmap(self):
+        for args, env in [(["--mapper", "incremental"], None), ([], fake_tools_env(FAKE_COLMAP_GLOBAL="0"))]:
+            r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--no-train", *args, env=env)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+            run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+            self.assertNotIn("global_mapper", (run / "colmap.log").read_text())
+            self.assertRegex((run / "summary.txt").read_text(), r"mapper:\s+incremental")
+
     def test_every_run_adds_a_clean_copy_and_keeps_the_original(self):
         r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview")
         self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])

@@ -235,9 +235,14 @@ colmap.log     COLMAP's full output
 You can also run single stages: `./splat-studio frames VIDEO` and `./splat-studio colmap FRAMES_DIR`,
 and add `--remove-background` to `run` to also save a copy with only the object. `./splat-studio isolate NAME.ply` does the latter for any splat.
 
+**Faster camera poses with COLMAP 4.** When COLMAP 4 or newer is installed, the first attempt uses its
+global mapper, which places every camera at once instead of one by one: on a 250-frame walkaround it
+took 44 s instead of 2 min, with the same accuracy. If it places fewer than 90% of the frames, the next
+attempts use the classic mapper as before. `--mapper incremental` always uses the classic one.
+
 **How long does each setting take on your computer?** `./splat-studio bench workspace/<video>/latest`
-measures it on a finished run. It times COLMAP with smaller features, fewer neighbouring frames and
-(with COLMAP 4 or newer) the faster global mapper, and trains once with Brush while scoring held-out
+measures it on a finished run. It times COLMAP with the classic (incremental) and the global mapper,
+smaller features and fewer neighbouring frames, and trains once with Brush while scoring held-out
 frames at regular steps, so one run shows how quality grows with time; then once more at a lower
 training resolution. It writes a table to `bench/report.md` in the run folder and never touches the
 run's own splats. `--only colmap` takes minutes; the Brush part takes about as long as two
@@ -516,9 +521,14 @@ exportada como site. A barra embaixo do nome de cada modelo gira só aquele mode
 ligado nos dois ao abrir: ligado, arrastar na vista gira o modelo; desligado, o modelo fica
 travado e arrastar não o gira. **Salvar vista** lembra como os dois estão girados.
 
+Com o COLMAP 4 ou mais novo instalado, a primeira tentativa usa o mapeador global, que posiciona todas
+as câmeras de uma vez em vez de uma por uma: num vídeo de 250 quadros levou 44 s em vez de 2 min, com a
+mesma precisão. Se ele posicionar menos de 90% dos quadros, as tentativas seguintes usam o mapeador
+clássico, como antes. `--mapper incremental` usa sempre o clássico.
+
 Para saber quanto tempo cada configuração leva no seu computador, use
 `./splat-studio bench workspace/<vídeo>/latest` numa execução terminada: ele cronometra o COLMAP com
-imagens menores, menos quadros vizinhos e (no COLMAP 4 ou mais novo) o mapeador global, e treina com
+o mapeador clássico (incremental) e o global, imagens menores e menos quadros vizinhos, e treina com
 o Brush medindo a qualidade em quadros separados ao longo do treino, e de novo numa resolução menor.
 A tabela fica em `bench/report.md` na pasta da execução; os splats da execução não são alterados.
 Execuções iniciadas no app ficam em `~/SplatStudio/workspace/<vídeo>/` (o nome do arquivo do vídeo

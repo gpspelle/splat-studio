@@ -32,12 +32,13 @@ from .common import fmt_time, say
 
 # (name, longest image side for features, max features per image, neighbours matched, mapper)
 COLMAP_VARIANTS = [
-    ("current", 1600, 8192, 15, "incremental"),
+    ("incremental", 1600, 8192, 15, "incremental"),
     ("smaller features", 1024, 4096, 15, "incremental"),
     ("smaller + fewer pairs", 1024, 4096, 8, "incremental"),
-    ("global mapper", 1600, 8192, 15, "global"),
+    ("global (default)", 1600, 8192, 15, "global"),
     ("smaller + global", 1024, 4096, 8, "global"),
 ]
+BASE = "incremental"            # what the others are compared with: COLMAP's classic mapper
 RE_EVAL = re.compile(r"Eval iter (\d+): PSNR ([\d.]+), ssim ([\d.]+)")
 RE_REPROJ = re.compile(r"Mean reprojection error:\s*([\d.]+)")
 
@@ -182,9 +183,9 @@ def train_scored(cmd: list[str], log_path: Path) -> tuple[list[dict], float, int
 def report(run: Path, colmap_rows: list[dict], brush_rows: list[dict]) -> str:
     lines = [f"# Benchmark: {run.name}", ""]
     if colmap_rows:
-        base = next((r for r in colmap_rows if r["variant"] == "current" and "total_s" in r), None)
+        base = next((r for r in colmap_rows if r["variant"] == BASE and "total_s" in r), None)
         lines += ["## Camera poses (COLMAP)", "",
-                  "| Variant | Features | Matching | Mapping | Total | vs current | Frames placed | Error (px) |",
+                  "| Variant | Features | Matching | Mapping | Total | vs incremental | Frames placed | Error (px) |",
                   "|---|---|---|---|---|---|---|---|"]
         for r in colmap_rows:
             if "error" in r:

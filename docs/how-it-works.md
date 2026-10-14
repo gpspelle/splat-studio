@@ -26,12 +26,21 @@ contains ≥ 90% of the frames:
 
 | Attempt | Matching | Mapper |
 |---|---|---|
-| 1 | sequential: each frame vs its 15 neighbours | standard |
+| 1 | sequential: each frame vs its 15 neighbours | global (COLMAP 4+), else standard |
 | 2 | 40 neighbours + jumps of 2, 4, 8… frames + loop closure (first 25 vs last 25 frames) | relaxed |
 | 3 | exhaustive: every pair (only up to 300 frames, it's O(n²)) | relaxed |
 | 4–5 | attempts 1–2 again with every frame, if you started with `--step 2` | |
 
 Matches are kept in COLMAP's database between attempts, so later attempts only pay for new pairs.
+
+The **global mapper** (`colmap global_mapper`, COLMAP 4.0+, GLOMAP's method) estimates every
+camera's rotation and position at once, then refines everything together, instead of adding
+cameras one at a time with a bundle adjustment after each. On a 250-frame walkaround (M1) it took
+44 s instead of 2m03s for the same frames placed and the same reprojection error (#44). It reports
+stages rather than images, so its progress bar follows the stages (rotation averaging, tracks,
+positioning, bundle adjustment rounds, retriangulation), and its speed is learned separately
+(`map_global` in the rates file). `--mapper incremental` (on `run` and `colmap`) turns it off; the
+summary has a `mapper:` line and marks attempts that used it.
 Below 60% the run stops, with advice, instead of training on a bad model.
 
 **Time estimates** (`splat_studio/eta.py`). The app never shows a made-up number:
@@ -304,9 +313,10 @@ place the cameras, training time, PSNR/SSIM on the held-out frames, and a one-li
 computer it runs on, without changing the run's results:
 
 - **COLMAP**: five variants run from scratch on the run's prepared images (`RUN/images`), each in
-  `RUN/bench/colmap/<variant>/`: the current settings (1600 px, 8192 SIFT features, 15 neighbours,
-  incremental mapper), smaller features (1024 px, 4096), fewer pairs (8 neighbours), and the global
-  mapper (`colmap global_mapper`, COLMAP 4.0+; skipped on older versions). Variants with the same
+  `RUN/bench/colmap/<variant>/`: the incremental mapper at full settings (1600 px, 8192 SIFT
+  features, 15 neighbours), smaller features (1024 px, 4096), fewer pairs (8 neighbours), and the
+  global mapper, the default since #44 (`colmap global_mapper`, COLMAP 4.0+; skipped on older
+  versions). The others are compared with the incremental row. Variants with the same
   features copy the extracted database instead of extracting again. Each reports seconds for
   extraction, matching and mapping, frames placed in the largest model and its mean reprojection
   error (`colmap model_analyzer`).

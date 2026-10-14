@@ -1,7 +1,7 @@
 """Stage 2: self-correcting camera-pose reconstruction with COLMAP (CPU).
 
 Escalates automatically when the camera track breaks:
-  1. sequential matching (fast)
+  1. sequential matching (fast), with COLMAP's global mapper when it has one (COLMAP 4+)
   2. wider overlap + loop closure (first vs last frames) + relaxed mapper
   3. exhaustive matching (every frame vs every frame; skipped above 300 images)
   4./5. if still broken and --step > 1: attempts 1-2 again with every frame
@@ -42,10 +42,22 @@ LOOP_N = 25
 
 # ---------------------------------------------------------------- COLMAP process wrapper
 
+MAPPERS = ("auto", "global", "incremental")
+
+
+def has_global_mapper() -> bool:
+    r = subprocess.run(["colmap", "help"], capture_output=True, text=True)
+    return "global_mapper" in r.stdout + r.stderr
+
+
 class Colmap:
-    def __init__(self, ws: Path, progress: Progress):
+    def __init__(self, ws: Path, progress: Progress, mapper: str = "auto"):
         self.ws, self.p = ws, progress
         self.log = ws / "colmap.log"
+        # The global mapper places all cameras at once instead of one by one: on a 250-frame
+        # walkaround, 44 s instead of 2 min with the same accuracy (#44). The fallback attempts
+        # keep the incremental mapper and its relaxed settings.
+        self.use_global = mapper == "global" or (mapper == "auto" and has_global_mapper())
         if "FeatureExtraction.use_gpu" in self._help("feature_extractor"):   # COLMAP >= 3.12 names
             self.extract_gpu = ["--FeatureExtraction.use_gpu", "0"]
             self.match_gpu = ["--FeatureMatching.use_gpu", "0"]
@@ -144,11 +156,11 @@ def pair_set(kind: str, n: int) -> set[tuple[int, int]]:
             "all": lambda: exhaustive_pairs(n)}[kind]()
 
 
-def plan_costs(plan: list[tuple]) -> list[dict]:
+def plan_costs(plan: list[tuple], use_global: bool = False) -> list[dict]:
     """Units of work per attempt. Matches accumulate in COLMAP's database, so each matcher
     only pays for pairs not matched by an earlier attempt of the same round."""
     costs, matched, prev_step = [], set(), None
-    for s, n, _, _, kinds in plan:
+    for s, n, _, relaxed, kinds in plan:
         new_round = s != prev_step
         if new_round:
             matched = set()            # a new round starts with a fresh database
@@ -158,8 +170,14 @@ def plan_costs(plan: list[tuple]) -> list[dict]:
             ps = pair_set(k, n)
             match_units.append(("match_exhaustive" if k == "all" else "match", len(ps - matched)))
             matched |= ps
-        costs.append({"extract": n if new_round else 0, "match": match_units, "map": n, "n": n})
+        costs.append({"extract": n if new_round else 0, "match": match_units, "map": n, "n": n,
+                      "map_kind": map_kind(use_global, relaxed)})
     return costs
+
+
+def map_kind(use_global: bool, relaxed: bool) -> str:
+    """Which mapper an attempt uses, as a Progress kind: the relaxed fallbacks are incremental."""
+    return "map_global" if use_global and not relaxed else "map"
 
 
 def remaining_time(p: Progress, costs: list[dict], attempt: int, phase: str, match_idx: int) -> tuple[float, float]:
@@ -169,14 +187,15 @@ def remaining_time(p: Progress, costs: list[dict], attempt: int, phase: str, mat
     cost = costs[attempt]
     rest = 0.0
     if phase in ("prepare", "extract"):
-        rest += sum(p.estimate(k, u) for k, u in cost["match"]) + p.estimate("map", cost["map"])
+        rest += sum(p.estimate(k, u) for k, u in cost["match"]) + p.estimate(cost.get("map_kind", "map"), cost["map"])
     elif phase == "match":
-        rest += sum(p.estimate(k, u) for k, u in cost["match"][match_idx + 1:]) + p.estimate("map", cost["map"])
+        rest += (sum(p.estimate(k, u) for k, u in cost["match"][match_idx + 1:])
+                 + p.estimate(cost.get("map_kind", "map"), cost["map"]))
     if_success = rest + p.estimate("undistort", cost["n"])
     worst = rest
     for later in costs[attempt + 1:]:
         worst += (p.estimate("extract", later["extract"]) + sum(p.estimate(k, u) for k, u in later["match"])
-                  + p.estimate("map", later["map"]))
+                  + p.estimate(later.get("map_kind", "map"), later["map"]))
     worst += p.estimate("undistort", costs[-1]["n"])
     return if_success, worst
 
@@ -300,6 +319,10 @@ def map_poses(c: Colmap, out: Path, relaxed: bool, n: int) -> None:
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
+    if c.use_global and not relaxed:
+        c.run("global_mapper", "--database_path", c.ws / "database.db", "--image_path", c.ws / "images",
+              "--output_path", out, label="reconstructing poses", kind="map_global", units=n, n_images=n)
+        return
     extra = (["--Mapper.init_min_num_inliers", "50", "--Mapper.abs_pose_min_num_inliers", "15",
               "--Mapper.abs_pose_min_inlier_ratio", "0.15"] if relaxed else [])
     c.run("mapper", "--database_path", c.ws / "database.db", "--image_path", c.ws / "images",
@@ -413,6 +436,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--overwrite", action="store_true", help="replace an existing workspace folder")
     ap.add_argument("--step", type=int, default=2, help="keep every Nth frame (default 2)")
     ap.add_argument("--max-size", type=int, default=1600, help="longest image side in px (default 1600)")
+    ap.add_argument("--mapper", choices=MAPPERS, default="auto",
+                    help="auto: COLMAP's global mapper when it has one (4.0+), else incremental (default)")
     args = ap.parse_args(argv)
 
     if not shutil.which("colmap"):
@@ -437,9 +462,10 @@ def main(argv: list[str] | None = None) -> None:
     summary.add("settings", f"--step {args.step} --max-size {args.max_size}")
 
     p = Progress(args.max_size)
-    c = Colmap(args.ws, p)
+    c = Colmap(args.ws, p, args.mapper)
     plan = build_plan(n_frames, args.step)
-    costs = plan_costs(plan)
+    costs = plan_costs(plan, c.use_global)
+    summary.add("mapper", "global (falls back to incremental if needed)" if c.use_global else "incremental")
     say(f"Full COLMAP log: {c.log}")
     say(f"Time estimates use speeds measured in earlier runs ({p.rates_file})" if p.saved else
         "First run on this computer: time estimates are rough (~) until matching and reconstruction are timed")
@@ -462,6 +488,8 @@ def main(argv: list[str] | None = None) -> None:
             current_step = s
 
         say(f"\n==> Attempt {idx + 1}/{len(plan)}: {label}")
+        if c.use_global and not relaxed:
+            say("    with COLMAP's global mapper (all cameras at once)")
         state["phase"] = "match"
         for mi, k in enumerate(kinds):
             state["match_idx"] = mi
@@ -485,8 +513,9 @@ def main(argv: list[str] | None = None) -> None:
         model_dir, registered = max(models, key=lambda m: len(m[1]))
         ratio = len(registered) / len(names)
         say(f"    {len(models)} model(s); largest registers {len(registered)}/{len(names)} frames ({ratio:.0%})")
+        mapper_note = ", global mapper" if c.use_global and not relaxed else ""
         summary.add(f"attempt {idx + 1}",
-                    f"{label}: {len(models)} model(s), largest {len(registered)}/{len(names)} ({ratio:.0%})")
+                    f"{label}{mapper_note}: {len(models)} model(s), largest {len(registered)}/{len(names)} ({ratio:.0%})")
         if best is None or ratio > best[0]:
             best = (ratio, model_dir, registered, list(names), label)
         if ratio >= TARGET:

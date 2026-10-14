@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **Camera poses 1.8x faster with COLMAP 4** ([#44](https://github.com/gpspelle/splat-studio/issues/44)).
+  The first attempt uses COLMAP's global mapper when it's installed (44 s instead of 2 min on a
+  250-frame walkaround, same accuracy); the fallback attempts keep the classic mapper.
+  `--mapper incremental` keeps the old behaviour. `bench` now calls its rows `incremental` and
+  `global (default)`.
 - **iPhone captures** ([#40](https://github.com/gpspelle/splat-studio/issues/40)). `run` takes a
   zip from the new [Splat Capture](https://github.com/gpspelle/splat-capture) iPhone app and trains
   with the phone's own camera positions (ARKit) instead of running COLMAP: frames with unsteady

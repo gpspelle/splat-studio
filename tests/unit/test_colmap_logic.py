@@ -55,6 +55,15 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(costs[3]["extract"], 400)
         self.assertEqual(costs[3]["match"][0][1], len(colmap.sequential_pairs(400, colmap.SEQ_OVERLAP, False)))
 
+    def test_global_mapper_only_for_the_first_attempt_of_each_round(self):
+        costs = colmap.plan_costs(colmap.build_plan(400, 2), use_global=True)
+        self.assertEqual([c["map_kind"] for c in costs], ["map_global", "map", "map", "map_global", "map"])
+        self.assertEqual({c["map_kind"] for c in colmap.plan_costs(colmap.build_plan(400, 2))}, {"map"})
+        p = Progress(1600, rates_file=None, out=io.StringIO())
+        fast, _ = colmap.remaining_time(p, colmap.plan_costs(colmap.build_plan(250, 1), True), 0, "extract", 0)
+        slow, _ = colmap.remaining_time(p, colmap.plan_costs(colmap.build_plan(250, 1)), 0, "extract", 0)
+        self.assertLess(fast, slow)
+
     def test_remaining_time(self):
         p = Progress(1600, rates_file=None, out=io.StringIO())
         costs = colmap.plan_costs(colmap.build_plan(250, 1))
