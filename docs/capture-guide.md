@@ -49,7 +49,8 @@ continuous take**. Almost every failed run comes down to breaking one of those t
 - Walk **slowly**, about 2–3 seconds per step. At corners, turn your body; don't swing the phone.
 - Keep the **whole object in frame**, filling about half to two-thirds of it. If it's too big
   to fit (a car up close), filming part of it is fine as long as you move slowly.
-- Total length: **1½–4 minutes**. Splat Studio picks about 250 frames evenly from the whole video.
+- Total length: **1½–4 minutes**. Splat Studio picks frames evenly from the whole video: 250 up to
+  about 2½ minutes, then about 1.75 a second (420 for 4 minutes, at most 600).
 
 **Why one take, and not three separate videos?** Splat Studio follows the camera from each
 frame to the next (COLMAP's sequential matching), so one continuous video links every loop to the
@@ -93,7 +94,8 @@ it, for example to 320×568, and Splat Studio warns that it's a shrunk copy.
   against a wall is recognised from the 3D points (it won't stop the run), but it can't be rebuilt.
 - Paint, windows and chrome act like mirrors: **overcast light** helps more than anything else.
   Expect the windows to come out hazy.
-- Allow 3–5 minutes, and raise **Frames** (New run → Advanced) to about 400.
+- Allow 3–5 minutes. The number of frames grows with the video's length on its own (about 420 for
+  4 minutes); **Frames** under New run → Advanced sets it by hand.
 - The underside can't be filmed and never counts as missing. Wheels need a slow close pass in the
   same take; the interior seen through the windows usually stays soft.
 

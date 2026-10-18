@@ -32,6 +32,7 @@ from . import brush as brushmod
 from . import capture
 from .bench import train_scored
 from .common import child_env, fmt_time, module_cmd, say
+from .frames import parse_target
 
 VARIANTS = [("arkit", "ARKit"), ("refine", "ARKit + points"), ("colmap", "COLMAP")]
 SAME = 0.5          # dB: about the smallest difference you can see
@@ -118,7 +119,8 @@ def main(argv: list[str] | None = None) -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("capture", type=Path, help="a Splat Capture package (.zip or its folder)")
     ap.add_argument("--only", nargs="+", choices=[k for k, _ in VARIANTS], help="run only these variants")
-    ap.add_argument("--frames", type=int, default=250, help="frames to use (default 250)")
+    ap.add_argument("--frames", type=parse_target, default="auto",
+                    help="frames to use, or 'auto' (default): about 1.75 per second of video, 250 to 600")
     ap.add_argument("--max-size", type=int, default=1600, help="image size (default 1600)")
     ap.add_argument("--quality", choices=brushmod.QUALITY, default="standard", help="Brush settings")
     ap.add_argument("--evals", type=int, default=6, help="how many times to score quality during training")

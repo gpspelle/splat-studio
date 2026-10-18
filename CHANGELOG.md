@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **The number of frames follows the video's length** ([#48](https://github.com/gpspelle/splat-studio/issues/48)).
+  Instead of always about 250, runs take about 1.75 frames per second of video (250 to 600): a
+  4-minute car walkaround gets 420, a 1½-minute clip still 250. New run's **Frames** field is
+  empty ("Auto") and says what it will pick for the chosen video and trim; typing a number still
+  sets it. `--frames auto` is the new default on the command line.
 - **Camera poses 1.8x faster with COLMAP 4** ([#44](https://github.com/gpspelle/splat-studio/issues/44)).
   The first attempt uses COLMAP's global mapper when it's installed (44 s instead of 2 min on a
   250-frame walkaround, same accuracy); the fallback attempts keep the classic mapper.

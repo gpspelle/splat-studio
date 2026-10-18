@@ -505,7 +505,7 @@ async function prepareFrames() {
   $("emptyStage").textContent = t("keep.noFrames");
   $("framesStatus").textContent = t("keep.working");
   try {
-    const job = await postJSON("/api/jobs", { type: "frames", video, frames: +params.get("frames") || 250 });
+    const job = await postJSON("/api/jobs", { type: "frames", video, frames: params.get("frames") || "auto" });
     await watch(job, $("framesStatus"), null, () => load());
   } catch (err) { toast(err.message); $("framesStatus").textContent = err.message; }
   preparing = false;

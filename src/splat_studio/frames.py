@@ -54,6 +54,28 @@ def choose_fps(target: int, length: float, fixed: float | None = None) -> float:
     return round(fixed if fixed else target / length, 3)
 
 
+# "auto" frame count: about 1.75 frames per second of video used (a frame every ~0.6 s of a slow
+# walk), so long walkarounds such as a car keep enough overlap; never below the old fixed 250
+# (short videos run as before) and never above 600 (COLMAP time grows faster than the count).
+AUTO_RATE = 1.75
+AUTO_MIN, AUTO_MAX = 250, 600
+
+
+def auto_target(length: float) -> int:
+    """Frames to extract from `length` seconds of video when the count is "auto"."""
+    return int(max(AUTO_MIN, min(AUTO_MAX, round(length * AUTO_RATE / 10) * 10)))
+
+
+def parse_target(value) -> int | str:
+    """A frame count: "auto" or a positive whole number (for argparse and the web API)."""
+    if str(value).strip().lower() == "auto":
+        return "auto"
+    n = int(value)
+    if n <= 0:
+        raise ValueError("the frame count must be positive")
+    return n
+
+
 def frame_name(prefix: str) -> str:
     return f"{prefix}_%04d.jpg"
 
@@ -104,7 +126,8 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", type=Path)
     ap.add_argument("--out", type=Path, help="output folder (default: frames/<video name>)")
-    ap.add_argument("--target", type=int, default=250, help="approximate number of frames (default 250)")
+    ap.add_argument("--target", type=parse_target, default=250,
+                    help="approximate number of frames, or 'auto' to choose from the video's length (default 250)")
     ap.add_argument("--fps", type=float, help="fixed frames per second (overrides --target)")
     ap.add_argument("--start", default="0", help="skip the video before this time, e.g. 0:05")
     ap.add_argument("--end", help="stop at this time, e.g. 2:40 (default: end of video)")
@@ -132,7 +155,10 @@ def main(argv: list[str] | None = None) -> None:
     if end <= start:
         sys.exit(f"--end ({end:.1f}s) must be after --start ({start:.1f}s)")
     length = end - start
-    fps = choose_fps(args.target, length, args.fps)
+    target = auto_target(length) if args.target == "auto" else args.target
+    if args.target == "auto" and not args.fps:
+        print(f"Auto: {target} frames for {int(length // 60)}:{int(length % 60):02d} of video")
+    fps = choose_fps(target, length, args.fps)
     # The two lines below are parsed by the web UI to map frame numbers back to video time.
     print(f"Video: {duration:.1f}s total, using {start:.1f}s -> {end:.1f}s ({length:.1f}s)")
     print(f"Extracting at {fps} fps -> about {int(fps * length)} frames into {out_dir}")

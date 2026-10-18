@@ -135,10 +135,11 @@
         <details class="adv" id="adv">
           <summary data-i18n="adv.title">Advanced</summary>
           <div class="field row">
-            <div><label for="frames" data-i18n="adv.frames">Frames</label><input id="frames" type="number" value="250" min="50" max="1000" step="10"></div>
+            <div><label for="frames" data-i18n="adv.frames">Frames</label><input id="frames" type="number" min="50" max="1000" step="10" placeholder="Auto" data-i18n-placeholder="adv.frames.auto" data-testid="frames-input"></div>
             <div><label for="start" data-i18n="adv.start">Trim start</label><input id="start" type="text" placeholder="0:03"></div>
             <div><label for="end" data-i18n="adv.end">Trim end</label><input id="end" type="text" placeholder="1:45"></div>
           </div>
+          <div class="help" id="framesHelp" data-testid="frames-help"></div>
           <label class="check"><input type="checkbox" id="reextract"> <span data-i18n="adv.reextract">Extract frames again instead of reusing the last set</span></label>
           <div class="field"><label for="brushArgs" data-i18n="adv.brush">Extra Brush options</label>
             <input id="brushArgs" type="text" placeholder="e.g. --sh-degree 1 --max-splats 800000" data-i18n-placeholder="adv.brush.placeholder"></div>
@@ -172,7 +173,7 @@ window.site.mount();
 window.i18n.mountSwitcher();
 window.theme.mount();
 window.i18n.apply();
-window.addEventListener("langchange", () => { refreshHelp(); renderPicked(); renderVideoOptions(); renderKeep(); renderStart(); });
+window.addEventListener("langchange", () => { refreshHelp(); renderPicked(); renderVideoOptions(); renderKeep(); renderStart(); renderFramesHelp(); });
 
 // ---------------------------------------------------------------- the draft: kept while you go to "Choose what to keep" and back
 const DRAFT = "splat:newrun";
@@ -208,6 +209,23 @@ document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e)
   saveDraft();
 }));
 [...CHECKS, ...FIELDS].forEach((k) => $(k).addEventListener("change", () => { saveDraft(); renderKeep(); }));
+["frames", "start", "end"].forEach((k) => $(k).addEventListener("input", () => renderFramesHelp()));
+
+// ---------------------------------------------------------------- frame count: auto from the video's length (#48)
+// Same rule as frames.auto_target: about 1.75 frames per second of video used, 250 to 600, rounded to 10.
+const autoFrames = (len) => Math.max(250, Math.min(600, Math.round(len * 1.75 / 10) * 10));
+const secs = (s) => (s || "").trim() ? s.trim().split(":").reduce((a, x) => a * 60 + (parseFloat(x) || 0), 0) : null;
+const clock = (len) => `${Math.floor(len / 60)}:${String(Math.floor(len % 60)).padStart(2, "0")}`;
+const framesValue = () => ($("frames").value ? +$("frames").value : "auto");
+function renderFramesHelp() {
+  const el = $("framesHelp"), n = $("frames").value;
+  if (n) { el.textContent = t("adv.frames.helpFixed", { n }); return; }
+  const d = picked.length === 1 ? picked[0].duration : null;
+  if (!d) { el.textContent = t(picked.length > 1 ? "adv.frames.helpMany" : "adv.frames.helpNone"); return; }
+  const start = secs($("start").value) || 0, end = Math.min(secs($("end").value) ?? d, d);
+  const len = Math.max(0, end - start) || d;
+  el.textContent = t("adv.frames.help", { n: autoFrames(len), d: clock(len) });
+}
 $("adv").addEventListener("toggle", saveDraft);
 
 // ---------------------------------------------------------------- choosing / uploading videos (several = a batch, #14)
@@ -220,7 +238,7 @@ function setPicked(list) {
   chosenVideo = one;
   renderPicked();
   if (picked.length > 1 && choosing()) { setSeg("keep", "all"); refreshHelp(); }
-  renderKeepButtons(); refreshHelp();
+  renderKeepButtons(); refreshHelp(); renderFramesHelp();
   if (changed) loadSelection(); else { renderKeep(); renderStart(); }
   saveDraft();
 }
@@ -249,12 +267,12 @@ $("fileInput").onchange = (e) => { uploadAll([...e.target.files]); e.target.valu
 ["dragenter", "dragover"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => $("dropZone").addEventListener(ev, (e) => { e.preventDefault(); $("dropZone").classList.remove("over"); }));
 $("dropZone").addEventListener("drop", (e) => uploadAll([...e.dataTransfer.files]));
-$("prevVideo").onchange = (e) => { const v = videos.find((x) => x.path === e.target.value); if (v) addPicked({ path: v.path, name: v.name, advice: v.advice }); e.target.value = ""; };
+$("prevVideo").onchange = (e) => { const v = videos.find((x) => x.path === e.target.value); if (v) addPicked({ path: v.path, name: v.name, advice: v.advice, duration: v.meta?.duration }); e.target.value = ""; };
 
 async function uploadAll(files) {
   for (const [i, f] of files.entries()) {
     const d = await upload(f, files.length > 1 ? `${i + 1}/${files.length} · ` : "").catch(() => null);
-    if (d) addPicked({ path: d.video, name: d.name, advice: d.advice });
+    if (d) addPicked({ path: d.video, name: d.name, advice: d.advice, duration: d.meta?.duration });
   }
   loadVideos();
 }
@@ -295,6 +313,7 @@ function applySettings(d) {
   if (d.detail) setSeg("detail", d.detail);
   ["removeBg", "trainGaps", "eval", "reextract"].forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
   ["frames", "brushArgs"].forEach((k) => { if (d[k] != null) $(k).value = d[k]; });
+  if (String(d.frames) === "250") $("frames").value = "";        // the old fixed default: now auto (#48)
 }
 $("saveDefaults").onclick = () => {
   const ok = defaults.set({ quality: seg("quality"), detail: seg("detail"), removeBg: $("removeBg").checked, trainGaps: $("trainGaps").checked,
@@ -322,7 +341,7 @@ function renderKeep() {
   const st = $("keepStatus"), link = $("keepLink");
   link.hidden = !chosenVideo;
   if (!chosenVideo) { st.className = "status"; st.textContent = t("keep.state.noVideo"); return; }
-  const kq = { video: chosenVideo, frames: +$("frames").value || 250 };
+  const kq = { video: chosenVideo, frames: framesValue() };
   if (seg("keep") === "several") kq.objects = "several";
   link.href = "/keep?" + new URLSearchParams(kq);
   if (!selection) { st.className = "status"; st.textContent = t("keep.state.checking"); link.textContent = t("keep.open"); return; }
@@ -345,7 +364,7 @@ function renderStart() {
 $("startBtn").onclick = async () => {
   const one = picked.length === 1;
   const body = { type: "video", quality: seg("quality"), detail: seg("detail"),
-    eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: +$("frames").value || 250,
+    eval: $("eval").checked, remove_background: $("removeBg").checked, reextract: $("reextract").checked, frames: framesValue(),
     stop_on_gaps: !$("trainGaps").checked,
     start: $("start").value.trim(), end: $("end").value.trim(), brush_args: $("brushArgs").value.trim(),
     masks: one && choosing() && selectionReady(), split_objects: one && seg("keep") === "several" && selectionReady() };
@@ -370,12 +389,13 @@ api("/api/setup").then((s) => { $("toolsNotice").hidden = !s.items.some((i) => i
   if (d.keep) setSeg("keep", d.keep === "chosen" ? "one" : d.keep);
   CHECKS.forEach((k) => { if (k in d) $(k).checked = !!d[k]; });
   FIELDS.forEach((k) => { if (d[k] != null) $(k).value = d[k]; });
+  if (String(d.frames) === "250") $("frames").value = "";        // the old fixed default: now auto (#48)
   if (d.adv) $("adv").open = true;
   if (q.get("keep")) setSeg("keep", { chosen: "one", one: "one", several: "several" }[q.get("keep")] || "all");
   refreshHelp(); renderKeep(); renderStart();
   await loadVideos();
   const want = q.get("video") ? [q.get("video")] : d.videos || (d.video ? [d.video] : []);
-  setPicked(want.map((p) => videos.find((x) => x.path === p)).filter(Boolean).map((v) => ({ path: v.path, name: v.name, advice: v.advice })));
+  setPicked(want.map((p) => videos.find((x) => x.path === p)).filter(Boolean).map((v) => ({ path: v.path, name: v.name, advice: v.advice, duration: v.meta?.duration })));
   if (q.toString()) history.replaceState(null, "", "/new");
 })();
 // read-only helpers for the automated tests

@@ -7,8 +7,12 @@
 
 ## Stage 1: frames (`splat_studio/frames.py`)
 
-- Samples the video evenly to get about 250 frames (`--frames`), so a 1-minute clip and a
-  4-minute clip both produce a workable set.
+- Samples the video evenly. The count is "auto" by default (`--frames auto`, `frames.auto_target`):
+  about 1.75 frames per second of the part used (after trimming), at least 250 and at most 600, so
+  a 1-minute clip gets 250 and a 4-minute car walkaround 420, a frame every ~0.6 s, which keeps
+  enough overlap between neighbours. Training time barely changes (at standard quality Brush's
+  steps are capped from 250 images on); COLMAP's time grows a little faster than the count, hence
+  the cap. A number (`--frames 400`, or **Frames** under New run → Advanced) overrides it.
 - iPhone HDR (HLG/PQ) is detected and tone-mapped to normal colours, so frames don't come out grey.
 - Rotation metadata is applied, so portrait videos come out upright.
 - Blurry frames (sharpness well below the median) are moved to `_blurry/` if OpenCV is installed.

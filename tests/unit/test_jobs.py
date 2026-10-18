@@ -129,6 +129,12 @@ class BuildCmdTest(unittest.TestCase):
                          ["videos/a.mov", "--frames", "300", "--start", "0:03", "--re-extract", "--quality", "high",
                           "--detail", "auto", "--eval", "--", "--sh-degree", "1"])
 
+    def test_auto_frames(self):
+        j = job(video="videos/a.mov", options={"frames": "auto"})
+        self.assertEqual(self.tail(build_cmd(j))[:3], ["videos/a.mov", "--frames", "auto"])
+        f = build_cmd(job(type="frames", video="videos/a.mov", options={"frames_dir": "frames/a"}))
+        self.assertEqual(f[f.index("--target") + 1], "auto")
+
     def test_retrain_and_setup(self):
         self.assertEqual(self.tail(build_cmd(job(type="retrain", run_dir="workspace/a/run_1", options={})))[:2],
                          ["--train-only", "workspace/a/run_1"])
@@ -140,9 +146,11 @@ class ValidateOptionsTest(unittest.TestCase):
         self.assertEqual(validate_options({"quality": "high", "start": "1:05", "eval": True, "frames": 250}),
                          {"quality": "high", "start": "1:05", "eval": True, "frames": 250})
         self.assertEqual(validate_options({"eval": False, "start": ""}), {})
+        self.assertEqual(validate_options({"frames": "auto"}), {"frames": "auto"})
+        self.assertEqual(validate_options({"frames": "400"}), {"frames": 400})
 
     def test_rejects_bad_options(self):
-        for body in ({"quality": "ultra"}, {"detail": "x"}, {"frames": 5}, {"start": "1;rm -rf"},
+        for body in ({"quality": "ultra"}, {"detail": "x"}, {"frames": 5}, {"frames": "lots"}, {"start": "1;rm -rf"},
                      {"brush_args": "--x $(whoami)"}):
             with self.assertRaises(ValueError, msg=str(body)):
                 validate_options(body)
