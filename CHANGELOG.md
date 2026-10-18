@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Blurry frames are swapped for a sharp neighbour** ([#50](https://github.com/gpspelle/splat-studio/issues/50)).
+  For each moment, three frames next to each other are looked at and the sharpest is kept, so a
+  blurry frame no longer leaves a gap, usually at a corner where overlap matters most. Only moments
+  with nothing sharp nearby are left out, and the advice says when they were.
+- **What happened to the frames, on each run** ([#50](https://github.com/gpspelle/splat-studio/issues/50)):
+  video length, frames taken (auto or set), blurry ones swapped, moments too blurry and when, frames
+  used, frames placed.
 - **The number of frames follows the video's length** ([#48](https://github.com/gpspelle/splat-studio/issues/48)).
   Instead of always about 250, runs take about 1.75 frames per second of video (250 to 600): a
   4-minute car walkaround gets 420, a 1½-minute clip still 250. New run's **Frames** field is
@@ -57,6 +64,8 @@
   direction from the centre (`dirs`); older runs are measured again when first opened.
 
 ### Fixed
+- **The marks under the frame slider on "Choose what to keep" line up with it**: they used to span
+  the width under the arrow buttons too.
 - **A shrunk iPhone video is called what it is.** A video the iPhone shrank on the way (a website's
   upload button, Messages, WhatsApp) said "Record in 4K" even when it was filmed in 4K; it now says
   it's a shrunk copy and to AirDrop the original.

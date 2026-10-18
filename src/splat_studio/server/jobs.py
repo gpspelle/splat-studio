@@ -35,7 +35,8 @@ class Job:
               "run_dir", "stage", "stage_label", "step_label", "step_pct", "eta", "eta_worst", "attempt",
               "registered", "train_step", "train_total", "train_eta", "splat", "frames", "blurry",
               "track_breaks", "error", "returncode", "clean_splat", "cleaned",
-              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts", "coverage", "stopped"]
+              "object_splat", "isolated", "eta_total", "eta_note", "masks", "parts", "coverage", "stopped",
+              "frame_stats"]
 
     def __init__(self, jobs_dir: Path, **kw):
         for f in self.FIELDS:
@@ -84,6 +85,7 @@ RE_CLEAN_COPY = re.compile(r"Clean copy: (.+\.ply)")
 RE_CLEAN_KEPT = re.compile(r"Kept ([\d,]+) of ([\d,]+) splats")
 RE_OBJECT_COPY = re.compile(r"Object copy: (.+\.ply)")
 RE_COVERAGE = re.compile(r"^Coverage: (\{.*\})\s*$")
+RE_FRAME_STATS = re.compile(r"^Frame stats: (\{.*\})\s*$")    # what happened to the frames (#50)
 RE_STOPPED = re.compile(r"^Stopped: (coverage)\s*$")      # the run stopped itself before training (#34)
 RE_PART_COPY = re.compile(r"Part copy \((.*)\): (.+\.ply)")
 RE_STAGE_SPLIT = re.compile(r"==> Splitting the objects")
@@ -169,6 +171,12 @@ def parse_line(job: Job, line: str, rel=lambda p: p, now: float | None = None) -
     m = RE_REUSE.search(line)
     if m:
         job.frames = clock.frames = int(m.group(1))
+    m = RE_FRAME_STATS.search(line.strip())
+    if m:
+        try:
+            job.frame_stats = json.loads(m.group(1))
+        except ValueError:
+            pass
     m = RE_TRACK.search(line)
     if m:
         brk = {"first": m.group(1), "last": m.group(2), "count": int(m.group(3))}

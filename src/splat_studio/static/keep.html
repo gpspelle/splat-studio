@@ -24,10 +24,23 @@
   .stage canvas { position: absolute; inset: 0; height: 100%; cursor: crosshair; touch-action: none; }
   .stage .empty-stage { aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--hud-ink-2); font: var(--text-meta); text-align: center; padding: var(--s-4); }
   .scrub { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); }
-  .scrub input[type=range] { flex: 1; accent-color: var(--signal); min-width: 0; }
   .scrub .meta { white-space: nowrap; }
-  .ticks { position: relative; height: 10px; margin: 0 var(--s-4) var(--s-3); }
-  .ticks i { position: absolute; top: 0; width: 3px; height: 10px; background: var(--signal); transform: translateX(-1px); }
+  /* The slider is drawn here (not the browser's own) so its geometry is known: the thumb's centre
+     runs from T/2 to width - T/2, and the marks of clicked frames use the same formula (#50). */
+  .scrub-track { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 16px; }
+  #scrub { --t: 18px; --f: 0; --at: calc(var(--t) / 2 + (100% - var(--t)) * var(--f));
+           appearance: none; -webkit-appearance: none; width: 100%; height: var(--t); margin: 0; background: transparent; cursor: pointer; }
+  #scrub::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+           background: linear-gradient(to right, var(--signal) var(--at), var(--sunken) var(--at)); box-shadow: inset 0 0 0 1px var(--field); }
+  #scrub::-moz-range-track { height: 6px; border-radius: 3px;
+           background: linear-gradient(to right, var(--signal) var(--at), var(--sunken) var(--at)); box-shadow: inset 0 0 0 1px var(--field); }
+  #scrub::-webkit-slider-thumb { -webkit-appearance: none; box-sizing: border-box; width: var(--t); height: var(--t); margin-top: calc((6px - var(--t)) / 2);
+           border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--ink); }
+  #scrub::-moz-range-thumb { box-sizing: border-box; width: var(--t); height: var(--t); border-radius: 50%; background: var(--ink);
+           border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--ink); }
+  #scrub:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 9px; }
+  .ticks { position: relative; height: 10px; --t: 18px; }
+  .ticks i { position: absolute; top: 0; width: 3px; height: 10px; background: var(--signal); transform: translateX(-50%); }
   .legend { display: flex; gap: var(--s-4); flex-wrap: wrap; padding: 0 var(--s-4) var(--s-3); font: var(--text-meta); color: var(--ink-3); }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 2px solid var(--paper); }
   .dot.keep { background: var(--ok); } .dot.drop { background: var(--bad); }
@@ -82,10 +95,12 @@
       </div>
       <div class="scrub">
         <button class="small" id="prev" aria-label="Previous frame">←</button>
-        <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Frame" data-testid="keep-scrub">
+        <div class="scrub-track">
+          <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Frame" data-testid="keep-scrub">
+          <div class="ticks" id="ticks" aria-hidden="true" data-testid="keep-ticks"></div>
+        </div>
         <button class="small" id="next" aria-label="Next frame">→</button>
       </div>
-      <div class="ticks" id="ticks" aria-hidden="true"></div>
       <div class="legend"><span><span class="dot keep"></span><span data-i18n="keep.legend.keep">keep</span></span>
         <span><span class="dot drop"></span><span data-i18n="keep.legend.drop">leave out</span></span>
         <span data-i18n="keep.legend.dim">dimmed: left out of the splat</span></div>
@@ -263,6 +278,7 @@ function showFrame(i) {
   if (!info || !info.frames.length) return;
   idx = Math.max(0, Math.min(info.frames.length - 1, i));
   $("scrub").value = idx;
+  $("scrub").style.setProperty("--f", (idx / Math.max(1, (info?.frames?.length || 1) - 1)).toFixed(4));
   renderSuggest();
   const name = frameName();
   $("frameInfo").textContent = t("keep.frameOf", { n: idx + 1, total: info.frames.length });
@@ -278,7 +294,7 @@ function renderTicks() {
   const n = info?.frames?.length || 1;
   $("ticks").innerHTML = Object.keys(prompts).filter((k) => prompts[k].length)
     .map((k) => info.frames.indexOf(k)).filter((i) => i >= 0)
-    .map((i) => `<i style="left:${(100 * i / Math.max(1, n - 1)).toFixed(2)}%"></i>`).join("");
+    .map((i) => `<i data-frame="${i}" style="left:calc(var(--t) / 2 + (100% - var(--t)) * ${(i / Math.max(1, n - 1)).toFixed(4)})"></i>`).join("");
 }
 
 function renderStatus() {

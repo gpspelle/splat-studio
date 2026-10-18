@@ -142,6 +142,24 @@ class WebUiTest(BrowserTestCase):
         pts = self.page.evaluate("Object.values(window.keepPage.prompts())[0]")
         self.assertEqual([p[2] for p in pts], [1, 0])
         self.assertAlmostEqual(pts[0][0], 0.5, delta=0.02)
+        # the mark of a clicked frame sits under the slider's thumb for that frame, at both ends (#50)
+        self.page.get_by_test_id("tool-keep").click()
+        self.page.focus("[data-testid=keep-scrub]")
+        self.page.keyboard.press("End")
+        self.page.wait_for_function("document.getElementById('frameImg').naturalWidth > 0")
+        self.page.mouse.click(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        self.page.wait_for_function("document.querySelectorAll('[data-testid=keep-ticks] i').length === 2")
+        geo = self.page.evaluate("""() => {
+            const r = document.querySelector('[data-testid=keep-scrub]').getBoundingClientRect();
+            const ticks = [...document.querySelectorAll('[data-testid=keep-ticks] i')].map((t) => {
+                const b = t.getBoundingClientRect(); return b.left + b.width / 2; });
+            return {left: r.left, width: r.width, ticks: ticks.sort((a, b) => a - b)};
+        }""")
+        thumb = 18
+        self.assertAlmostEqual(geo["ticks"][0], geo["left"] + thumb / 2, delta=1)
+        self.assertAlmostEqual(geo["ticks"][1], geo["left"] + geo["width"] - thumb / 2, delta=1)
+        self.shot("keep-ticks")
+        self.page.keyboard.press("Home")
         self.page.get_by_test_id("keep-apply").click()
         self.page.wait_for_function("window.keepPage.masksDone()", timeout=60000)
         self.page.wait_for_timeout(500)

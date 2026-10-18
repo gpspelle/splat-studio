@@ -15,7 +15,16 @@
   the cap. A number (`--frames 400`, or **Frames** under New run → Advanced) overrides it.
 - iPhone HDR (HLG/PQ) is detected and tone-mapped to normal colours, so frames don't come out grey.
 - Rotation metadata is applied, so portrait videos come out upright.
-- Blurry frames (sharpness well below the median) are moved to `_blurry/` if OpenCV is installed.
+- **The sharpest frame at each moment** (#50, needs OpenCV): ffmpeg extracts 3 candidates per
+  moment (3× the rate), each is scored (variance of the Laplacian at half size) while ffmpeg runs
+  and the others are deleted at once, so only a few spare frames are ever on disk. The sharpest
+  candidate is saved under the moment's own number (frame N is still at start + (N−1)/fps). A
+  moment whose best candidate is still under half the median sharpness of all candidates is moved
+  to `_blurry/`. Blur comes from moving fast, usually at corners, so swapping a blurry frame for a
+  sharp neighbour keeps the overlap exactly where it's most needed, instead of leaving a gap.
+  `--candidates 1` (or no OpenCV) extracts one frame per moment and drops blurry ones as before.
+- `extraction.json` keeps `stats` (length, target, auto, kept, replaced, dropped, dropped_at), and
+  the stage prints them as `Frame stats: {…}` (again when frames are reused) for the run line.
 - The frame rate and start time are saved in `extraction.json`. That's what lets the UI turn
   "frames 85–102 failed" into "0:42–0:51 in your video".
 

@@ -110,6 +110,10 @@ def import_capture(args) -> tuple[Path | None, Path]:
     else:
         say(f"    {capture.describe(plan)}")
         say(f"    Kept {len(plan['frames'])} frames")                # parsed by the web UI
+    say("Frame stats: " + json.dumps({"length": round(float(plan["meta"].get("duration") or 0), 1),
+                                      "target": args.frames if args.frames != "auto" else len(plan["frames"]),
+                                      "auto": args.frames == "auto", "kept": len(plan["frames"]),
+                                      "limited": plan["left_out"]}, separators=(",", ":")))   # parsed by the web UI
 
     ws = new_run_dir(Path("workspace") / name).resolve()
     if args.poses == "colmap":
@@ -252,6 +256,10 @@ def main(argv: list[str] | None = None) -> None:
         have = len(list(frames.glob("*.jpg"))) if frames.exists() else 0
         if have and not args.re_extract:
             say(f"    reusing {have} frames extracted earlier (use --re-extract to redo)")
+            from .guidance import load_extraction_info
+            stats = load_extraction_info(frames).get("stats")
+            if stats:
+                say("Frame stats: " + json.dumps(stats, separators=(",", ":")))   # parsed by the web UI
         else:
             if frames.exists() and args.re_extract and not args.dry_run:
                 shutil.rmtree(frames)

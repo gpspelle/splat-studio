@@ -14,6 +14,24 @@
   const viewerUrl = (file, title) => "/viewer?" + new URLSearchParams({ file, title: title || file.split("/").pop() });
   const fileUrl = (p) => "/files/" + p.split("/").map(encodeURIComponent).join("/");
   const locale = () => window.i18n.getLang() === "pt" ? "pt-BR" : "en";
+
+  // What happened to the frames, in one line (#50): video length, frames asked for, blurry ones
+  // swapped for a sharper neighbour, moments too blurry to use (and when), frames used, frames placed.
+  function frameFacts(j) {
+    const fs = j.frame_stats, out = [];
+    const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+    if (fs) {
+      if (fs.length) out.push(t("run.facts.video", { d: mmss(fs.length) }));
+      if (fs.target) out.push(t(fs.auto ? "run.facts.askedAuto" : "run.facts.asked", { n: fs.target }));
+      if (fs.replaced) out.push(t("run.facts.replaced", { n: fs.replaced }));
+      if (fs.dropped) out.push(t("run.facts.dropped", { n: fs.dropped,
+        when: (fs.dropped_at || []).slice(0, 3).map(mmss).join(", ") + ((fs.dropped_at || []).length > 3 ? "…" : "") }));
+      if (fs.limited) out.push(t("run.facts.limited", { n: fs.limited }));
+    }
+    if (j.frames) out.push(t(fs ? "run.facts.used" : "run.frames", { n: j.frames }));
+    if (j.registered) out.push(t("run.registered", { r: j.registered }));
+    return out;
+  }
   const ago = (ts) => { if (!ts) return ""; const s = Date.now() / 1000 - ts;
     if (s < 60) return t("ago.now"); if (s < 3600) return t("ago.min", { n: Math.floor(s / 60) });
     if (s < 86400) return t("ago.h", { n: Math.floor(s / 3600) }); return new Date(ts * 1000).toLocaleDateString(locale()); };
@@ -123,7 +141,7 @@
     const timing = running ? t("run.running", { t: dur(j.started) }) : qd ? t("run.queued", { ago: ago(j.created) })
       : !j.started ? t("run.stoppedEarly", { ago: ago(j.finished || j.created) })
       : j.finished ? t("run.took", { t: dur(j.started, j.finished), ago: ago(j.finished) }) : ago(j.created);
-    const facts = [j.frames ? t("run.frames", { n: j.frames }) : null, j.registered ? t("run.registered", { r: j.registered }) : null].filter(Boolean).join(" · ");
+    const facts = frameFacts(j).join(" · ");
     const best = j.clean_splat || j.splat, title = best ? splatTitle(best) : "";   // fog removed when there is a copy
     const canRetrain = !running && !qd && j.type !== "clean" && j.type !== "isolate" && j.run_dir && (j.status === "done" || (j.summary?.result || "").startsWith("OK"));
     const s = j.summary || {};

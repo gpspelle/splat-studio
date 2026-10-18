@@ -13,7 +13,7 @@ It wires together three open-source tools and handles the fiddly parts for you:
 
 | Step | Tool | What Splat Studio adds |
 |---|---|---|
-| Video → frames | ffmpeg | even sampling, iPhone HDR conversion, blurry-frame filtering |
+| Video → frames | ffmpeg | even sampling, iPhone HDR conversion, the sharpest of 3 frames at each moment |
 | Frames → camera poses | [COLMAP](https://colmap.github.io/) | retries automatically when tracking breaks, time estimates, one folder per run |
 | Poses → splat | [Brush](https://github.com/ArthurBrussee/brush) | settings chosen from your footage, built automatically on first use |
 | Splat → website | [Spark](https://sparkjs.dev) + three.js | viewer with auto-upright, one-click export of a self-contained site |
@@ -118,6 +118,9 @@ Splat Studio helps you get it right with fewer attempts:
   it's visible, so a side hidden behind another object shows up too.
 - **After a run**, if tracking broke, it tells you **at which seconds of the video** it
   happened, so you know exactly which part to re-film.
+- Each run's line says what happened to the frames: the video's length, how many frames were
+  taken, how many blurry ones were swapped for a sharper frame right next to them, which moments
+  were too blurry to use (and when), and how many COLMAP placed.
 - It flags blurry footage, and runs that couldn't be reconstructed, with concrete advice.
 
 <br clear="right">
@@ -492,7 +495,9 @@ Passe o vídeo do iPhone para o Mac por **AirDrop** (no app Fotos, **Compartilha
 pelo botão de upload de um site (inclusive o Splat Studio aberto no celular), pelo Mensagens, WhatsApp ou
 Mail, o iPhone reduz o vídeo (por exemplo para 320×568), e o app avisa que é uma cópia reduzida.
 
-O número de quadros é automático: cerca de 1,75 por segundo de vídeo, de 250 a 600 (uns 420 para um carro
+Para cada momento escolhido, o Splat Studio olha 3 quadros vizinhos e fica com o mais nítido, então um
+quadro borrado é trocado em vez de deixar um buraco; a linha de cada execução diz quantos foram trocados e
+quais momentos ficaram borrados demais (e quando). O número de quadros é automático: cerca de 1,75 por segundo de vídeo, de 250 a 600 (uns 420 para um carro
 filmado em 4 minutos). Para escolher você mesmo, digite um número em **Quadros**, em **Avançado** na Nova
 execução.
 
