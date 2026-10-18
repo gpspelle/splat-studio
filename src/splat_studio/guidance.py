@@ -185,11 +185,24 @@ def run_advice(job: dict) -> list[dict]:
     ratio = registered_ratio(job.get("registered"))
     breaks = job.get("track_breaks") or []
     frames, blurry = job.get("frames") or 0, job.get("blurry") or 0
+    fs = job.get("frame_stats") or {}
 
     if blurry and frames and blurry / (frames + blurry) > 0.15:
-        tips.append(tip("warn", "run.blurry", f"{blurry} of {frames + blurry} frames were blurry and set aside. "
-                        "Move more slowly, add light, and lock focus (press and hold on the object).",
-                        blurry=blurry, total=frames + blurry))
+        when = ", ".join(fmt_timestamp(t) for t in (fs.get("dropped_at") or [])[:4])
+        if when:
+            tips.append(tip("warn", "run.blurry_at", f"{blurry} of {frames + blurry} moments were too blurry to use, "
+                            f"even the frames next to them (around {when}). Film those parts more slowly, add light, "
+                            "and lock focus (press and hold on the object).",
+                            blurry=blurry, total=frames + blurry, when=when))
+        else:
+            tips.append(tip("warn", "run.blurry", f"{blurry} of {frames + blurry} frames were blurry and set aside. "
+                            "Move more slowly, add light, and lock focus (press and hold on the object).",
+                            blurry=blurry, total=frames + blurry))
+    replaced, used = fs.get("replaced") or 0, (fs.get("kept") or 0)
+    if used and replaced / used > 0.25:
+        tips.append(tip("info", "run.replaced", f"{replaced} of {used} frames were blurry and swapped for a sharper one "
+                        "right next to them. That worked, but moving more slowly gives sharper detail.",
+                        replaced=replaced, total=used))
     if breaks:
         when = ", ".join(b["when"] for b in breaks[:4] if b.get("when"))
         where = f" around {when} in the video" if when else ""
@@ -215,9 +228,14 @@ def run_advice(job: dict) -> list[dict]:
 
 # ---------------------------------------------------------------- extraction facts saved with frames
 
-def save_extraction_info(frames_dir: Path, fps: float, start: float, duration: float, video: str) -> None:
+def save_extraction_info(frames_dir: Path, fps: float, start: float, duration: float, video: str,
+                         stats: dict | None = None) -> None:
+    """extraction.json: how the frames were taken (fps and start map frame numbers to video time)
+    and, when known, what happened to them (`stats`: length, target, auto, kept, replaced, dropped,
+    dropped_at)."""
     (frames_dir / "extraction.json").write_text(json.dumps(
-        {"fps": fps, "start": start, "duration": duration, "video": video}, indent=1))
+        {"fps": fps, "start": start, "duration": duration, "video": video, **({"stats": stats} if stats else {})},
+        indent=1))
 
 
 def load_extraction_info(frames_dir: Path) -> dict:

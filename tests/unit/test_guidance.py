@@ -106,6 +106,19 @@ class RunAdviceTest(unittest.TestCase):
         self.assertTrue(any("blurry" in t["text"] for t in tips))
         self.assertTrue(any("continuous take" in t["text"] for t in tips))
 
+
+    def test_blurry_moments_say_when_and_swaps_are_mentioned(self):
+        job = {"status": "done", "registered": "300/300 frames (100%)", "frames": 300, "blurry": 70,
+               "frame_stats": {"kept": 300, "replaced": 90, "dropped": 70, "dropped_at": [72.0, 75.5, 130.0]}}
+        tips = {t["code"]: t for t in guidance.run_advice(job)}
+        self.assertIn("around 1:12, 1:16, 2:10", tips["run.blurry_at"]["text"])
+        self.assertEqual(tips["run.blurry_at"]["level"], "warn")
+        self.assertEqual(tips["run.replaced"]["level"], "info")
+        self.assertIn("90 of 300 frames", tips["run.replaced"]["text"])
+        few = {"status": "done", "registered": "300/300 frames (100%)", "frames": 300, "blurry": 2,
+               "frame_stats": {"kept": 300, "replaced": 20, "dropped": 2, "dropped_at": [10.0, 11.0]}}
+        codes = {t["code"] for t in guidance.run_advice(few)}
+        self.assertFalse(codes & {"run.blurry", "run.blurry_at", "run.replaced"})
     def test_nothing_reconstructed(self):
         tips = guidance.run_advice({"status": "failed", "error": "COLMAP could not reconstruct anything."})
         self.assertTrue(any("textured surface" in t["text"] for t in tips))

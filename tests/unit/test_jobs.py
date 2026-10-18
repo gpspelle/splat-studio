@@ -19,6 +19,16 @@ class ParseLineTest(unittest.TestCase):
         self.assertEqual(j.run_dir, "rel:/data/workspace/vase/run_1")
         self.assertEqual(j.stage_label, "Camera poses")
 
+    def test_frame_stats(self):
+        j = job()
+        parse_line(j, "Kept 413 frames, moved 7 blurry ones to frames/car/_blurry")
+        parse_line(j, 'Frame stats: {"length":240.0,"target":420,"auto":true,"kept":413,"replaced":63,'
+                      '"dropped":7,"dropped_at":[72.0,73.5]}')
+        self.assertEqual((j.frames, j.blurry), (413, 7))
+        self.assertEqual(j.frame_stats["replaced"], 63)
+        parse_line(j, "Frame stats: {not json")                    # ignored
+        self.assertEqual(j.frame_stats["target"], 420)
+
     def test_fog_cleaning_and_background_removal_are_told_apart(self):
         j = job()
         for line in ("Done. Splat: /d/workspace/v/run_1/splat/preview_3000.ply",

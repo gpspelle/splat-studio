@@ -10,9 +10,11 @@ converted to normal colours, and blurry frames are moved aside (needs OpenCV).
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .common import to_seconds
@@ -93,6 +95,104 @@ def extract(video: Path, out_dir: Path, fps: float, start: float, length: float 
     subprocess.run(cmd, check=True)
 
 
+CANDIDATES = 3     # frames looked at around each chosen moment; the sharpest is kept (#50)
+
+
+def sharpness(path: Path, cv2) -> float | None:
+    """Laplacian variance of the image at half size (fast to read; only compared within one video)."""
+    img = cv2.imread(str(path), cv2.IMREAD_REDUCED_GRAYSCALE_2)
+    return None if img is None else float(cv2.Laplacian(img, cv2.CV_64F).var())
+
+
+def pick_sharpest(scores: dict[int, list[tuple[float, object]]], ratio: float) -> dict:
+    """For each moment (slot), the sharpest of its candidate frames, and whether even that one is
+    blurry: under `ratio` x the median sharpness of all candidates. `scores`: slot -> [(score, item),
+    ...] in time order (the first item is the frame at the moment itself). Returns {slot: {"item",
+    "score", "blurry": bool, "replaced": bool}}; replaced = the moment's own frame was blurry and a
+    sharper neighbour stands in for it."""
+    every = sorted(sc for cands in scores.values() for sc, _ in cands)
+    median = every[len(every) // 2] if every else 0.0
+    limit = median * ratio
+    out = {}
+    for slot, cands in scores.items():
+        best_score, best_item = max(cands, key=lambda c: c[0])
+        out[slot] = {"item": best_item, "score": best_score, "blurry": ratio > 0 and best_score < limit,
+                     "replaced": ratio > 0 and cands[0][0] < limit <= best_score}
+    return out
+
+
+def extract_sharpest(video: Path, out_dir: Path, fps: float, start: float, length: float | None, prefix: str,
+                     tonemap: bool, ratio: float, k: int = CANDIDATES) -> dict:
+    """Like `extract`, but looks at `k` frames around each moment and keeps the sharpest, so a
+    blurry frame is replaced by a sharp neighbour instead of leaving a gap. Moments where every
+    candidate is blurry go to out_dir/_blurry. Candidates are scored and deleted while ffmpeg
+    runs, so at most a few spare frames are on disk at once. Needs OpenCV."""
+    import cv2
+    cand = out_dir / "_candidates"
+    shutil.rmtree(cand, ignore_errors=True)
+    cand.mkdir(parents=True)
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    if start > 0:
+        cmd += ["-ss", str(start)]
+    cmd += ["-i", str(video)]
+    if length:
+        cmd += ["-t", str(length)]
+    vf = f"fps={fps * k}" + (f",{TONEMAP}" if tonemap else "")
+    cmd += ["-vf", vf, "-qscale:v", "2", str(cand / "c_%06d.jpg")]
+    proc = subprocess.Popen(cmd)
+    scores: dict[int, list[tuple[float, Path]]] = {}
+    best: dict[int, tuple[float, Path]] = {}
+    done: set[str] = set()
+
+    def settle(final: bool) -> None:
+        files = sorted(f for f in cand.glob("c_*.jpg") if f.name not in done)
+        if not final and files:
+            files = files[:-1]                       # the newest may still be being written
+        for f in files:
+            done.add(f.name)
+            n = int(f.stem[2:]) - 1
+            slot = n // k
+            sc = sharpness(f, cv2)
+            if sc is None:
+                f.unlink(missing_ok=True)
+                continue
+            scores.setdefault(slot, []).append((sc, f))
+            if slot not in best or sc > best[slot][0]:
+                if slot in best:
+                    best[slot][1].unlink(missing_ok=True)
+                best[slot] = (sc, f)
+            else:
+                f.unlink(missing_ok=True)
+
+    while proc.poll() is None:
+        settle(False)
+        time.sleep(0.3)
+    if proc.returncode != 0:
+        shutil.rmtree(cand, ignore_errors=True)
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+    settle(True)
+    picks = pick_sharpest({s: [(sc, f) for sc, f in c] for s, c in scores.items()}, ratio)
+    blurry_dir = out_dir / "_blurry"
+    kept, replaced, dropped = 0, 0, []
+    for slot in sorted(picks):
+        info = picks[slot]
+        name = frame_name(prefix) % (slot + 1)          # numbered by moment, as before: frame N is at start + (N-1)/fps
+        if info["blurry"]:
+            blurry_dir.mkdir(exist_ok=True)
+            shutil.move(str(info["item"]), blurry_dir / name)
+            dropped.append(round(start + slot / fps, 1))
+        else:
+            shutil.move(str(info["item"]), out_dir / name)
+            kept += 1
+            replaced += info["replaced"]
+    shutil.rmtree(cand, ignore_errors=True)
+    return {"kept": kept, "replaced": replaced, "dropped": len(dropped), "dropped_at": dropped}
+
+
+def clock(seconds: float) -> str:
+    return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
+
+
 def blurry_indices(scores: list[float], ratio: float) -> list[int]:
     """Indices of frames whose sharpness is below `ratio` x the median sharpness."""
     if not scores or ratio <= 0:
@@ -133,6 +233,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--end", help="stop at this time, e.g. 2:40 (default: end of video)")
     ap.add_argument("--hdr", choices=["auto", "on", "off"], default="auto",
                     help="convert HDR (e.g. iPhone) video to normal colours (default: auto-detect)")
+    ap.add_argument("--candidates", type=int, default=CANDIDATES,
+                    help=f"frames looked at around each moment, keeping the sharpest (default {CANDIDATES}; 1 = off)")
     ap.add_argument("--blur-ratio", type=float, default=0.5,
                     help="move frames sharper than less than this fraction of the median to _blurry/ (0 = keep all)")
     args = ap.parse_args(argv)
@@ -157,7 +259,7 @@ def main(argv: list[str] | None = None) -> None:
     length = end - start
     target = auto_target(length) if args.target == "auto" else args.target
     if args.target == "auto" and not args.fps:
-        print(f"Auto: {target} frames for {int(length // 60)}:{int(length % 60):02d} of video")
+        print(f"Auto: {target} frames for {clock(length)} of video")
     fps = choose_fps(target, length, args.fps)
     # The two lines below are parsed by the web UI to map frame numbers back to video time.
     print(f"Video: {duration:.1f}s total, using {start:.1f}s -> {end:.1f}s ({length:.1f}s)")
@@ -175,15 +277,33 @@ def main(argv: list[str] | None = None) -> None:
             print("HDR video detected, but this ffmpeg lacks the 'zscale' filter - frames may look washed out.\n"
                   "  Fix: brew reinstall ffmpeg, or record with HDR Video off (Settings > Camera > Record Video)")
 
-    extract(args.video, out_dir, fps, start, length if args.end else None, name, tonemap)
-    # lets the UI map frame numbers back to video time, even when the frames are reused later
-    save_extraction_info(out_dir, fps, start, duration, str(args.video))
-    total = len(list(out_dir.glob("*.jpg")))
-    if args.blur_ratio > 0:
-        moved = drop_blurry(out_dir, args.blur_ratio)
-        print(f"Kept {total - moved} frames, moved {moved} blurry ones to {out_dir / '_blurry'}")
+    try:
+        import cv2  # noqa: F401
+        have_cv2 = True
+    except ImportError:
+        have_cv2 = False
+    stats = {"length": round(length, 1), "target": target, "auto": args.target == "auto" and not args.fps}
+    if have_cv2 and args.blur_ratio > 0 and args.candidates > 1:
+        print(f"Looking at {args.candidates} frames around each moment and keeping the sharpest")
+        r = extract_sharpest(args.video, out_dir, fps, start, length if args.end else None, name, tonemap,
+                             args.blur_ratio, args.candidates)
+        stats.update(r)
+        if r["replaced"]:
+            print(f"Replaced {r['replaced']} blurry frames with sharper ones next to them")
+        if r["dropped"]:
+            print(f"Too blurry to use around {', '.join(clock(t) for t in r['dropped_at'][:6])}"
+                  + (" and more" if r["dropped"] > 6 else ""))
+        print(f"Kept {r['kept']} frames, moved {r['dropped']} blurry ones to {out_dir / '_blurry'}")
     else:
-        print(f"Kept {total} frames")
+        extract(args.video, out_dir, fps, start, length if args.end else None, name, tonemap)
+        total = len(list(out_dir.glob("*.jpg")))
+        moved = drop_blurry(out_dir, args.blur_ratio) if args.blur_ratio > 0 else 0
+        stats.update(kept=total - moved, replaced=0, dropped=moved, dropped_at=[])
+        print(f"Kept {total - moved} frames, moved {moved} blurry ones to {out_dir / '_blurry'}" if args.blur_ratio > 0
+              else f"Kept {total} frames")
+    # lets the UI map frame numbers back to video time, even when the frames are reused later
+    save_extraction_info(out_dir, fps, start, duration, str(args.video), stats)
+    print("Frame stats: " + json.dumps(stats, separators=(",", ":")))       # parsed by the web UI
 
 
 if __name__ == "__main__":

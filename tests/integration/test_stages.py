@@ -17,6 +17,37 @@ class FramesStageTest(TempDirTestCase):
         info = json.loads((out / "extraction.json").read_text())
         self.assertEqual((info["fps"], info["start"]), (4.0, 0.0))
 
+    def test_blurry_frames_are_swapped_for_sharp_neighbours(self):
+        """Frames 58-62 are blurred (only the moment's own frame, 60, is hit: its neighbours 65 and 70
+        are sharp) and 148-162 (every candidate of the moment at 5 s is hit)."""
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            self.skipTest("OpenCV not installed")
+        import subprocess
+        video = self.tmp / "shaky.mov"
+        blur = "boxblur=12:3:enable='between(n,58,62)+between(n,148,162)'"
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                        "testsrc2=duration=10:size=640x360:rate=30", "-vf", blur, "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-qp", "0", str(video)], check=True)
+        r = run_module("frames", [video, "--target", "20"], cwd=self.tmp)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = self.tmp / "frames" / "shaky"
+        self.assertIn("Looking at 3 frames around each moment", r.stdout)
+        self.assertIn("Replaced 1 blurry frames with sharper ones next to them", r.stdout)
+        self.assertIn("Too blurry to use around 0:05", r.stdout)
+        names = sorted(p.name for p in out.glob("*.jpg"))
+        self.assertEqual(len(names), 19)
+        self.assertIn("shaky_0005.jpg", names)                     # the moment at 2 s, swapped for a sharp neighbour
+        self.assertNotIn("shaky_0011.jpg", names)                  # the moment at 5 s: nothing sharp nearby
+        self.assertEqual(sorted(p.name for p in (out / "_blurry").glob("*.jpg")), ["shaky_0011.jpg"])
+        self.assertFalse((out / "_candidates").exists())
+        stats = json.loads((out / "extraction.json").read_text())["stats"]
+        self.assertEqual({k: stats[k] for k in ("target", "auto", "kept", "replaced", "dropped", "dropped_at")},
+                         {"target": 20, "auto": False, "kept": 19, "replaced": 1, "dropped": 1, "dropped_at": [5.0]})
+        line = next(l for l in r.stdout.splitlines() if l.startswith("Frame stats: "))
+        self.assertEqual(json.loads(line[len("Frame stats: "):]), stats)
+
     def test_trim_and_refuse_overwrite(self):
         video = make_video(self.tmp / "clip.mp4", seconds=10)
         r = run_module("frames", [video, "--out", "f", "--fps", "2", "--start", "0:02", "--end", "0:07"], cwd=self.tmp)
