@@ -404,7 +404,7 @@ def make_handler(data: DataDir, runner: Runner, static_dir: Path = STATIC_DIR):
                     if not v or not v.is_file() or v.suffix.lower() not in VIDEO_EXT:
                         return self.send_json({"error": "video not found", "code": "video_missing"}, 400)
                     frames_dir = data.frames / data.frames_name(data.rel(v))
-                    o = {"frames_dir": data.rel(frames_dir), "frames": opts.get("frames", 250)}
+                    o = {"frames_dir": data.rel(frames_dir), "frames": opts.get("frames", "auto")}
                     if t == "mask":
                         from .. import masks as masksmod
                         prompts = masksmod.normalise_prompts(body.get("prompts") or {},

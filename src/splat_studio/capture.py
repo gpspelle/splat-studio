@@ -343,6 +343,9 @@ def prepare(package: Path, frames_dir: Path, target: int, max_size: int, unpack_
     except (OSError, ValueError):
         pass
 
+    if target == "auto":                         # same rule as for videos: from the recording's length
+        from .frames import auto_target
+        target = auto_target(float(rows[-1].get("t", 0)) - float(rows[0].get("t", 0)))
     picked, left_out = choose_frames(rows, target)
     cams = [colmap_camera(rows[i]["pose"]) for i in picked]
     turns = upright_turns([R for R, _ in cams])

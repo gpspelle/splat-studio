@@ -22,6 +22,7 @@ from .. import guidance
 from ..colmap import pid_alive
 from ..common import child_env, module_cmd
 from ..eta import RunClock, fmt_left
+from ..frames import parse_target
 from .library import DataDir, read_summary
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[=>]")
@@ -100,7 +101,7 @@ def job_clock(job: Job) -> RunClock:
     c = getattr(job, "_clock", None)
     if c is None:
         o = job.options or {}
-        c = job._clock = RunClock(kind=job.type or "video", frames_hint=int(o.get("frames") or 250),
+        c = job._clock = RunClock(kind=job.type or "video", frames_hint=o["frames"] if isinstance(o.get("frames"), int) else 250,
                                   isolate_after=bool(o.get("remove_background")),
                                   quality=o.get("quality") or "standard")
         if job.type in ("clean", "isolate"):
@@ -247,7 +248,7 @@ def build_cmd(job: Job) -> list[str]:
             return [sys.executable, "-u", "-m", "splat_studio", "setup", "--masking"]
         return module_cmd("pipeline", "--setup-only")
     if job.type == "frames":
-        return module_cmd("frames", job.video, "--out", o["frames_dir"], "--target", str(int(o.get("frames") or 250)))
+        return module_cmd("frames", job.video, "--out", o["frames_dir"], "--target", str(o.get("frames") or "auto"))
     if job.type == "mask":
         return [sys.executable, "-u", "-m", "splat_studio", "mask", o["frames_dir"], "--prompts", o["prompts_file"]]
     if job.type == "clean":
@@ -261,7 +262,7 @@ def build_cmd(job: Job) -> list[str]:
     else:
         args = [job.video]
         if o.get("frames"):
-            args += ["--frames", str(int(o["frames"]))]
+            args += ["--frames", str(o["frames"])]                  # a number or "auto"
         for k in ("start", "end"):
             if o.get(k):
                 args += [f"--{k}", str(o[k])]
@@ -304,11 +305,12 @@ def validate_options(body: dict) -> dict:
         raise ApiError("detail", "detail must be auto, low, normal or high")
     if "frames" in opts:
         try:
-            ok = 20 <= int(opts["frames"]) <= 2000
+            opts["frames"] = parse_target(opts["frames"])
+            ok = opts["frames"] == "auto" or 20 <= opts["frames"] <= 2000
         except (TypeError, ValueError):
             ok = False
         if not ok:
-            raise ApiError("frames", "frames must be between 20 and 2000")
+            raise ApiError("frames", "frames must be auto or between 20 and 2000")
     for k in ("start", "end"):
         if k in opts and not re.fullmatch(r"\d+(:\d{1,2}){0,2}(\.\d+)?", str(opts[k])):
             raise ApiError("trim", f"{k} must look like 1:05 or 65")

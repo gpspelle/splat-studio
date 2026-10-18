@@ -26,6 +26,7 @@ from pathlib import Path
 from . import brush as brushmod
 from .colmap import new_run_dir
 from .common import child_env, module_cmd, say
+from .frames import parse_target
 from .setup_deps import ensure_dependencies
 
 
@@ -95,7 +96,7 @@ def import_capture(args) -> tuple[Path | None, Path]:
     frames = Path("frames") / name
     say(f"==> 1/3 Frames: {frames}")                          # parsed by the web UI
     if args.dry_run:
-        say(f"    (dry run: would read the capture {src}, pick about {args.frames} frames and use "
+        say(f"    (dry run: would read the capture {src}, pick {args.frames} frames and use "
             f"{'COLMAP' if args.poses == 'colmap' else 'ARKit'} camera positions)")
         return None, frames
     if args.re_extract:
@@ -178,7 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--quality", choices=brushmod.QUALITY, default="standard")
     ap.add_argument("--detail", choices=["auto", *brushmod.DETAIL], default="auto",
                     help="fine detail to grow splats for (default: judged from the reconstruction)")
-    ap.add_argument("--frames", type=int, default=250, help="frames to extract (default 250)")
+    ap.add_argument("--frames", type=parse_target, default="auto",
+                    help="frames to extract, or 'auto' (default): about 1.75 per second of video, 250 to 600")
     ap.add_argument("--start", help="trim: start time, e.g. 0:03")
     ap.add_argument("--end", help="trim: end time, e.g. 1:45")
     ap.add_argument("--re-extract", action="store_true", help="extract frames again even if they exist")

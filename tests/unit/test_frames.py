@@ -13,6 +13,18 @@ class FramesLogicTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             frames.choose_fps(250, 0)
 
+    def test_auto_frame_count_follows_the_length(self):
+        self.assertEqual(frames.auto_target(90), 250)            # short videos: the old fixed count
+        self.assertEqual(frames.auto_target(143), 250)
+        self.assertEqual(frames.auto_target(240), 420)           # a 4-minute walkaround
+        self.assertEqual(frames.auto_target(15 * 60), 600)       # capped
+        self.assertEqual(frames.parse_target("auto"), "auto")
+        self.assertEqual(frames.parse_target(" AUTO "), "auto")
+        self.assertEqual(frames.parse_target("400"), 400)
+        for bad in ("0", "-3", "many"):
+            with self.assertRaises(ValueError):
+                frames.parse_target(bad)
+
     def test_blurry_indices(self):
         scores = [100, 110, 20, 95, 30, 105]
         self.assertEqual(frames.blurry_indices(scores, 0.5), [2, 4])

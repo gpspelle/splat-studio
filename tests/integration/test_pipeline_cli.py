@@ -20,10 +20,16 @@ class PipelineTest(TempDirTestCase):
         splats = [p for p in (run / "splat").glob("preview_*.ply") if not p.stem.endswith("_clean")]
         self.assertEqual(len(splats), 1)
         self.assertTrue(splats[0].read_bytes().startswith(b"ply\n"))
+        self.assertNotIn("Auto:", r.stdout)                              # --frames 40 was given
         summary = (run / "summary.txt").read_text()
         self.assertIn("brush command:", summary)
         self.assertIn("--total-train-iters", summary)
         self.assertIn("splat:", summary)
+
+    def test_frame_count_is_auto_by_default(self):
+        r = self.run_pipeline(self.video, "--quality", "preview", "--no-train")
+        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+        self.assertIn("Auto: 250 frames for 0:06 of video", r.stdout)
 
     def test_global_mapper_first_incremental_as_fallback(self):
         r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--no-train")

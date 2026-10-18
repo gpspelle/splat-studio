@@ -509,6 +509,13 @@ class WebUiTest(BrowserTestCase):
         self.page.click('[data-testid=picked] [data-remove="1"]')
         self.assertEqual(self.page.get_by_test_id("chosen-video").all_text_contents(), ["mug.mov", "cup.mov"])
         self.assertEqual(self.page.text_content("#startBtn"), "Start 2 runs")
+        # the frame count is chosen from each video's length unless a number is typed (#48)
+        self.page.click("#adv summary")
+        self.assertEqual(self.page.input_value("[data-testid=frames-input]"), "")
+        self.assertIn("chosen for each video", self.page.text_content("[data-testid=frames-help]"))
+        self.page.fill("[data-testid=frames-input]", "400")
+        self.assertIn("400 frames, whatever the video's length", self.page.text_content("[data-testid=frames-help]"))
+        self.page.fill("[data-testid=frames-input]", "")
         self.page.click("#startBtn")
         self.page.wait_for_url(self.url + "/", timeout=10000)
         self.page.wait_for_selector("text=2 runs queued", timeout=5000)
@@ -518,6 +525,7 @@ class WebUiTest(BrowserTestCase):
         for j in runs:
             self.assertEqual((j["options"]["quality"], j["options"]["detail"], j["options"].get("remove_background")),
                              ("preview", "low", True))
+            self.assertEqual(j["options"]["frames"], "auto")
             self.assertNotIn("masks", j["options"])
         self.page.wait_for_function("document.querySelectorAll('[data-testid=run-done]').length === 2", timeout=240000)
         self.assertEqual(self.errors, [])
@@ -746,8 +754,14 @@ class LanguageAndFogUiTest(BrowserTestCase):
         advice = self.page.get_by_test_id("video-advice")
         advice.wait_for(state="visible")
         self.assertIn("poucos pontos de vista", advice.inner_text())
+        self.page.click("#adv summary")
+        help_ = self.page.get_by_test_id("frames-help")
+        self.assertEqual(help_.inner_text(), "Auto: 250 quadros para 0:05 de vídeo. Digite um número para escolher você mesmo.")
         self.page.get_by_test_id("lang-select").select_option("en")
         self.assertIn("too few viewpoints", advice.inner_text())
+        self.assertEqual(help_.inner_text(), "Auto: 250 frames for 0:05 of video. Type a number to choose yourself.")
+        self.page.fill("#start", "0:02")                                  # trimmed: the length used
+        self.assertIn("for 0:03 of video", help_.inner_text())
         self.assertEqual(self.errors, [])
 
     def test_turntable_video(self):

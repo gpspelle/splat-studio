@@ -183,7 +183,7 @@ choice is remembered in your browser; the first time, it follows your browser's 
 | Remove the background | on/off (off) | Also saves a copy with only the object: no table, floor or room. The original is always kept. |
 | Train even if a side wasn't filmed | on/off (off) | Off: a run whose camera positions show a side nobody filmed stops before training, with **Train anyway** to continue. On: it trains anyway and only warns. In the terminal: `run --stop-on-gaps`. |
 | Measure quality | on/off | Holds back every 10th frame and reports PSNR/SSIM, so runs can be compared with a number. |
-| Advanced | frames, trim start/end, extra Brush options | e.g. trim the first seconds while you were pressing record. |
+| Advanced | frames, trim start/end, extra Brush options | Frames is automatic (about 1.75 per second of video, 250 to 600, so 420 for a 4-minute car); type a number to set it. Trim the first seconds while you were pressing record. |
 
 ### Viewer
 
@@ -491,6 +491,10 @@ gravação**), com seções para carros e objetos grandes e para pessoas.
 Passe o vídeo do iPhone para o Mac por **AirDrop** (no app Fotos, **Compartilhar › AirDrop**). Enviado
 pelo botão de upload de um site (inclusive o Splat Studio aberto no celular), pelo Mensagens, WhatsApp ou
 Mail, o iPhone reduz o vídeo (por exemplo para 320×568), e o app avisa que é uma cópia reduzida.
+
+O número de quadros é automático: cerca de 1,75 por segundo de vídeo, de 250 a 600 (uns 420 para um carro
+filmado em 4 minutos). Para escolher você mesmo, digite um número em **Quadros**, em **Avançado** na Nova
+execução.
 
 Logo depois das posições de câmera, antes do treino, um **anel de cobertura** mostra onde as
 câmeras estiveram em volta do objeto e avisa se um lado ficou sem filmar ou se tudo foi filmado
