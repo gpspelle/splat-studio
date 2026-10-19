@@ -47,6 +47,21 @@ def has_cv2() -> bool:
     return subprocess.run([sys.executable, "-c", "import cv2"], capture_output=True).returncode == 0
 
 
+def in_virtualenv() -> bool:
+    """Running from a venv (or virtualenv): pip installs into it, and --user is refused there."""
+    return sys.prefix != getattr(sys, "base_prefix", sys.prefix) or hasattr(sys, "real_prefix")
+
+
+def cv2_install_commands(python: str = sys.executable) -> list[str]:
+    """pip commands to try in turn for OpenCV: straight into a virtualenv, else into the user's
+    site-packages (with --break-system-packages for a Homebrew Python that refuses plain --user)."""
+    py = shlex.quote(python)
+    if in_virtualenv():
+        return [f"{py} -m pip install --quiet opencv-python-headless"]
+    return [f"{py} -m pip install --user --quiet opencv-python-headless",
+            f"{py} -m pip install --user --quiet --break-system-packages opencv-python-headless"]
+
+
 def has_sam2() -> bool:
     from .masks import sam2_python
     return sam2_python() is not None
@@ -153,9 +168,7 @@ def ensure_dependencies(dry: bool = False) -> None:
     # 5. OpenCV for the blur filter (optional)
     if not has_cv2():
         say("    OpenCV missing (used to drop blurry frames) - installing")
-        py = shlex.quote(sys.executable)
-        ok = (sh(f"{py} -m pip install --user --quiet opencv-python-headless", dry) == 0 or
-              sh(f"{py} -m pip install --user --quiet --break-system-packages opencv-python-headless", dry) == 0)
+        ok = any(sh(cmd, dry) == 0 for cmd in cv2_install_commands())
         if not ok:
             say("    (couldn't install OpenCV - continuing; blurry frames won't be filtered)")
     say("    all dependencies present")

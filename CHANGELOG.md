@@ -64,6 +64,9 @@
   direction from the centre (`dirs`); older runs are measured again when first opened.
 
 ### Fixed
+- **`setup` installs OpenCV inside a virtualenv.** It used `pip install --user`, which pip refuses
+  in a venv ("User site-packages are not visible"), so the blur filter was left out. In a venv it
+  now installs into the venv; elsewhere it still installs for the user.
 - **The marks under the frame slider on "Choose what to keep" line up with it**: they used to span
   the width under the arrow buttons too.
 - **A shrunk iPhone video is called what it is.** A video the iPhone shrank on the way (a website's
