@@ -297,6 +297,12 @@ Add `--run workspace/<video>/run_<date_time>` to use the run's camera positions.
 diagnosis says *most splats are nearly transparent even near the object*, cleaning won't help:
 the camera positions were inaccurate. Re-run COLMAP or re-film following the recording guide.
 
+**Filmed a room from inside it?** Add `--scene` to `run` (or `clean`): there is no object in the
+middle, so instead of a sphere around one, the cleaner keeps everything around where the cameras
+were, out to a little past the walls, and drops only the faint fog in the air and what was seen
+far away through a window. Apps built on splat-studio ask for it with the job option `scene`.
+`--scene` can't be combined with `--remove-background`, `--person` or `--masks`.
+
 ## Removing the background
 
 Fog removal keeps the object *and* what it stands on. To show the object alone, for example on
@@ -524,7 +530,9 @@ do globo são medidas de novo na primeira vez que você as abre (pode levar um p
 objetos); enquanto isso o painel mostra *Medindo a cobertura…*.
 
 Se o modelo ficar com **névoa** ao redor, use **Remover névoa** na biblioteca ou **Recortar** no
-visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. No visualizador, **Vídeo girando** grava o modelo dando
+visualizador; `./splat-studio inspect ARQUIVO.ply` explica a causa. Filmou um cômodo por dentro? Use
+`run --scene`: a limpeza mantém tudo ao redor de onde as câmeras passaram (paredes, chão, móveis) e
+tira só a névoa no ar e o que foi visto longe, pela janela. No visualizador, **Vídeo girando** grava o modelo dando
 uma volta completa, em MP4 ou GIF, para redes sociais ou lojas. Para mostrar só o objeto,
 sem mesa nem ambiente, use **Remover fundo**. Se um suporte, a sua mão ou um apoio aparece no
 vídeo, em **Nova execução** mude **O que manter** para **Um objeto** (beta): instale a

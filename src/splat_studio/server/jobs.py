@@ -279,6 +279,8 @@ def build_cmd(job: Job) -> list[str]:
     args += ["--quality", o.get("quality", "standard"), "--detail", o.get("detail", "auto")]
     if o.get("eval"):
         args.append("--eval")
+    if o.get("scene") and job.type in ("video", "retrain"):
+        args.append("--scene")                         # a room filmed from inside it
     if o.get("remove_background"):
         args.append("--remove-background")
     if o.get("person") and job.type == "video":
@@ -310,7 +312,7 @@ class ApiError(ValueError):
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
                                      "brush_args", "remove_background", "masks", "split_objects", "stop_on_gaps",
-                                     "person")
+                                     "person", "scene")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")
@@ -327,6 +329,8 @@ def validate_options(body: dict) -> dict:
     for k in ("start", "end"):
         if k in opts and not re.fullmatch(r"\d+(:\d{1,2}){0,2}(\.\d+)?", str(opts[k])):
             raise ApiError("trim", f"{k} must look like 1:05 or 65")
+    if opts.get("scene") and any(opts.get(k) for k in ("remove_background", "person", "masks")):
+        raise ApiError("scene", "a room keeps everything: it can't also remove the background or keep only what was chosen")
     if "brush_args" in opts and not re.fullmatch(r"[\w\s.,=+-]*", str(opts["brush_args"])):
         raise ApiError("brush_args", "extra Brush options may only contain letters, numbers, spaces and . , = + -")
     return opts

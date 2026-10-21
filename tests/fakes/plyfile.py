@@ -124,6 +124,51 @@ def write_room_scene(path: Path, seed: int = 5, up_axis: str | None = "0 -1 0") 
     return path
 
 
+def write_inside_room(path: Path, seed: int = 6, up_axis: str | None = "0 -1 0") -> Path:
+    """A room filmed from inside it: a floor (y = 0) and four walls 2.5 from the middle, 2.6 high,
+    a sofa-sized box by one wall, faint fog in the air, and junk seen through a window far
+    outside. Splat sizes tell them apart: room 0.03, furniture 0.015, fog 0.3 or more, outside
+    0.05 (opaque, 9 to 14 away). World is y-down like COLMAP."""
+    rnd = random.Random(seed)
+    rows = []
+    for _ in range(6000):                          # floor
+        rows.append((rnd.uniform(-2.5, 2.5), 0.0, rnd.uniform(-2.5, 2.5), (0.5, 0.4, 0.3), 3.0, 0.03))
+    for _ in range(8000):                          # four walls
+        u, v, w = rnd.uniform(-2.5, 2.5), rnd.uniform(0, 2.6), rnd.choice((-2.5, 2.5))
+        x, z = (u, w) if rnd.random() < 0.5 else (w, u)
+        rows.append((x, v, z, (0.85, 0.85, 0.8), 3.0, 0.03))
+    for _ in range(3000):                          # a box against the wall at z = -2.5
+        x, y, z = rnd.uniform(-1, 1), rnd.uniform(0, 0.45), rnd.uniform(-2.5, -1.7)
+        k = rnd.randrange(3)
+        if k == 0:
+            y = 0.45
+        elif k == 1:
+            z = -1.7
+        else:
+            x = rnd.choice((-1.0, 1.0))
+        rows.append((x, y, z, (0.3, 0.3, 0.6), 3.0, 0.015))
+    for _ in range(2000):                          # fog in the air
+        rows.append((rnd.uniform(-2, 2), rnd.uniform(0.3, 2.3), rnd.uniform(-2, 2),
+                     (rnd.random(), rnd.random(), rnd.random()), rnd.uniform(-3.0, -1.0), rnd.uniform(0.3, 0.8)))
+    for _ in range(500):                           # seen through a window: far outside
+        d, a = rnd.uniform(9, 14), rnd.uniform(-0.5, 0.5)
+        rows.append((d * math.cos(a), rnd.uniform(0, 3), d * math.sin(a), (0.3, 0.6, 0.3), 3.0, 0.05))
+    header = "ply\nformat binary_little_endian 1.0\ncomment Exported from Brush\n"
+    if up_axis:
+        header += f"comment Vertical axis: {up_axis}\n"
+    header += f"element vertex {len(rows)}\n" + "".join(f"property float {p}\n" for p in PROPS) + "end_header\n"
+    row = struct.Struct("<" + "f" * len(PROPS))
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(header.encode())
+        for x, y, z, col, logit, sz in rows:
+            ls = math.log(sz)
+            f.write(row.pack(x, -y, z, 0, 0, 0, _dc(col[0]), _dc(col[1]), _dc(col[2]), *([0.0] * 45),
+                             logit, ls, ls, ls, 1, 0, 0, 0))
+    return path
+
+
 def write_points(path: Path, pts, up_axis: str | None = "0 -1 0") -> Path:
     """A splat PLY from (x, y, z, (r, g, b), size, opacity) tuples, in world coordinates as given."""
     header = "ply\nformat binary_little_endian 1.0\ncomment Exported from Brush\n"
@@ -173,9 +218,11 @@ def write_cameras_bin(path: Path, width: int = 320, height: int = 240, params=(2
     return path
 
 
-def write_images_bin(path: Path, n: int = 36, radius: float = 1.6, target=(0.0, -0.6, 0.0), seed: int = 4) -> Path:
+def write_images_bin(path: Path, n: int = 36, radius: float = 1.6, target=(0.0, -0.6, 0.0), seed: int = 4,
+                     outward: bool = False) -> Path:
     """COLMAP images.bin with n cameras walking around `target` at ~radius, at three heights,
-    each looking at the target (world coordinates match write_foggy_scene, which is y-down)."""
+    each looking at the target (world coordinates match write_foggy_scene, which is y-down).
+    outward: each looks away from it instead, as when a room is filmed from inside."""
     rnd = random.Random(seed)
     out = bytearray(struct.pack("<Q", n))
     for i in range(n):
@@ -183,7 +230,7 @@ def write_images_bin(path: Path, n: int = 36, radius: float = 1.6, target=(0.0, 
         h = (-0.4, 0.0, 0.5)[i % 3]
         c = (target[0] + radius * math.cos(a), target[1] - h, target[2] + radius * math.sin(a))
         # camera z axis looks at the target (with a little hand-held wobble)
-        fwd = [target[k] - c[k] + rnd.uniform(-0.02, 0.02) for k in range(3)]
+        fwd = [(c[k] - target[k] if outward else target[k] - c[k]) + rnd.uniform(-0.02, 0.02) for k in range(3)]
         nf = math.sqrt(sum(v * v for v in fwd))
         z = [v / nf for v in fwd]
         up = (0.0, -1.0, 0.0)

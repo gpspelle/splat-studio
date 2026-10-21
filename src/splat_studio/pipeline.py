@@ -5,6 +5,7 @@
     splat-studio run --train-only workspace/IMG_1234/latest --quality high     # re-train, skip COLMAP
     splat-studio run IMG_1234.MOV -- --sh-degree 1                              # extra Brush options
     splat-studio run capture_2026-10-14_153012.zip       # an iPhone capture: ARKit's poses, no COLMAP
+    splat-studio run LIVING_ROOM.MOV --scene              # a room filmed from inside: keep the walls
 
 Frames are extracted once per video (frames/<name>) and reused. Each run gets its own
 folder workspace/<name>/run_<date_time>/ with dense/ (COLMAP result), splat/ (the .ply
@@ -217,6 +218,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--stop-on-gaps", action="store_true",
                     help="stop before training when a side of the object (or of a chosen object) wasn't filmed; "
                          "train it later with --train-only RUN_DIR")
+    ap.add_argument("--scene", action="store_true",
+                    help="the video films a room or a place from inside it, not an object: fog removal "
+                         "keeps everything around where the cameras were (walls, floor, furniture)")
     ap.add_argument("--viewer", action="store_true", help="open the Brush window while training")
     ap.add_argument("--brush", help="path to the brush binary")
     ap.add_argument("--dry-run", action="store_true", help="print the commands without running them")
@@ -231,6 +235,8 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     if not args.video and not args.train_only and not args.setup_only:
         ap.error("give a video, or --train-only RUN_DIR, or --setup-only")
+    if args.scene and (args.remove_background or args.person or args.masks):
+        ap.error("--scene keeps the whole room: it can't be used with --remove-background, --person or --masks")
 
     # Set everything up first, so a long COLMAP run is never followed by a missing tool.
     if not args.skip_setup and not os.environ.get("SPLAT_IN_CONTAINER"):
@@ -289,7 +295,8 @@ def main(argv: list[str] | None = None) -> None:
                 pass
 
     # ------------------------------------------------ 2a: coverage (where the cameras were, before training)
-    if not args.train_only and not args.dry_run:
+    # (a room is filmed from inside it: there is no ring of cameras around an object to check)
+    if not args.train_only and not args.dry_run and not args.scene:
         from . import coverage
         # with several objects chosen, one ring per object (its own centre, the frames it's visible in)
         cov = coverage.for_run(ws, frames if args.masks and args.split_objects else None)
@@ -380,7 +387,7 @@ def main(argv: list[str] | None = None) -> None:
         say("\n==> Removing background fog (the original is kept)")
         from .splats import PlyError, clean
         try:
-            s = clean(plys[-1], run_dir=ws)
+            s = clean(plys[-1], run_dir=ws, scene=args.scene)
             say(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed)")
             say(f"Clean copy: {s['output']}")                     # parsed by the web UI
             append_summary(ws, [("clean splat", f"{s['output']}  (kept {s['kept']} of {s['total']})")])

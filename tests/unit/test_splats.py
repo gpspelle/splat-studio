@@ -167,6 +167,50 @@ class RoomSceneTest(TempDirTestCase):
             self.assertGreater(k["object"], 0.93 * 6000, run)                  # a thin band at the base may go
 
 
+def room_kinds(path):
+    """Counts of splats in a write_inside_room scene, told apart by size and place."""
+    ply = splats.PlyFile(path)
+    d = ply.read(["x", "z", "scale_0"])
+    out = {"room": 0, "furniture": 0, "fog": 0, "outside": 0}
+    for x, z, ls in zip(d["x"], d["z"], d["scale_0"]):
+        s = math.exp(ls)
+        out["outside" if math.hypot(x, z) > 5 else "furniture" if s < 0.02 else "room" if s < 0.04 else "fog"] += 1
+    return out
+
+
+class SceneCleanTest(TempDirTestCase):
+    """--scene: a room filmed from inside it keeps its walls, floor and furniture."""
+
+    def setUp(self):
+        super().setUp()
+        from plyfile import write_inside_room
+        self.src = write_inside_room(self.tmp / "room.ply")
+        self.run = self.tmp / "run"
+        write_images_bin(self.run / "dense" / "sparse" / "0" / "images.bin", n=36, radius=0.6,
+                         target=(0.0, -1.4, 0.0), outward=True)
+
+    def test_object_cleaning_would_cut_the_room(self):
+        k = room_kinds(splats.clean(self.src, self.tmp / "o.ply", run_dir=self.run)["output"])
+        self.assertLess(k["room"], 0.5 * 14000)                       # why rooms need --scene
+
+    def test_scene_keeps_the_room_and_drops_fog_and_the_view_outside(self):
+        for run in (self.run, None):
+            s = splats.clean(self.src, self.tmp / f"s{bool(run)}.ply", run_dir=run, scene=True)
+            k = room_kinds(s["output"])
+            self.assertEqual((k["room"], k["furniture"]), (14000, 3000), run)
+            self.assertEqual(k["outside"], 0, run)
+            self.assertLess(k["fog"], 0.05 * 2000, run)
+            self.assertEqual(s["region"]["source"], "cameras" if run else "opaque splats")
+        self.assertIn("where the cameras were", " ".join(splats.PlyFile(s["output"]).comments))
+
+    def test_command_line(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            splats.main_clean([str(self.src), "--run", str(self.run), "--scene", "--out", str(self.tmp / "c.ply")])
+        self.assertIn("Clean copy:", out.getvalue())
+        self.assertEqual(room_kinds(self.tmp / "c.ply")["room"], 14000)
+
+
 class IsolateTest(TempDirTestCase):
     def test_vase_on_disc(self):
         src = write_ply(self.tmp / "vase.ply", n=20000)                         # 14000 vase, 6000 disc, 40 floaters

@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 from tests.helpers import TempDirTestCase
-from splat_studio.server.jobs import Job, Runner, build_cmd, parse_line, validate_options
+from splat_studio.server.jobs import ApiError, Job, Runner, build_cmd, parse_line, validate_options
 from splat_studio.server.library import DataDir
 
 
@@ -87,6 +87,17 @@ class ParseLineTest(unittest.TestCase):
         self.assertIsNone(j.stopped)
         parse_line(j, "Stopped: coverage")
         self.assertEqual(j.stopped, "coverage")
+
+    def test_scene_option_keeps_the_room(self):
+        """A "scene" run (a room filmed from inside it) passes --scene, also when trained again."""
+        self.assertIn("--scene", build_cmd(job(video="v.mov", options={"scene": True})))
+        self.assertNotIn("--scene", build_cmd(job(video="v.mov", options={})))
+        self.assertIn("--scene", build_cmd(job(type="retrain", run_dir="workspace/v/run_1", options={"scene": True})))
+        self.assertEqual(validate_options({"scene": True}), {"scene": True})
+        for other in ("remove_background", "person", "masks"):
+            with self.assertRaises(ApiError) as e:
+                validate_options({"scene": True, other: True})
+            self.assertEqual(e.exception.code, "scene")
 
     def test_fog_removal_is_not_an_option(self):
         self.assertEqual(validate_options({"clean": True}), {})            # old clients: ignored, it always runs
