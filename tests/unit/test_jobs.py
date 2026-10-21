@@ -63,6 +63,15 @@ class ParseLineTest(unittest.TestCase):
         self.assertTrue(j.object_splat.endswith("_object.ply"))           # background removal is told apart
         self.assertEqual(validate_options({"masks": True, "split_objects": True}), {"masks": True, "split_objects": True})
 
+    def test_person_option_makes_the_masks_by_themselves(self):
+        """A "person" run passes --person; training it later uses the masks it made."""
+        self.assertIn("--person", build_cmd(job(video="v.mov", options={"person": True})))
+        self.assertNotIn("--person", build_cmd(job(video="v.mov", options={})))           # off unless asked
+        retrain = build_cmd(job(type="retrain", run_dir="workspace/v/run_1", options={"person": True}))
+        self.assertNotIn("--person", retrain)
+        self.assertIn("--masks", retrain)
+        self.assertEqual(validate_options({"person": True}), {"person": True})
+
     def test_stopping_before_training_when_a_side_is_missing(self):
         """#34: the run can stop itself after the coverage check; training it later keeps the settings."""
         cmd = build_cmd(job(video="v.mov", options={"stop_on_gaps": True}))
