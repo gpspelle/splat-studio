@@ -281,6 +281,10 @@ def build_cmd(job: Job) -> list[str]:
         args.append("--eval")
     if o.get("remove_background"):
         args.append("--remove-background")
+    if o.get("person") and job.type == "video":
+        args.append("--person")                        # masks of the person, made by themselves
+    if o.get("person") and job.type == "retrain" and not (o.get("masks") and o.get("split_objects")):
+        args.append("--masks")                         # training a stopped run: the person's masks are there
     if o.get("masks") and job.type == "video":
         args.append("--masks")
         if o.get("split_objects"):
@@ -305,7 +309,8 @@ class ApiError(ValueError):
 
 def validate_options(body: dict) -> dict:
     opts = {k: body.get(k) for k in ("quality", "detail", "frames", "start", "end", "eval", "reextract",
-                                     "brush_args", "remove_background", "masks", "split_objects", "stop_on_gaps")
+                                     "brush_args", "remove_background", "masks", "split_objects", "stop_on_gaps",
+                                     "person")
             if body.get(k) not in (None, "", False)}
     if opts.get("quality", "standard") not in QUALITIES:
         raise ApiError("quality", "quality must be preview, standard or high")

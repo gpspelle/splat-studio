@@ -6,6 +6,8 @@
 - **`--person`: keep only the person filmed, without clicks.** The masks are made by Apple's
   Vision person segmentation on a Mac (nothing to download), or by SAM 2 from the centre of the
   frame elsewhere, then the run trains like `--masks`.
+- Jobs take a `person` option (the same as `--person`), so an app built on splat-studio can ask
+  for it in its web runs.
 - **Blurry frames are swapped for a sharp neighbour** ([#50](https://github.com/gpspelle/splat-studio/issues/50)).
   For each moment, three frames next to each other are looked at and the sharpest is kept, so a
   blurry frame no longer leaves a gap, usually at a corner where overlap matters most. Only moments
