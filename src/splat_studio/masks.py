@@ -441,6 +441,54 @@ class Sam2Server:
 
 # ---------------------------------------------------------------- making masks for every frame
 
+PERSON_SCRIPT = Path(__file__).with_name("person_mask.swift")
+PERSON_CLICKS = 6                     # frames clicked (at the centre) when SAM 2 finds the person
+
+
+def person_backend() -> str | None:
+    """How --person finds the person: Apple's Vision on a Mac (nothing to install), else SAM 2
+    from a click at the centre of the frame (the person filmed stands there), else nothing."""
+    forced = os.environ.get("SPLAT_STUDIO_PERSON_BACKEND")
+    if forced in ("vision", "sam2", "disc"):
+        return forced
+    if sys.platform == "darwin" and shutil.which("swift"):
+        return "vision"
+    return backend()
+
+
+def make_person_masks(frames_dir: Path, which: str | None = None) -> Path:
+    """Masks of the person in every frame, without clicks: the object kept is "Person"."""
+    frames_dir = Path(frames_dir)
+    frames = frame_list(frames_dir)
+    if not frames:
+        raise ValueError(f"no frames in {frames_dir}")
+    which = which or person_backend()
+    if which is None:
+        raise RuntimeError("no way to find the person: on a Mac install the Xcode command line tools "
+                           "(xcode-select --install), elsewhere run: splat-studio setup --masking")
+    objects = [{"id": 1, "name": "Person"}]
+    if which != "vision":
+        step = max(1, len(frames) // PERSON_CLICKS)
+        return make_masks(frames_dir, {f.name: [[0.5, 0.5, 1]] for f in frames[::step]}, which, objects)
+    out = masks_dir(frames_dir)
+    if out.exists():
+        for old in out.glob("*.png"):
+            old.unlink()
+        shutil.rmtree(out / "objects", ignore_errors=True)
+        (out / "done.json").unlink(missing_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "prompts.json").write_text("{}")
+    (out / "objects.json").write_text(json.dumps(objects, indent=1))
+    say(f"==> Finding the person: {len(frames)} frames, Vision")
+    r = subprocess.run(["swift", str(PERSON_SCRIPT), str(out), *map(str, frames)])
+    missing = [f.name for f in frames if not (out / (f.stem + ".png")).exists()]
+    if r.returncode != 0 or missing:
+        raise RuntimeError(f"Vision found no person in {len(missing)} frame(s)" + (f", e.g. {missing[0]}" if missing else ""))
+    (out / "done.json").write_text(json.dumps({"frames": len(frames), "backend": which, "objects": 1}))
+    say(f"Masks: {out}")                                  # parsed by the web UI
+    return out
+
+
 def make_masks(frames_dir: Path, prompts: dict, which: str | None = None, objects: list | None = None) -> Path:
     frames_dir = Path(frames_dir)
     frames = frame_list(frames_dir)

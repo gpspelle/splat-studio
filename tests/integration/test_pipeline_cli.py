@@ -90,6 +90,20 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("support surface removed", r.stdout)
         self.assertIn("object splat:", (run / "summary.txt").read_text())
 
+    def test_person_masks_made_by_themselves(self):
+        env = fake_tools_env(SPLAT_STUDIO_PERSON_BACKEND="disc")
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--person", env=env)
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
+        self.assertIn("Masks:", r.stdout)
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        self.assertTrue(any((run / "dense" / "masks").glob("*.png")))
+        self.assertIn("masks:", (run / "summary.txt").read_text())
+        self.assertIn("--alpha-mode", (run / "summary.txt").read_text())
+        # the next run reuses them
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--person", "--no-train", env=env)
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
+        self.assertNotIn("Choosing what to keep", r.stdout)
+
     def test_frames_are_reused_and_retrain_skips_colmap(self):
         self.assertEqual(self.run_pipeline(self.video, "--frames", "30", "--quality", "preview").returncode, 0)
         r = self.run_pipeline(self.video, "--quality", "preview")

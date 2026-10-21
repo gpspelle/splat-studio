@@ -113,7 +113,8 @@ it, for example to 320×568, and Splat Studio warns that it's a shrunk copy.
 - Matte, patterned clothes help; plain black, plain white, shiny or sequinned fabric is hard. Take
   off glasses and tie back loose hair: flyaway strands come out blurry.
 - Soft light from several sides, so the face has no hard shadows.
-- Choose **What to keep → One object** to keep only the person and drop the chair.
+- Choose **What to keep → One object** to keep only the person and drop the chair, or run with
+  `--person` to have the person found in every frame without clicks.
 
 ## What Splat Studio tells you
 
