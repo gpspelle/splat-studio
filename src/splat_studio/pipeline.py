@@ -205,6 +205,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--masks", action="store_true",
                     help="train only what was chosen on the 'Choose what to keep' page "
                          "(uses frames/<video>/masks, made by `splat-studio mask`)")
+    ap.add_argument("--person", action="store_true",
+                    help="keep only the person filmed: like --masks, with the masks made by themselves "
+                         "(Apple's Vision on a Mac, else SAM 2 from the centre of the frame)")
     ap.add_argument("--split-objects", action="store_true",
                     help="with --masks and several objects chosen: also save one splat per object "
                          "(NAME_part-<object>.ply)")
@@ -308,6 +311,14 @@ def main(argv: list[str] | None = None) -> None:
 
     # ------------------------------------------------ 2b: masks (Choose what to keep)
     dense = ws / "dense"
+    if args.person and not args.train_only and not args.dry_run:
+        from . import masks as masksmod
+        if not (masksmod.has_masks(frames) and masksmod.load_objects(frames) == [{"id": 1, "name": "Person"}]):
+            try:
+                masksmod.make_person_masks(frames)
+            except (OSError, ValueError, RuntimeError) as e:
+                sys.exit(f"--person: {e}")
+        args.masks = True
     if args.masks and not args.train_only and not args.dry_run:
         from . import masks as masksmod
         if not masksmod.has_masks(frames):

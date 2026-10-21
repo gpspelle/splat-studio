@@ -355,6 +355,15 @@ On the command line:
 ./splat-studio run IMG_1234.MOV --masks                     # add --mask-mode ignore to only ignore the rest
 ```
 
+Filming a person? `--person` makes the masks by itself, with no clicks: on a Mac with Apple's
+Vision person segmentation (it comes with macOS; the Xcode command line tools run it), elsewhere
+with SAM 2 from a click at the centre of a few frames, where the person filmed stands. The masks
+are kept like clicked ones, so the next run with `--person` reuses them.
+
+```bash
+./splat-studio run ME.MOV --person
+```
+
 Clicks are fractions of the frame (0–1); `1` keeps, `0` leaves out. This is a beta: runs made
 before this version need COLMAP again to use masks, and parts of the object hidden behind the
 holder in every frame stay missing, so film so that each part is seen at least once.

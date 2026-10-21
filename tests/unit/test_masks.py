@@ -285,6 +285,82 @@ class MakeMasksTest(TempDirTestCase):
         self.assertTrue(masks.has_masks(self.frames))
 
 
+FAKE_SWIFT = """#!/usr/bin/env python3
+import sys
+sys.path.insert(0, %r)
+from splat_studio import masks
+from pathlib import Path
+script, out, frames = sys.argv[1], Path(sys.argv[2]), sys.argv[3:]
+assert script.endswith("person_mask.swift"), script
+for f in frames:
+    w, h = masks.jpeg_size(Path(f))
+    masks.write_png_gray(out / (Path(f).stem + ".png"), w, h, [bytes([255 if abs(x - w / 2) < w / 4 else 0 for x in range(w)])] * h)
+"""
+
+
+class PersonMasksTest(TempDirTestCase):
+    """--person: the person's masks without clicks (Vision on a Mac, else SAM 2 from the centre)."""
+
+    def setUp(self):
+        super().setUp()
+        self.frames = self.tmp / "frames" / "me"
+        for i in range(1, 13):
+            tiny_jpeg(self.frames / f"frame_{i:05d}.jpg", 32, 24)
+
+    def test_backend_choice(self):
+        env = {"SPLAT_STUDIO_PERSON_BACKEND": "", "SPLAT_STUDIO_MASK_BACKEND": "", "SPLAT_STUDIO_MASK_PYTHON": ""}
+        with mock.patch.dict("os.environ", env), mock.patch.object(masks.sys, "platform", "darwin"), \
+                mock.patch.object(masks.shutil, "which", return_value="/usr/bin/swift"):
+            self.assertEqual(masks.person_backend(), "vision")
+        with mock.patch.dict("os.environ", env), mock.patch.object(masks.sys, "platform", "linux"):
+            self.assertIsNone(masks.person_backend())         # no SAM 2 either
+        with mock.patch.dict("os.environ", {**env, "SPLAT_STUDIO_MASK_BACKEND": "disc"}), \
+                mock.patch.object(masks.sys, "platform", "linux"):
+            self.assertEqual(masks.person_backend(), "disc")
+        with mock.patch.dict("os.environ", {"SPLAT_STUDIO_PERSON_BACKEND": "disc"}):
+            self.assertEqual(masks.person_backend(), "disc")
+
+    def test_from_the_centre_without_vision(self):
+        out = masks.make_person_masks(self.frames, "disc")
+        self.assertEqual(len(list(out.glob("*.png"))), 12)
+        self.assertEqual(masks.load_objects(self.frames), [{"id": 1, "name": "Person"}])
+        clicks = masks.load_prompts(self.frames)
+        self.assertGreaterEqual(len(clicks), 4)
+        self.assertTrue(all(p == [[0.5, 0.5, 1]] for p in clicks.values()))
+        _, _, rows = read_png_gray(out / "frame_00007.png")
+        self.assertEqual(rows[12][16], 255)
+
+    def test_with_vision(self):
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        fake = bin_dir / "swift"
+        fake.write_text(FAKE_SWIFT.replace("#!/usr/bin/env python3", "#!" + sys.executable)
+                        % str(Path(masks.__file__).resolve().parents[1]))
+        fake.chmod(0o755)
+        with mock.patch.dict("os.environ", {"PATH": f"{bin_dir}:{__import__('os').environ['PATH']}"}):
+            out = masks.make_person_masks(self.frames, "vision")
+        self.assertTrue(masks.has_masks(self.frames))
+        self.assertEqual(json.loads((out / "done.json").read_text())["backend"], "vision")
+        _, _, rows = read_png_gray(out / "frame_00003.png")
+        self.assertEqual((rows[5][16], rows[5][1]), (255, 0))
+        self.assertTrue(masks.PERSON_SCRIPT.exists())
+
+    def test_vision_missing_a_frame_fails(self):
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "swift").write_text("#!/bin/sh\nexit 0\n")
+        (bin_dir / "swift").chmod(0o755)
+        with mock.patch.dict("os.environ", {"PATH": f"{bin_dir}:{__import__('os').environ['PATH']}"}):
+            with self.assertRaises(RuntimeError):
+                masks.make_person_masks(self.frames, "vision")
+        self.assertFalse(masks.has_masks(self.frames))
+
+    def test_nothing_to_find_it_with(self):
+        with mock.patch.object(masks, "person_backend", return_value=None):
+            with self.assertRaises(RuntimeError):
+                masks.make_person_masks(self.frames)
+
+
 @needs_ffmpeg
 class PrepareForDenseTest(TempDirTestCase):
     """Masks go through the same resize and undistortion as the training images."""
