@@ -353,10 +353,42 @@ def format_report(a: dict) -> str:
 
 # ---------------------------------------------------------------- cleaning
 
+def _box_distance(p, lo, hi) -> float:
+    """How far p is outside the box lo..hi (0 inside it)."""
+    return math.sqrt(sum(max(lo[k] - p[k], 0.0, p[k] - hi[k]) ** 2 for k in range(3)))
+
+
+def scene_region(d: dict, cams: list[dict] | None = None) -> dict:
+    """What to keep of a room or a place filmed from inside it (--scene): everything around where
+    the cameras were, out to a little past the walls. The cameras look outwards, so there is no
+    object in the middle to keep a sphere around. The box is the cameras' path (or, without them,
+    the middle of the opaque splats); the reach is how far the opaque splats go from it (95% of
+    them), and a quarter more, so a far wall stays and what was seen through a window goes."""
+    idx = [i for i, o in enumerate(d["opacity"]) if o >= 0.5] or list(range(len(d["opacity"])))
+    step = max(1, len(idx) // 50000)
+    idx = idx[::step]
+    if len(cams or []) >= 2:
+        lo = tuple(min(c["center"][k] for c in cams) for k in range(3))
+        hi = tuple(max(c["center"][k] for c in cams) for k in range(3))
+        source = "cameras"
+    else:
+        cols = [sorted(d[k][i] for i in idx) for k in ("x", "y", "z")]
+        lo = tuple(percentile(c, 0.4) for c in cols)
+        hi = tuple(percentile(c, 0.6) for c in cols)
+        source = "opaque splats"
+    dists = sorted(_box_distance((d["x"][i], d["y"][i], d["z"][i]), lo, hi) for i in idx)
+    reach = 1.25 * percentile(dists, 0.95) if dists else 0.0
+    # fog in a room: big faint splats in the air, bigger than nearly every opaque one
+    sizes = sorted(d["size"][i] for i in idx)
+    return {"box": [list(lo), list(hi)], "radius": reach, "fog_size": percentile(sizes, 0.99) if sizes else math.inf,
+            "source": source}
+
+
 def clean(path: Path, out: Path | None = None, run_dir: Path | None = None, radius_scale: float = 1.0,
-          min_opacity: float = 0.02) -> dict:
+          min_opacity: float = 0.02, scene: bool = False) -> dict:
     """Write a copy keeping only splats inside the object region and not nearly invisible.
-    Returns stats. The input file is only read."""
+    scene: the video filmed a room or a place from inside it, so keep everything around the
+    cameras instead (scene_region). Returns stats. The input file is only read."""
     path = Path(path)
     out = Path(out) if out else path.with_name(path.stem + "_clean" + path.suffix)
     if out.resolve() == path.resolve():
@@ -364,21 +396,32 @@ def clean(path: Path, out: Path | None = None, run_dir: Path | None = None, radi
     ply = PlyFile(path)
     d = load(ply)
     cams = find_cameras(run_dir) if run_dir else []
-    region = object_region(d, cams)
-    c, r = region["center"], region["radius"] * radius_scale
     keep = bytearray(ply.count)
     kept = 0
-    for i, (x, y, z, o) in enumerate(zip(d["x"], d["y"], d["z"], d["opacity"])):
-        if o >= min_opacity and math.dist((x, y, z), c) <= r:
-            keep[i] = 1
-            kept += 1
+    if scene:
+        region = scene_region(d, cams)
+        lo, hi = region["box"]
+        r, big = region["radius"] * radius_scale, region["fog_size"]
+        for i, (x, y, z, o, s) in enumerate(zip(d["x"], d["y"], d["z"], d["opacity"], d["size"])):
+            if o >= min_opacity and not (o < 0.35 and s > big) and _box_distance((x, y, z), lo, hi) <= r:
+                keep[i] = 1
+                kept += 1
+        what = f"within {r:.4g} of where the cameras were, no faint splats bigger than {big:.3g}"
+    else:
+        region = object_region(d, cams)
+        c, r = region["center"], region["radius"] * radius_scale
+        for i, (x, y, z, o) in enumerate(zip(d["x"], d["y"], d["z"], d["opacity"])):
+            if o >= min_opacity and math.dist((x, y, z), c) <= r:
+                keep[i] = 1
+                kept += 1
+        what = f"radius {r:.4g} around the object"
     header = []
     for line in ply.header_lines:
         if line.startswith("element vertex"):
             line = f"element vertex {kept}"
         header.append(line)
     header.insert(2, f"comment Cleaned by Splat Studio: kept {kept} of {ply.count} splats "
-                     f"(radius {r:.4g} around the object, opacity >= {min_opacity})")
+                     f"({what}, opacity >= {min_opacity})")
     tmp = out.with_name(out.name + ".part")
     with open(path, "rb") as src, open(tmp, "wb") as dst:
         dst.write(("\n".join(header) + "\nend_header\n").encode("latin1"))
@@ -420,9 +463,11 @@ def main_clean(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, help="output file (default: NAME_clean.ply next to the input)")
     ap.add_argument("--radius", type=float, default=1.0, help="scale the kept region (e.g. 1.3 keeps more)")
     ap.add_argument("--min-opacity", type=float, default=0.02, help="drop splats fainter than this (0-1)")
+    ap.add_argument("--scene", action="store_true",
+                    help="a room or a place filmed from inside it: keep everything around the cameras")
     a = ap.parse_args(argv)
     try:
-        s = clean(a.ply, a.out, a.run, a.radius, a.min_opacity)
+        s = clean(a.ply, a.out, a.run, a.radius, a.min_opacity, a.scene)
     except (PlyError, OSError, ValueError) as e:
         sys.exit(f"Can't clean {a.ply}: {e}")
     print(f"Kept {s['kept']:,} of {s['total']:,} splats ({s['removed_share']:.0%} removed)")

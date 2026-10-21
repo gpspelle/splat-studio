@@ -1,4 +1,5 @@
 """The whole command-line pipeline: video -> frames -> COLMAP (fake) -> Brush (fake) -> .ply"""
+from splat_studio.splats import PlyFile
 from tests.helpers import TempDirTestCase, fake_tools_env, make_video, needs_ffmpeg, run_module
 
 
@@ -89,6 +90,18 @@ class PipelineTest(TempDirTestCase):
         self.assertIn("Object copy:", r.stdout)
         self.assertIn("support surface removed", r.stdout)
         self.assertIn("object splat:", (run / "summary.txt").read_text())
+
+    def test_scene_run_keeps_the_room(self):
+        r = self.run_pipeline(self.video, "--frames", "30", "--quality", "preview", "--scene")
+        self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
+        run = (self.tmp / "workspace" / "vase" / "latest").resolve()
+        self.assertEqual(sorted(p.name for p in (run / "splat").glob("*.ply")),
+                         ["preview_3000.ply", "preview_3000_clean.ply"])
+        self.assertIn("where the cameras were", " ".join(PlyFile(run / "splat" / "preview_3000_clean.ply").comments))
+        self.assertNotIn("Coverage:", r.stdout)
+        r = self.run_pipeline(self.video, "--scene", "--remove-background", "--no-train")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--scene keeps the whole room", r.stderr)
 
     def test_person_masks_made_by_themselves(self):
         env = fake_tools_env(SPLAT_STUDIO_PERSON_BACKEND="disc")

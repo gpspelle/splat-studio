@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **`--scene`: a room filmed from inside it** (and the job option `scene`). Fog removal then keeps
+  everything around where the cameras were (walls, floor, furniture) instead of a sphere around an
+  object in the middle, which cut a room's walls off; it still drops faint fog in the air and what
+  was seen far away through a window. The coverage ring is skipped, as there is no object to
+  walk around. Can't be combined with `--remove-background`, `--person` or `--masks`.
 - **`--person`: keep only the person filmed, without clicks.** The masks are made by Apple's
   Vision person segmentation on a Mac (nothing to download), or by SAM 2 from the centre of the
   frame elsewhere, then the run trains like `--masks`.
